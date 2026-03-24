@@ -1074,7 +1074,7 @@ def compute_allostatic_load(conn: sqlite3.Connection) -> dict:
         details["hr_avg_sleep"] = {"value": round(avg_hr, 1), "threshold": NOCTURNAL_HR_ELEVATED,
                                    "exceeded": hr_flag, "unit": "bpm"}
 
-    # 2. HRV < clinical deficiency threshold (Kleiger 1987, Bigger 1992)
+    # 2. HRV < clinical deficiency threshold (ESC/NASPE Task Force 1996; Shaffer & Ginsberg 2017)
     rows = conn.execute("SELECT AVG(rmssd) FROM oura_hrv WHERE rmssd IS NOT NULL").fetchall()
     if rows and rows[0][0] is not None:
         avg_rmssd = rows[0][0]
