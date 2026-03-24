@@ -536,9 +536,14 @@ def analyze_temperature(daily: pd.DataFrame) -> dict[str, Any]:
     for i in range(1, len(temp_vals)):
         cusum_pos[i] = max(0, cusum_pos[i - 1] + temp_vals[i] - mu - k)
         cusum_neg[i] = max(0, cusum_neg[i - 1] - temp_vals[i] + mu - k)
-        if cusum_pos[i] > h or cusum_neg[i] > h:
+        reset_logged = False
+        if cusum_pos[i] > h:
             regime_changes.append(str(temp.index[i].date()))
+            reset_logged = True
             cusum_pos[i] = 0
+        if cusum_neg[i] > h:
+            if not reset_logged:
+                regime_changes.append(str(temp.index[i].date()))
             cusum_neg[i] = 0
 
     result["regime_changes"] = regime_changes
