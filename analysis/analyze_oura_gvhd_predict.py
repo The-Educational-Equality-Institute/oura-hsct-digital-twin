@@ -2165,7 +2165,7 @@ def bos_risk_integration(
         shared_idx = breath.index.intersection(composite.dropna().index)
         if len(shared_idx) > 10:
             breath_corr = breath.loc[shared_idx].corr(composite.loc[shared_idx])
-            result["breath_composite_correlation"] = round(float(breath_corr), 3)
+            result["breath_composite_correlation"] = round(float(breath_corr) if pd.notna(breath_corr) else 0.0, 3)
             log("BOS", f"  Breathing rate - composite correlation: {breath_corr:.3f}")
 
     # Combined pulmonary-systemic risk
