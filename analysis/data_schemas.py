@@ -1,6 +1,6 @@
 """Pandera DataFrame validation schemas for Oura analysis pipeline.
 
-These schemas validate data at system boundaries — after SQL load, before
+These schemas validate data at system boundaries - after SQL load, before
 analysis. If the daily pipeline produces an impossible value (negative SpO2,
 HR of 500, p-value of 2.0), it crashes loudly instead of publishing garbage.
 
@@ -42,7 +42,7 @@ heart_rate_schema = DataFrameSchema(
             float,
             Check.in_range(25, 250),
             nullable=True,
-            description="Heart rate (bpm) — 25 to 250 covers bradycardia to SVT",
+            description="Heart rate (bpm) - 25 to 250 covers bradycardia to SVT",
         ),
     },
     coerce=True,
@@ -57,7 +57,7 @@ spo2_schema = DataFrameSchema(
             float,
             Check.in_range(70, 100),
             nullable=True,
-            description="Blood oxygen saturation (%) — <70 is not physiologically plausible from Oura",
+            description="Blood oxygen saturation (%) - <70 is not physiologically plausible from Oura",
         ),
     },
     coerce=True,
@@ -72,7 +72,7 @@ sleep_schema = DataFrameSchema(
             float,
             Check.in_range(0, 86400),
             nullable=True,
-            description="Total sleep duration (seconds) — max 24h",
+            description="Total sleep duration (seconds) - max 24h",
         ),
         "efficiency": Column(
             float,
@@ -100,7 +100,7 @@ temperature_schema = DataFrameSchema(
 )
 
 # ---------------------------------------------------------------------------
-# Statistical results — for validating computed p-values and effect sizes
+# Statistical results - for validating computed p-values and effect sizes
 # ---------------------------------------------------------------------------
 stats_result_schema = DataFrameSchema(
     {
@@ -122,7 +122,7 @@ stats_result_schema = DataFrameSchema(
 
 
 # ---------------------------------------------------------------------------
-# Convenience validators — call these after loading data
+# Convenience validators - call these after loading data
 # ---------------------------------------------------------------------------
 def validate_hrv(df):
     """Validate HRV DataFrame. Returns the validated (coerced) DataFrame."""

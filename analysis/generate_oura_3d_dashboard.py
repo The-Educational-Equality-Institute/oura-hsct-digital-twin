@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-generate_oura_3d_dashboard.py — Unified CMO Dashboard
+generate_oura_3d_dashboard.py - Unified CMO Dashboard
 
 The front door. One HTML file shows everything: CausalImpact p-values,
 UKF state estimates, disease-state models, anomaly detection, composite
@@ -8,9 +8,9 @@ biomarkers, and raw biosignal visualizations. The goal is fast external
 review of an exploratory N=1 wearable dataset, not clinical proof.
 
 Architecture:
-  Tab 1 (Overview)     — Narrative + KPI cards + Hero ITS + Forest plot
-  Tab 2 (Disease)      — rSLDS states + Anomaly timeline + Biomarkers + SpO2
-  Tab 3 (Biosignals)   — Raw biosignal timeline + HR Terrain + Phase Space
+  Tab 1 (Overview)     - Narrative + KPI cards + Hero ITS + Forest plot
+  Tab 2 (Disease)      - rSLDS states + Anomaly timeline + Biomarkers + SpO2
+  Tab 3 (Biosignals)   - Raw biosignal timeline + HR Terrain + Phase Space
                           + Sleep heatmap + Circadian radar
 
 Data sources:
@@ -86,12 +86,12 @@ ACUTE_EVENT = KNOWN_EVENT_DATE
 # ---------------------------------------------------------------------------
 # Dark theme color palette (colorblind-safe)
 # ---------------------------------------------------------------------------
-C_PRE = "#4589FF"  # Blue — pre-ruxolitinib
-C_POST = "#F59E0B"  # Amber — post-ruxolitinib (design system ACCENT_AMBER)
-C_INTERVENTION = "#FFFFFF"  # White dashed — March 16 line
-C_CI_BAND = "rgba(255,255,255,0.1)"  # Subtle — confidence intervals
-C_ALERT = "#CC79A7"  # Magenta — anomaly alerts
-C_COUNTERFACTUAL = "#999999"  # Grey — predicted counterfactual
+C_PRE = "#4589FF"  # Blue - pre-ruxolitinib
+C_POST = "#F59E0B"  # Amber - post-ruxolitinib (design system ACCENT_AMBER)
+C_INTERVENTION = "#FFFFFF"  # White dashed - March 16 line
+C_CI_BAND = "rgba(255,255,255,0.1)"  # Subtle - confidence intervals
+C_ALERT = "#CC79A7"  # Magenta - anomaly alerts
+C_COUNTERFACTUAL = "#999999"  # Grey - predicted counterfactual
 C_STATES = [
     "#10B981",
     "#F59E0B",
@@ -100,7 +100,7 @@ C_STATES = [
 ]  # Remission, Pre-flare, Flare, Recovery
 C_STATE_NAMES = ["Remission", "Pre-flare", "Active Flare", "Recovery"]
 
-# Existing colors (for 3D panels) — from _theme dark palette
+# Existing colors (for 3D panels) - from _theme dark palette
 COLOR_PRE_RUX = C_PRE_TX
 COLOR_POST_RUX = C_POST_TX
 COLOR_EVENT = C_ACCENT
@@ -110,7 +110,7 @@ COLOR_SURFACE_SCALE = "Plasma"
 PHASE_COLORS = {1: "#6366F1", 2: "#3B82F6", 3: "#10B981", 4: "#EF4444"}
 PHASE_NAMES = {1: "Deep", 2: "Light", 3: "REM", 4: "Awake"}
 
-# Note: DARK_LAYOUT removed — the "clinical_dark" Plotly template
+# Note: DARK_LAYOUT removed - the "clinical_dark" Plotly template
 # handles paper_bgcolor, plot_bgcolor, font, gridcolor automatically.
 
 
@@ -161,7 +161,7 @@ def _add_vline(
         )
 
 
-# Alias for backwards-compat within this file — canonical is _theme.format_p_value
+# Alias for backwards-compat within this file - canonical is _theme.format_p_value
 _format_p_value = format_p_value
 
 
@@ -188,7 +188,7 @@ def _apply_data_start(df: pd.DataFrame, col: str) -> pd.DataFrame:
 
 
 # ===================================================================
-# DATA LOADING — RAW DATABASE
+# DATA LOADING - RAW DATABASE
 # ===================================================================
 
 
@@ -292,7 +292,7 @@ def load_activity(conn: sqlite3.Connection) -> pd.DataFrame:
 
 
 # ===================================================================
-# DATA LOADING — ANALYSIS MODULE JSON OUTPUTS
+# DATA LOADING - ANALYSIS MODULE JSON OUTPUTS
 # ===================================================================
 
 
@@ -335,7 +335,7 @@ def build_narrative_summary(outputs: dict, summary: dict) -> str:
     dt = outputs.get("digital_twin", {})
     streams = causal.get("causal_impact", {}).get("streams", {})
 
-    # Temperature deviation — strongest signal
+    # Temperature deviation - strongest signal
     temp = streams.get("temperature_deviation", {})
     temp_p = temp.get("p_value")
     temp_prob = temp.get("probability_of_effect")
@@ -556,7 +556,7 @@ def build_kpi_cards(outputs: dict, summary: dict) -> str:
         )
     )
 
-    # 4. SpO2 — use summary (same source as JSON output) to avoid mismatch
+    # 4. SpO2 - use summary (same source as JSON output) to avoid mismatch
     spo2_mean = _as_float(full_analysis.get("spo2_mean"))
     if spo2_mean is None:
         spo2_mean = _as_float(summary.get("mean_spo2"))
@@ -732,7 +732,7 @@ def build_hero_its_chart(outputs: dict, readiness_df: pd.DataFrame) -> go.Figure
             )
         )
 
-        # Intervention line — dramatic
+        # Intervention line - dramatic
         _add_vline(
             fig,
             x=RUXOLITINIB_START,
@@ -867,7 +867,7 @@ def build_forest_plot(outputs: dict) -> go.Figure:
     # Near-zero baselines (e.g. temperature_deviation ≈ 0.08°C) produce
     # extreme relative_effect_pct values (-287%) that blow out the x-axis.
     # Fix: cap display at ±DISPLAY_CAP%, use arrow markers for capped values,
-    # show true values in hover text.  Remove CI whiskers — the JSON's
+    # show true values in hover text.  Remove CI whiskers - the JSON's
     # ci_lower/ci_upper are posterior intervals on the counterfactual, not
     # confidence intervals on the relative effect.
     DISPLAY_CAP = 80  # ±80% keeps axis readable for clinical audience
@@ -1334,7 +1334,7 @@ def build_biomarker_trends(outputs: dict) -> go.Figure:
             post_dates = [d for d in dates if d >= rux_date]
             post_vals = [v for d, v in zip(dates, values) if d >= rux_date]
 
-            # Pre line — sparkline aesthetic
+            # Pre line - sparkline aesthetic
             fig.add_trace(
                 go.Scatter(
                     x=pre_dates,
@@ -1583,7 +1583,7 @@ def build_spo2_panel(outputs: dict, spo2_df: pd.DataFrame) -> go.Figure:
 
 
 # ===================================================================
-# TAB 3: HEART RATE TERRAIN MAP (3D Surface) — preserved
+# TAB 3: HEART RATE TERRAIN MAP (3D Surface) - preserved
 # ===================================================================
 
 
@@ -1771,7 +1771,7 @@ def build_hr_terrain(hr_df: pd.DataFrame, sleep_df: pd.DataFrame) -> go.Figure:
 
 
 # ===================================================================
-# TAB 3: PHASE SPACE (3D Scatter) — preserved
+# TAB 3: PHASE SPACE (3D Scatter) - preserved
 # ===================================================================
 
 
@@ -1937,7 +1937,7 @@ def build_phase_space(sleep_df: pd.DataFrame, spo2_df: pd.DataFrame) -> go.Figur
 
 
 # ===================================================================
-# TAB 3: SLEEP ARCHITECTURE HEATMAP — preserved
+# TAB 3: SLEEP ARCHITECTURE HEATMAP - preserved
 # ===================================================================
 
 
@@ -1960,17 +1960,17 @@ def build_sleep_heatmap(epochs_df: pd.DataFrame, sleep_df: pd.DataFrame) -> go.F
         if date_idx is not None and epoch_idx < max_epochs:
             z_matrix[date_idx, epoch_idx] = row["phase"]
 
-    # Refined sleep phase colorscale — high contrast on dark background
+    # Refined sleep phase colorscale - high contrast on dark background
     colorscale = [
         [0.0, "#1A1D27"],
         [0.125, "#7C3AED"],
-        [0.25, "#7C3AED"],  # Deep — vivid purple
+        [0.25, "#7C3AED"],  # Deep - vivid purple
         [0.25, "#3B82F6"],
-        [0.5, "#3B82F6"],  # Light — blue
+        [0.5, "#3B82F6"],  # Light - blue
         [0.5, "#10B981"],
-        [0.75, "#10B981"],  # REM — emerald
+        [0.75, "#10B981"],  # REM - emerald
         [0.75, "#EF4444"],
-        [1.0, "#EF4444"],  # Awake — red
+        [1.0, "#EF4444"],  # Awake - red
     ]
 
     date_labels = [str(d) for d in dates]
@@ -2047,7 +2047,7 @@ def build_sleep_heatmap(epochs_df: pd.DataFrame, sleep_df: pd.DataFrame) -> go.F
 
 
 # ===================================================================
-# TAB 3: CIRCADIAN RHYTHM RADAR — BUG FIXED
+# TAB 3: CIRCADIAN RHYTHM RADAR - BUG FIXED
 # ===================================================================
 
 
@@ -2222,7 +2222,7 @@ def build_circadian_radar(hr_df: pd.DataFrame, outputs: dict) -> go.Figure:
 
 
 # ===================================================================
-# TAB 3: BIOSIGNAL TIMELINE (5-row subplots) — preserved with UKF overlay
+# TAB 3: BIOSIGNAL TIMELINE (5-row subplots) - preserved with UKF overlay
 # ===================================================================
 
 
@@ -2470,7 +2470,7 @@ def build_biosignal_timeline(
     )
     add_annotations(fig, 5)
 
-    # Y-axis labels — sparkline aesthetic: minimal text
+    # Y-axis labels - sparkline aesthetic: minimal text
     for row_i, label in enumerate(["bpm", "ms", "%", "\u00b0C", "%"], 1):
         fig.update_yaxes(
             title_text=label,
@@ -2510,7 +2510,7 @@ def build_biosignal_timeline(
         font=dict(size=11, color=TEXT_PRIMARY),
     )
 
-    # Style subplot titles — sparkline aesthetic
+    # Style subplot titles - sparkline aesthetic
     for ann in fig.layout.annotations:
         if (
             ann.text and ann.text != fig.layout.annotations[-1].text
@@ -2637,7 +2637,7 @@ def compute_summary(
 
 
 # ===================================================================
-# HTML ASSEMBLY — DARK THEME WITH TABS AND LAZY LOADING
+# HTML ASSEMBLY - DARK THEME WITH TABS AND LAZY LOADING
 # ===================================================================
 
 
@@ -2971,7 +2971,7 @@ def build_html(
 
     # --- Extra CSS for dashboard-specific components ---
     extra_css = f"""
-/* Hide standard header — custom hero replaces it */
+/* Hide standard header - custom hero replaces it */
 .odt-header {{ display: none; }}
 
 /* ============================================================
@@ -3564,7 +3564,7 @@ document.querySelectorAll('.dash-tab-section.active .chart-box').forEach(renderC
 
 
 # ===================================================================
-# JSON METRICS HELPERS — extract p-values for statcheck backing
+# JSON METRICS HELPERS - extract p-values for statcheck backing
 # ===================================================================
 
 
@@ -3619,7 +3619,7 @@ def _extract_spo2_trend(outputs: dict) -> dict:
 
 def main() -> int:
     print("=" * 60)
-    print("Oura Digital Twin — Unified CMO Dashboard")
+    print("Oura Digital Twin - Unified CMO Dashboard")
     print("=" * 60)
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)

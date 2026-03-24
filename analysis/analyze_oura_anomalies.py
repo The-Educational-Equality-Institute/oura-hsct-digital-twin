@@ -94,7 +94,7 @@ JSON_OUTPUT = REPORTS_DIR / "anomaly_detection_metrics.json"
 # Clinical context
 # ---------------------------------------------------------------------------
 CONTAMINATION_RATE = 0.1  # Isolation Forest expected anomaly rate
-HSCT_TYPICAL_RMSSD = HSCT_RMSSD_RANGE  # (25, 40) ms range — imported from config
+HSCT_TYPICAL_RMSSD = HSCT_RMSSD_RANGE  # (25, 40) ms range - imported from config
 
 # Anomaly detection parameters
 MP_WINDOW_SIZES = [3, 5, 7]
@@ -321,7 +321,7 @@ def run_matrix_profile(daily: pd.DataFrame) -> dict[str, Any]:
     try:
         import stumpy
     except ImportError:
-        logging.warning("stumpy not installed — Matrix Profile will be skipped")
+        logging.warning("stumpy not installed - Matrix Profile will be skipped")
         return {
             "method": "Matrix Profile",
             "anomalies_by_window": {},
@@ -586,7 +586,7 @@ def run_lstm_autoencoder(daily: pd.DataFrame) -> dict[str, Any]:
         import torch.nn as nn
         from torch.utils.data import DataLoader, TensorDataset
     except ImportError:
-        logging.warning("torch not installed — LSTM Autoencoder will be skipped")
+        logging.warning("torch not installed - LSTM Autoencoder will be skipped")
         return {
             "method": "LSTM Autoencoder",
             "anomalies": [],
@@ -1062,7 +1062,7 @@ def run_tsfresh_clustering(data: dict[str, pd.DataFrame]) -> dict[str, Any]:
         from tsfresh import extract_features
         from tsfresh.feature_extraction import MinimalFCParameters
     except ImportError:
-        logging.warning("tsfresh not installed — tsfresh clustering will be skipped")
+        logging.warning("tsfresh not installed - tsfresh clustering will be skipped")
         return {
             "method": "tsfresh + DBSCAN",
             "anomalies": [],
@@ -2661,7 +2661,7 @@ def _build_clinical_interpretation(
     <div class="cs-verdict">
       <div class="cs-verdict-dot"></div>
       <div class="cs-verdict-text">
-        <strong>{n_methods_detecting}/{n_methods} algorithms detected the acute event</strong> —
+        <strong>{n_methods_detecting}/{n_methods} algorithms detected the acute event</strong> -
         ranked #{feb9_rank if feb9_rank else "N/A"} in ensemble scoring across {len(daily)} days.
       </div>
     </div>"""
@@ -2671,19 +2671,19 @@ def _build_clinical_interpretation(
     <div class="cs-stats-row">
       <div class="cs-stat">
         <div class="cs-stat-number critical">{rmssd_txt}</div>
-        <div class="cs-stat-label">RMSSD (ms) — event night</div>
+        <div class="cs-stat-label">RMSSD (ms) - event night</div>
       </div>
       <div class="cs-stat">
         <div class="cs-stat-number critical">{hr_txt}</div>
-        <div class="cs-stat-label">Mean HR (bpm) — event night</div>
+        <div class="cs-stat-label">Mean HR (bpm) - event night</div>
       </div>
       <div class="cs-stat">
         <div class="cs-stat-number warning">{ready_txt}</div>
-        <div class="cs-stat-label">Readiness — event day</div>
+        <div class="cs-stat-label">Readiness - event day</div>
       </div>
       <div class="cs-stat">
         <div class="cs-stat-number warning">{recovery_txt}</div>
-        <div class="cs-stat-label">Recovery index — event day</div>
+        <div class="cs-stat-label">Recovery index - event day</div>
       </div>
     </div>"""
 
@@ -2782,7 +2782,7 @@ def _build_clinical_interpretation(
     # Limitations as conclusion block
     limitations_html = f"""
     <div class="cs-conclusion">
-      <strong>Limitations</strong> —
+      <strong>Limitations</strong> -
       Single known positive event (no specificity/PPV calculation).
       LSTM autoencoder trained on {len(daily)} days (limited).
       Oura Ring PPG is not a medical device.

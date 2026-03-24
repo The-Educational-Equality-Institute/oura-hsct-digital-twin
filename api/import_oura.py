@@ -1200,13 +1200,13 @@ def main():
                 return 1
             elif preflight.status_code != 200:
                 logging.warning(
-                    "Pre-flight check returned HTTP %d — proceeding anyway",
+                    "Pre-flight check returned HTTP %d - proceeding anyway",
                     preflight.status_code,
                 )
             else:
                 logging.info("API access verified (HTTP 200)")
         except requests.RequestException as e:
-            logging.warning("Pre-flight check failed: %s — proceeding anyway", e)
+            logging.warning("Pre-flight check failed: %s - proceeding anyway", e)
 
         stats = import_oura_data(conn, client, start_date, end_date)
     finally:

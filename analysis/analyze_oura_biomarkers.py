@@ -7,12 +7,12 @@ post-allogeneic-HSCT surveillance with chronic GVHD, autonomic dysfunction,
 and iron overload.
 
 Biomarkers:
-  1. Autonomic Dysfunction Severity Index (ADSI) — 0-100
-  2. GVHD Activity Score (Wearable) — 0-100
-  3. Recovery Trajectory Index — 0-100
-  4. Pharmacodynamic Response Score (ruxolitinib) — Z-score
-  5. Cardiovascular Risk Composite — 0-100
-  6. Wearable Allostatic Load Score — 0-7
+  1. Autonomic Dysfunction Severity Index (ADSI) - 0-100
+  2. GVHD Activity Score (Wearable) - 0-100
+  3. Recovery Trajectory Index - 0-100
+  4. Pharmacodynamic Response Score (ruxolitinib) - Z-score
+  5. Cardiovascular Risk Composite - 0-100
+  6. Wearable Allostatic Load Score - 0-7
 
 Outputs:
   - Interactive HTML dashboard: reports/composite_biomarkers.html
@@ -89,7 +89,7 @@ HTML_OUTPUT = REPORTS_DIR / "composite_biomarkers.html"
 JSON_OUTPUT = REPORTS_DIR / "composite_biomarkers.json"
 
 # Population norms for 36yo male (Nunan 2010, Shaffer & Ginsberg 2017)
-NORM_RMSSD_MEAN = POPULATION_RMSSD_MEAN  # ms — from config
+NORM_RMSSD_MEAN = POPULATION_RMSSD_MEAN  # ms - from config
 NORM_RMSSD_SD = POPULATION_RMSSD_SD
 NORM_SLEEP_HR_MEAN = 65.0  # bpm
 NORM_SLEEP_HR_SD = 10.0

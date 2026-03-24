@@ -42,7 +42,7 @@ from config import (
 )
 
 # ---------------------------------------------------------------------------
-# Report Registry — 11 reports in 3 groups
+# Report Registry - 11 reports in 3 groups
 # ---------------------------------------------------------------------------
 
 REPORT_REGISTRY = [
@@ -127,7 +127,7 @@ REPORT_REGISTRY = [
 ]
 
 # ---------------------------------------------------------------------------
-# Color Palette — premium dark theme
+# Color Palette - premium dark theme
 # ---------------------------------------------------------------------------
 
 # Backgrounds
@@ -166,12 +166,12 @@ STATUS_COLORS = {
 }
 
 # Biometric-specific (clinical monitor standard)
-C_HR = ACCENT_GREEN  # Heart rate — green on patient monitors
-C_SPO2 = ACCENT_CYAN  # SpO2 — cyan on pulse oximeters
-C_HRV = ACCENT_PURPLE  # HRV/RMSSD — autonomic nervous system
-C_SLEEP = ACCENT_INDIGO  # Sleep — calming, sleep-associated
-C_TEMP = ACCENT_ORANGE  # Temperature — warmth association
-C_ACTIVITY = "#34D399"  # Activity — energy/movement (light emerald)
+C_HR = ACCENT_GREEN  # Heart rate - green on patient monitors
+C_SPO2 = ACCENT_CYAN  # SpO2 - cyan on pulse oximeters
+C_HRV = ACCENT_PURPLE  # HRV/RMSSD - autonomic nervous system
+C_SLEEP = ACCENT_INDIGO  # Sleep - calming, sleep-associated
+C_TEMP = ACCENT_ORANGE  # Temperature - warmth association
+C_ACTIVITY = "#34D399"  # Activity - energy/movement (light emerald)
 
 # Period/series colors (for treatment effect plots)
 C_PRE_TX = TEXT_SECONDARY
@@ -214,7 +214,7 @@ C_BG_LIGHT = BG_ELEVATED
 C_CAUTION = ACCENT_AMBER
 
 # ---------------------------------------------------------------------------
-# Metric Descriptions — reusable across reports
+# Metric Descriptions - reusable across reports
 # ---------------------------------------------------------------------------
 
 METRIC_DESCRIPTIONS = {
@@ -356,7 +356,7 @@ def create_clinical_dark_template() -> go.layout.Template:
     return template
 
 
-# Auto-register at import time (does NOT set as default — each script opts in)
+# Auto-register at import time (does NOT set as default - each script opts in)
 pio.templates["clinical_dark"] = create_clinical_dark_template()
 
 # ---------------------------------------------------------------------------
@@ -1284,7 +1284,7 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
   border: 1px solid rgba(245,158,11,0.25);
 }}
 
-/* === Clinical Summary v2 — Enhanced === */
+/* === Clinical Summary v2 - Enhanced === */
 
 /* CSS Houdini: register custom angle for animated border */
 @property --verdict-angle {{
@@ -1335,7 +1335,7 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
   100% {{ opacity: 1; transform: scaleX(1); transform-origin: left; }}
 }}
 
-/* --- Verdict Banner — Animated gradient border with outer glow --- */
+/* --- Verdict Banner - Animated gradient border with outer glow --- */
 .cs-verdict {{
   border: none;
   position: relative;
@@ -1418,17 +1418,17 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
   transition: transform 0.2s ease-out, box-shadow 0.2s ease-out, border-color 0.2s ease-out;
   animation: cs-fade-in-up 0.4s ease-out backwards;
 }}
-/* Staggered entrance — dev cards */
+/* Staggered entrance - dev cards */
 .cs-dev-card:nth-child(1) {{ animation-delay: 0s; }}
 .cs-dev-card:nth-child(2) {{ animation-delay: 0.1s; }}
 .cs-dev-card:nth-child(3) {{ animation-delay: 0.2s; }}
 .cs-dev-card:nth-child(4) {{ animation-delay: 0.3s; }}
-/* Staggered entrance — findings */
+/* Staggered entrance - findings */
 .cs-finding:nth-child(1) {{ animation-delay: 0.15s; }}
 .cs-finding:nth-child(2) {{ animation-delay: 0.25s; }}
 .cs-finding:nth-child(3) {{ animation-delay: 0.35s; }}
 .cs-finding:nth-child(4) {{ animation-delay: 0.45s; }}
-/* Staggered entrance — stats */
+/* Staggered entrance - stats */
 .cs-stat:nth-child(1) {{ animation-delay: 0.4s; }}
 .cs-stat:nth-child(2) {{ animation-delay: 0.5s; }}
 .cs-stat:nth-child(3) {{ animation-delay: 0.6s; }}
@@ -1984,9 +1984,9 @@ def disclaimer_banner(post_days: int | None = None) -> str:
 
     return (
         '<div class="odt-context-strip">'
-        '<span class="odt-ctx-item">Oura Ring Gen 4 sensor data — not clinical measurements</span>'
+        '<span class="odt-ctx-item">Oura Ring Gen 4 sensor data - not clinical measurements</span>'
         '<span class="odt-ctx-dot"></span>'
-        '<span class="odt-ctx-item">N=1 case study — not validated for clinical decisions</span>'
+        '<span class="odt-ctx-item">N=1 case study - not validated for clinical decisions</span>'
         '<span class="odt-ctx-dot"></span>'
         '<span class="odt-ctx-item warn">HEV diagnosed Mar 18; interpret findings cautiously '
         f"in this Day {post_days} post-ruxolitinib window</span>"
@@ -2005,7 +2005,7 @@ def metric_explainer(name: str, description: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# P-value Formatting — single source of truth for all reports
+# P-value Formatting - single source of truth for all reports
 # ---------------------------------------------------------------------------
 
 
@@ -2145,7 +2145,7 @@ def wrap_html(
 
     Args:
         title: Report title (shown in header and <title>)
-        body_content: Main HTML — KPI rows, sections, chart divs
+        body_content: Main HTML - KPI rows, sections, chart divs
         report_id: Must match an id in REPORT_REGISTRY for nav highlighting
         subtitle: Optional subtitle below title
         header_meta: Optional header metadata text after the generated timestamp.
@@ -2227,7 +2227,7 @@ document.querySelectorAll('.chart-box').forEach(el => observer.observe(el));
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="{BG_PRIMARY}">
 <meta name="robots" content="noindex, nofollow">
-<title>{title} — Oura Digital Twin</title>
+<title>{title} - Oura Digital Twin</title>
 {_INTER_FONT_LINK}
 <script src="{PLOTLY_CDN_URL}"></script>
 {get_base_css()}{extra_style}
