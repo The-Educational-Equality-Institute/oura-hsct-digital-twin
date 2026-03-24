@@ -191,6 +191,7 @@ def load_oura_data() -> pd.DataFrame:
         """
         SELECT substr(timestamp, 1, 10) AS day, AVG(rmssd) AS mean_rmssd
         FROM oura_hrv
+        WHERE rmssd IS NOT NULL AND rmssd > 0
         GROUP BY substr(timestamp, 1, 10)
         ORDER BY day
         """,
@@ -1351,7 +1352,7 @@ def create_state_trajectory_figure(
                        line=dict(color=TEXT_TERTIARY, width=0.5, dash="dash"))
 
     fig.update_layout(
-        height=1520, width=1200,
+        height=1520,
         margin=dict(l=64, r=34, t=132, b=68),
         font=dict(size=12),
         hovermode="x unified",
@@ -1590,7 +1591,7 @@ def create_prediction_figure(
     )
 
     fig.update_layout(
-        height=1040, width=1200,
+        height=1040,
         margin=dict(l=64, r=34, t=128, b=70),
         font=dict(size=12),
     )
@@ -1733,7 +1734,7 @@ def create_drug_response_figure(
     fig.update_yaxes(title_text="Shift (SD)", row=2, col=3, zeroline=False)
 
     fig.update_layout(
-        height=780, width=1200,
+        height=780,
         margin=dict(l=64, r=34, t=118, b=66),
         font=dict(size=12),
         legend=dict(orientation="h", yanchor="top", y=-0.12),
@@ -1887,7 +1888,7 @@ def create_sensor_fusion_figure(
     fig.update_yaxes(title_text="Contribution (%)", row=1, col=2, zeroline=False)
 
     fig.update_layout(
-        height=920, width=1200,
+        height=920,
         margin=dict(l=64, r=34, t=120, b=66),
         font=dict(size=12),
     )
@@ -1920,7 +1921,7 @@ def create_observation_overlay_figure(
     obs_cols = ["mean_rmssd", "mean_hr", "spo2_average",
                 "temperature_deviation", "sleep_efficiency"]
     obs_titles = ["HRV (RMSSD, ms)", "Heart Rate (bpm)", "SpO2 (%)",
-                  "Temperature Deviation (C)", "Sleep Efficiency (%)"]
+                  "Temperature Deviation (°C)", "Sleep Efficiency (%)"]
     obs_colors = [COLORS["hrv"], COLORS["hr"], COLORS["spo2"],
                   COLORS["temp"], COLORS["sleep"]]
 
@@ -1978,7 +1979,7 @@ def create_observation_overlay_figure(
         )
 
     fig.update_layout(
-        height=1520, width=1200,
+        height=1520,
         margin=dict(l=64, r=34, t=132, b=68),
         font=dict(size=12),
         hovermode="x unified",
@@ -2076,7 +2077,7 @@ def create_kf_vs_ukf_figure(
                   line=dict(color=TEXT_TERTIARY, width=0.5, dash="dash"))
 
     fig.update_layout(
-        height=1020, width=1200,
+        height=1020,
         margin=dict(l=64, r=34, t=128, b=66),
         font=dict(size=12),
         hovermode="x unified",
