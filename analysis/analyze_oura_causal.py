@@ -1277,7 +1277,7 @@ def run_pcmci(daily: pd.DataFrame) -> dict[str, Any]:
                         })
 
         # Sort by absolute correlation strength
-        sig_links.sort(key=lambda x: abs(x["val"]), reverse=True)
+        sig_links.sort(key=lambda x: abs(x["correlation"]), reverse=True)
 
         print(f"    Found {len(sig_links)} significant causal links (alpha={PCMCI_ALPHA})")
         for link in sig_links[:5]:
