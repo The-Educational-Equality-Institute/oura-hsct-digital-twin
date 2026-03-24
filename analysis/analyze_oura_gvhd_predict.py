@@ -1497,9 +1497,11 @@ def run_rslds_analysis(
             event_idx = i
             break
     if event_idx is not None:
+        ev_state_idx = remapped_viterbi[event_idx]
+        ev_state_name = STATE_NAMES[ev_state_idx] if ev_state_idx != -1 else "No Data"
         result["event_validation"] = {
             "date": KNOWN_EVENT_DATE,
-            "viterbi_state": STATE_NAMES[remapped_viterbi[event_idx]],
+            "viterbi_state": ev_state_name,
             "state_probs": {
                 STATE_NAMES[k]: float(remapped_probs[event_idx, k])
                 for k in range(N_STATES)
