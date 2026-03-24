@@ -2927,10 +2927,9 @@ tr.alert-yellow td {{ background: rgba(245, 158, 11, 0.1); }}
 # ===========================================================================
 def main() -> None:
     """Execute the full GVHD prediction pipeline."""
-    global DATA_END
-    DATA_END = _resolve_data_end()
+    data_end = _get_data_end()
     metrics["generated_at"] = datetime.now(timezone.utc).isoformat()
-    metrics["data_range"] = {"start": DATA_START, "end": DATA_END}
+    metrics["data_range"] = {"start": DATA_START, "end": data_end}
 
     t0 = time.time()
     print("=" * 70)
