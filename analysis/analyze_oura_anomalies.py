@@ -2782,6 +2782,7 @@ def _build_clinical_interpretation(
       LSTM autoencoder trained on {len(daily)} days (limited).
       Oura Ring PPG is not a medical device.
       tsfresh features depend on HR data points per night (variable coverage).
+      Benjamini-Hochberg FDR correction applied to SPC Shewhart p-values and ensemble per-method scores to control for multiple comparisons.
     </div>"""
 
     return verdict_html + stats_html + findings_html + relevance_html + limitations_html
