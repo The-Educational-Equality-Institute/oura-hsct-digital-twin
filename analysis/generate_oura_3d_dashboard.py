@@ -2990,6 +2990,10 @@ def main() -> int:
         "analysis_modules_loaded": {k: bool(v) for k, v in outputs.items()},
         "n_figures": len(figures),
         "html_size_mb": round(size_mb, 1),
+        # --- p-values backing every stat displayed in the HTML ---
+        "causal_impact_streams": _extract_stream_p_values(outputs),
+        "ukf_drug_response": _extract_ukf_p_values(outputs),
+        "spo2_trend": _extract_spo2_trend(outputs),
     }
     json_path.write_text(json.dumps(json_metrics, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"  JSON metrics: {json_path}")
