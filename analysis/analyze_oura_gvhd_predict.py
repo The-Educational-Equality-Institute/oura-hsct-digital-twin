@@ -32,6 +32,7 @@ Usage:
 
 from __future__ import annotations
 
+import html as _html_escape_mod
 import io
 import json
 import random
