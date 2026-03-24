@@ -49,3 +49,4 @@ scripts/
 test-results/
 .wrangler/
 index.html
+.codegraph/
