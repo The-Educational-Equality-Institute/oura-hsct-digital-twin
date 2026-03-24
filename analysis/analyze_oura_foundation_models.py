@@ -1360,7 +1360,7 @@ def create_forecast_figure(
 
     fig.update_layout(
         margin=dict(l=50, r=30, t=50, b=40),
-        xaxis_title="Dato",
+        xaxis_title="Date",
         yaxis_title=f"{series_label} ({unit})",
         height=450,
         hovermode="x unified",
@@ -1594,7 +1594,7 @@ def create_ruxolitinib_figure(
 
     fig.update_layout(
         margin=dict(l=50, r=30, t=50, b=40),
-        xaxis_title="Dato",
+        xaxis_title="Date",
         yaxis_title=f"{col_label} ({unit})",
         height=450,
         hovermode="x unified",
