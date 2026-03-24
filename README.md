@@ -2,7 +2,7 @@
 
 Exploratory wearable-analysis toolkit for post-transplant monitoring with Oura Ring data.
 
-Single-patient case study. Current window: 75 modeled days, 8 post-ruxolitinib days, known HEV confound diagnosed March 18, 2026.
+Single-patient case study. Current window: 79 modeled days, 8 post-ruxolitinib days, known HEV confound diagnosed March 18, 2026.
 
 **Live reports:** [digital-twin.theeducationalequalityinstitute.org](https://digital-twin.theeducationalequalityinstitute.org)
 
