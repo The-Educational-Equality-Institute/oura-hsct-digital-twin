@@ -415,7 +415,8 @@ def compute_mse(
             se = antropy.sample_entropy(coarsened, order=m, metric="chebyshev")
             # antropy returns array of length order, we want the last one (m=2)
             entropies.append(float(se[-1]) if hasattr(se, "__len__") else float(se))
-        except Exception:
+        except (ValueError, RuntimeError) as e:
+            logging.debug(f"MSE scale entropy computation failed: {e}")
             entropies.append(float("nan"))
 
     # Classify pattern
