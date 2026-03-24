@@ -2487,6 +2487,35 @@ def run_mediation_analysis(daily: pd.DataFrame) -> dict[str, Any]:
 
         results["pathways"][pathway_key] = pathway_result
 
+    # ------------------------------------------------------------------
+    # Benjamini-Hochberg FDR correction across mediation pathways
+    # ------------------------------------------------------------------
+    valid_pathway_keys = [
+        k for k, v in results["pathways"].items()
+        if "error" not in v and "p_indirect" in v
+    ]
+    if len(valid_pathway_keys) > 1 and MULTIPLETESTS_AVAILABLE:
+        raw_pvals = np.array([results["pathways"][k]["p_indirect"] for k in valid_pathway_keys])
+        try:
+            reject, qvals, _, _ = multipletests(raw_pvals, method="fdr_bh", alpha=0.05)
+            for i, k in enumerate(valid_pathway_keys):
+                results["pathways"][k]["q_indirect_bh"] = round(float(qvals[i]), 6)
+                results["pathways"][k]["significant_fdr"] = bool(reject[i])
+            n_sig_fdr = int(np.sum(reject))
+            print(
+                f"\n  FDR correction (Benjamini-Hochberg): {n_sig_fdr}/{len(valid_pathway_keys)} "
+                f"mediation pathways significant at q < 0.05"
+            )
+        except Exception as fdr_err:
+            print(f"\n  WARNING: FDR correction failed for mediation: {fdr_err}")
+            for k in valid_pathway_keys:
+                results["pathways"][k]["q_indirect_bh"] = results["pathways"][k]["p_indirect"]
+                results["pathways"][k]["significant_fdr"] = results["pathways"][k]["p_indirect"] < 0.05
+    else:
+        for k in valid_pathway_keys:
+            results["pathways"][k]["q_indirect_bh"] = results["pathways"][k]["p_indirect"]
+            results["pathways"][k]["significant_fdr"] = results["pathways"][k]["p_indirect"] < 0.05
+
     results["runtime_s"] = round(time.perf_counter() - t0, 2)
     print(f"\n  Mediation Analysis complete in {results['runtime_s']}s")
     return results
