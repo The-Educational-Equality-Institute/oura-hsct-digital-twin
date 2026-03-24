@@ -2005,9 +2005,12 @@ def compute_feature_importance(
         low_vals = f_vals[t_vals == 0]
         high_vals = f_vals[t_vals == 1]
         if len(low_vals) > 2 and len(high_vals) > 2:
-            cohens_d = (high_vals.mean() - low_vals.mean()) / (
-                np.sqrt((low_vals.std() ** 2 + high_vals.std() ** 2) / 2) + 1e-6
-            )
+            n_low, n_high = len(low_vals), len(high_vals)
+            pooled_std = np.sqrt(
+                ((n_low - 1) * low_vals.std(ddof=1)**2 + (n_high - 1) * high_vals.std(ddof=1)**2)
+                / (n_low + n_high - 2)
+            ) + 1e-6
+            cohens_d = (high_vals.mean() - low_vals.mean()) / pooled_std
         else:
             cohens_d = 0.0
 
