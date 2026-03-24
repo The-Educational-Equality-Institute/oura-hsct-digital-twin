@@ -32,4 +32,11 @@ Changed lines 125-132: Query now JOINs oura_sleep (for score) with oura_sleep_pe
 ## FIX M6 — SpO2 axis label
 - Line 1160: Changed `"SpO2 %"` to `"SpO2 (%)"` with parenthesized unit.
 
-## Status: APPLIED
+## Status: APPLIED AND VERIFIED
+
+Script runs successfully. JSON output confirms biometric fields now populated:
+- sleep_hr_mean: 84.88 bpm (was missing)
+- sleep_hr_lowest_mean: 76.43 bpm (was missing)
+- sleep_hrv_mean: 9.13 ms (was missing)
+- sleep_duration_avg_hrs: 5.96 (was missing)
+- SpO2 axis label: "SpO2 (%)" confirmed in HTML output
