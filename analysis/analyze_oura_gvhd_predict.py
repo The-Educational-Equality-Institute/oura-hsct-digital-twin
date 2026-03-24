@@ -611,7 +611,7 @@ def analyze_temperature(daily: pd.DataFrame) -> dict[str, Any]:
         row=1, col=1,
     )
 
-    # Highlight fever episodes (temp_dev > 0.5 C) with background shading
+    # Highlight fever episodes (temp_dev > 0.5 °C) with background shading
     fever_mask = daily["temp_dev"] > 0.5
     if fever_mask.any():
         fever_starts = []
@@ -644,7 +644,7 @@ def analyze_temperature(daily: pd.DataFrame) -> dict[str, Any]:
             name="Temp Deviation",
             hovertemplate=(
                 "<b>%{x|%b %d, %Y}</b><br>"
-                "Deviation: %{y:+.2f} C<br>"
+                "Deviation: %{y:+.2f} °C<br>"
                 "<extra></extra>"
             ),
         ),
@@ -655,11 +655,11 @@ def analyze_temperature(daily: pd.DataFrame) -> dict[str, Any]:
     # Clinical thresholds with refined dash patterns
     fig.add_hline(y=0.5, line_dash="dashdot", line_color="rgba(239, 68, 68, 0.35)",
                   line_width=1, row=1, col=1,
-                  annotation_text="Fever threshold (+0.5 C)",
+                  annotation_text="Fever threshold (+0.5 °C)",
                   annotation_font=dict(size=9, color=ACCENT_RED))
     fig.add_hline(y=-0.5, line_dash="dashdot", line_color="rgba(59, 130, 246, 0.35)",
                   line_width=1, row=1, col=1,
-                  annotation_text="Hypothermia (-0.5 C)",
+                  annotation_text="Hypothermia (-0.5 °C)",
                   annotation_font=dict(size=9, color=ACCENT_BLUE))
     _add_event_markers(fig, row=1)
 
@@ -675,7 +675,7 @@ def analyze_temperature(daily: pd.DataFrame) -> dict[str, Any]:
             name="7d Variability",
             hovertemplate=(
                 "<b>%{x|%b %d}</b><br>"
-                "7-day SD: %{y:.3f} C<br>"
+                "7-day SD: %{y:.3f} °C<br>"
                 "<extra></extra>"
             ),
         ),
@@ -704,7 +704,7 @@ def analyze_temperature(daily: pd.DataFrame) -> dict[str, Any]:
             name="Nightly Gradient",
             hovertemplate=(
                 "<b>%{x|%b %d}</b><br>"
-                "Gradient: %{y:+.3f} C/night<br>"
+                "Gradient: %{y:+.3f} °C/night<br>"
                 "<extra></extra>"
             ),
         ),
@@ -734,9 +734,9 @@ def analyze_temperature(daily: pd.DataFrame) -> dict[str, Any]:
             spikedash="dot",
             row=row_i, col=1,
         )
-    fig.update_yaxes(title_text="Degrees C", row=1, col=1)
-    fig.update_yaxes(title_text="SD (C)", row=2, col=1)
-    fig.update_yaxes(title_text="Delta C", row=3, col=1)
+    fig.update_yaxes(title_text="Temperature deviation (°C)", row=1, col=1)
+    fig.update_yaxes(title_text="SD (°C)", row=2, col=1)
+    fig.update_yaxes(title_text="Δ°C/night", row=3, col=1)
 
     figures.append(fig)
     log("TEMP", "Temperature analysis complete.")
@@ -1947,7 +1947,7 @@ def compute_feature_importance(
         ("steps", "Steps"),
         ("readiness_score", "Readiness Score"),
         ("stress_high", "Stress High (sec)"),
-        ("sleep_breath", "Breathing Rate"),
+        ("sleep_breath", "Breathing Rate (breaths/min)"),
     ]
 
     results = []

@@ -1169,7 +1169,7 @@ def build_html_report(
             name="BDI (events/hour)",
             marker=dict(size=5, color=C_SPO2, opacity=0.4,
                         line=dict(width=0)),
-            hovertemplate="<b>%{x|%b %d, %Y}</b><br>BDI: %{y:.1f} events/hr<extra></extra>",
+            hovertemplate="<b>%{x|%b %d, %Y}</b><br>BDI: %{y:.1f} events/hour<extra></extra>",
         ))
         # Rolling 7d average - prominent trend line
         valid_rolling = [(d, v) for d, v in zip(bdi["dates"], bdi["rolling_7d"])
@@ -1181,7 +1181,7 @@ def build_html_report(
                 mode="lines", name="7d rolling mean",
                 line=dict(color=C_SPO2, width=2.5),
                 fill="tozeroy", fillcolor="rgba(6, 182, 212, 0.06)",
-                hovertemplate="<b>%{x|%b %d}</b><br>7d mean: %{y:.1f} events/hr<extra></extra>",
+                hovertemplate="<b>%{x|%b %d}</b><br>7d mean: %{y:.1f} events/hour<extra></extra>",
             ))
 
         # Warning threshold lines - refined dash styling
@@ -1550,7 +1550,7 @@ def build_html_report(
             status_label=desat_lbl,
         ),
         make_kpi_card(
-            "BDI Mean", bdi.get("mean_bdi", "N/A"), "",
+            "BDI Mean", bdi.get("mean_bdi", "N/A"), "events/hour",
             status=bdi_status_kpi,
             detail=bdi.get("bdi_status", "Unavailable"),
             status_label=bdi_lbl,
