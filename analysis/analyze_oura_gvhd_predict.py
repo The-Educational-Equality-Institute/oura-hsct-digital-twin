@@ -644,12 +644,14 @@ def analyze_temperature(daily: pd.DataFrame) -> dict[str, Any]:
     fig.add_hline(y=0.5, line_dash="dashdot", line_color="rgba(239, 68, 68, 0.35)",
                   line_width=1, row=1, col=1,
                   annotation_text="Fever threshold (+0.5 °C)",
+                  annotation_position="bottom right",
                   annotation_font=dict(size=9, color=ACCENT_RED))
     fig.add_hline(y=-0.5, line_dash="dashdot", line_color="rgba(59, 130, 246, 0.35)",
                   line_width=1, row=1, col=1,
                   annotation_text="Hypothermia (-0.5 °C)",
+                  annotation_position="top right",
                   annotation_font=dict(size=9, color=ACCENT_BLUE))
-    _add_event_markers(fig, row=1)
+    _add_event_markers(fig, row=1, show_labels=True)
 
     # Panel 2: Rolling variability with refined gradient fill
     fig.add_trace(
@@ -669,7 +671,7 @@ def analyze_temperature(daily: pd.DataFrame) -> dict[str, Any]:
         ),
         row=2, col=1,
     )
-    _add_event_markers(fig, row=2)
+    _add_event_markers(fig, row=2, show_labels=False)
 
     # Panel 3: Gradient with color-coded severity
     grad_vals = daily["temp_gradient"].fillna(0)
@@ -698,12 +700,12 @@ def analyze_temperature(daily: pd.DataFrame) -> dict[str, Any]:
         ),
         row=3, col=1,
     )
-    _add_event_markers(fig, row=3)
+    _add_event_markers(fig, row=3, show_labels=False)
 
     fig.update_layout(
         height=900,
         showlegend=False,
-        margin=dict(t=120),
+        margin=dict(t=136),
         hovermode="x unified",
     )
     # Subtle gridlines and crosshair spikes for all axes
@@ -731,14 +733,15 @@ def analyze_temperature(daily: pd.DataFrame) -> dict[str, Any]:
     return result
 
 
-def _add_event_markers(fig: go.Figure, row: int) -> None:
+def _add_event_markers(fig: go.Figure, row: int, show_labels: bool = False) -> None:
     """Add known clinical event markers to a subplot with refined styling."""
     events = [
         (KNOWN_EVENT_DATE, "Acute Event", ACCENT_RED, "dot"),
         (RUXOLITINIB_START, "Ruxolitinib", ACCENT_GREEN, "dashdot"),
         (HEV_DIAGNOSIS, "HEV Dx", ACCENT_AMBER, "longdashdot"),
     ]
-    for date_str, label, color, dash_style in events:
+    label_y = [0.06, 0.14, 0.22]
+    for i, (date_str, label, color, dash_style) in enumerate(events):
         fig.add_shape(
             type="line",
             x0=date_str, x1=date_str,
@@ -748,18 +751,21 @@ def _add_event_markers(fig: go.Figure, row: int) -> None:
             opacity=0.7,
             row=row, col=1,
         )
-        fig.add_annotation(
-            x=date_str,
-            y=1.0,
-            yref=f"y{row} domain" if row > 1 else "y domain",
-            text=f"<b>{label}</b>",
-            showarrow=False,
-            font=dict(size=8, color=color, family="Inter, sans-serif"),
-            yanchor="bottom",
-            bgcolor="rgba(15, 17, 23, 0.7)",
-            borderpad=2,
-            row=row, col=1,
-        )
+        if show_labels:
+            fig.add_annotation(
+                x=date_str,
+                y=label_y[i] if i < len(label_y) else 0.06,
+                yref=f"y{row} domain" if row > 1 else "y domain",
+                text=f"<b>{label}</b>",
+                showarrow=False,
+                xanchor="left",
+                yanchor="bottom",
+                xshift=6,
+                font=dict(size=8, color=color, family="Inter, sans-serif"),
+                bgcolor="rgba(15, 17, 23, 0.75)",
+                borderpad=2,
+                row=row, col=1,
+            )
 
 
 # ===========================================================================
@@ -963,10 +969,11 @@ def compute_gvhd_composite(daily: pd.DataFrame) -> tuple[pd.Series, dict[str, An
     fig.add_hline(y=65, line_dash="dash", line_color=ACCENT_RED,
                   opacity=0.4, line_width=1, row=1, col=1,
                   annotation_text="Alert (65)",
+                  annotation_position="bottom right",
                   annotation_font=dict(size=9, color=ACCENT_RED))
     fig.add_hrect(y0=65, y1=100, fillcolor="rgba(239, 68, 68, 0.04)",
                   line_width=0, row=1, col=1)
-    _add_event_markers(fig, row=1)
+    _add_event_markers(fig, row=1, show_labels=True)
 
     # Panel 2: Stacked component breakdown with clean transitions
     stream_config = [
@@ -1004,7 +1011,7 @@ def compute_gvhd_composite(daily: pd.DataFrame) -> tuple[pd.Series, dict[str, An
 
     fig.update_layout(
         height=800,
-        margin=dict(t=100),
+        margin=dict(t=124),
         hovermode="x unified",
     )
     # Subtle gridlines and crosshair spikes
@@ -1537,7 +1544,7 @@ def run_rslds_analysis(
             ),
             row=1, col=1,
         )
-    _add_event_markers(fig, row=1)
+    _add_event_markers(fig, row=1, show_labels=True)
 
     # Panel 2: Viterbi path as colored bars with clean gaps
     for k in range(N_STATES):
@@ -1869,19 +1876,21 @@ def evaluate_alerts(
         y=YELLOW_PREFLARE_PROB, line_dash="dash", line_color=ACCENT_AMBER,
         opacity=0.5, line_width=1, row=2, col=1,
         annotation_text=f"YELLOW ({YELLOW_PREFLARE_PROB})",
+        annotation_position="bottom right",
         annotation_font=dict(size=9, color=ACCENT_AMBER),
     )
     fig.add_hline(
         y=RED_PREFLARE_PROB, line_dash="dash", line_color=ACCENT_RED,
         opacity=0.5, line_width=1, row=2, col=1,
         annotation_text=f"RED ({RED_PREFLARE_PROB})",
+        annotation_position="top right",
         annotation_font=dict(size=9, color=ACCENT_RED),
     )
-    _add_event_markers(fig, row=2)
+    _add_event_markers(fig, row=2, show_labels=False)
 
     fig.update_layout(
         height=700,
-        margin=dict(t=100),
+        margin=dict(t=124),
         hovermode="x unified",
     )
     # Subtle gridlines and crosshair spikes
@@ -2312,9 +2321,12 @@ def generate_html_report(
     # --- Clinical context note ---
     body += (
         '<div class="clinical-note">'
-        "<strong>Clinical Context:</strong> Chronic GVHD confirmed in 10+ organs: "
-        "skin, liver, mouth, eyes, lungs (BOS), heart, brain, GI tract, musculoskeletal, fascia "
-        "(NIH 2014 consensus: moderate; clinically under-graded). "
+        "<strong>Clinical Context:</strong> Chronic GVHD across 14 organ systems: "
+        "skin (biopsy-verified), oral cavity (biopsy-verified), eyes (sicca), liver, GI tract, "
+        "lungs (declining DLCO, BOS not excluded), joints/fascia, genitalia, heart (pericardial effusion, "
+        "borderline EF), brain/CNS (white matter lesions 5x age norm), peripheral nerves (burning feet, "
+        "tremor), autonomic nervous system (HRV 2nd percentile, IST), endocrine (secondary hypogonadism). "
+        "NIH 2014 consensus: minimum moderate (3+ organs score &ge;1); clinically under-graded as mild by OUS. "
         "Known acute decompensation on Feb 9, 2026 (validation target). "
         f"{state_model_label} classified Feb 9 as <strong>{viterbi_state}</strong>, while RED alerts were mostly off-window "
         f"({red_outside_window}/{total_red} outside ±3d), so treat this as a retrospective state-classification signal. "
