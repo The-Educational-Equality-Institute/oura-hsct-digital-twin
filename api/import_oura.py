@@ -1095,9 +1095,11 @@ def import_oura_data(
         if isinstance(info, dict):
             data = info.get("data", info) if "data" in info else info
             cursor.execute("DELETE FROM oura_personal_info")  # Single-row table
+            raw_email = data.get("email")
+            email_hash = hashlib.sha256(raw_email.encode()).hexdigest()[:16] if raw_email else None
             cursor.execute(
                 """
-                INSERT INTO oura_personal_info (age, weight, height, biological_sex, email)
+                INSERT INTO oura_personal_info (age, weight, height, biological_sex, email_hash)
                 VALUES (?, ?, ?, ?, ?)
             """,
                 (
@@ -1105,7 +1107,7 @@ def import_oura_data(
                     data.get("weight"),
                     data.get("height"),
                     data.get("biological_sex"),
-                    data.get("email"),
+                    email_hash,
                 ),
             )
             stats["personal_info"] += 1
