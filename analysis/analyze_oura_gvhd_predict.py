@@ -2799,9 +2799,11 @@ def generate_html_report(
 
     sec5 = (
         '<div class="methodology">'
-        "Features ranked by combined score: point-biserial correlation (30%), "
-        "mutual information (30%), composite correlation (20%), Cohen's d effect size (20%). "
-        "Binary target: composite score > 65th percentile."
+        "Features ranked by combined score: point-biserial correlation with Viterbi flare state (30%), "
+        "mutual information (30%), Kruskal-Wallis H across all 4 latent states (20%), "
+        "Cohen's d effect size (20%). "
+        "Binary target: Viterbi state &ge; 2 (Active Flare / Recovery). "
+        "Target derived from rSLDS/HMM latent states, not the composite score, to avoid circularity."
         "</div>" + _fig(4) + feature_table
     )
     body += make_section("5. Predictive Feature Importance", sec5)
