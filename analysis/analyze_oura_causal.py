@@ -3881,7 +3881,7 @@ def _build_clinical_interpretation(
     n_pathways_sig = 0
     pathways = all_results.get("mediation", {}).get("pathways", {})
     for p in pathways.values():
-        if isinstance(p, dict) and p.get("p_indirect", 1) < 0.05:
+        if isinstance(p, dict) and p.get("significant_fdr", p.get("p_indirect", 1) < 0.05):
             n_pathways_sig += 1
 
     # Placebo validation
