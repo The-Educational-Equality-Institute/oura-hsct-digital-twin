@@ -346,7 +346,7 @@ def build_daily_features(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     log("FEATURES", "Building daily feature matrix...")
 
     # Date range
-    dates = pd.date_range(DATA_START, DATA_END, freq="D")
+    dates = pd.date_range(DATA_START, _get_data_end(), freq="D")
     daily = pd.DataFrame({"date": dates})
 
     # --- Temperature deviation (from readiness) ---
