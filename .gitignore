@@ -45,6 +45,12 @@ reports/send_bundle/
 # Local automation (contains hardcoded paths)
 scripts/
 
+# Local MCP config
+.mcp.json
+
+# Generated report docs (keep .md out of repo too)
+reports/*.md
+
 # Build / deploy artifacts
 test-results/
 .wrangler/
