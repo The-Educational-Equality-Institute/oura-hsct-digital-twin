@@ -154,7 +154,7 @@ def _resolve_data_end() -> str:
     )
 
 
-# BOS risk payload — loaded at runtime from canonical SpO2/BOS output
+# BOS risk payload - loaded at runtime from canonical SpO2/BOS output
 _BOS_RISK = load_bos_risk(REPORTS_DIR)
 try:
     BOS_RISK_SCORE = (
@@ -189,7 +189,7 @@ YELLOW_CONSEC_DAYS = 3
 RED_PREFLARE_PROB = 0.50
 RED_FLARE_PROB = 0.20
 
-# Visual palette (used by chart traces — NOT the HTML layout)
+# Visual palette (used by chart traces - NOT the HTML layout)
 COLORS = {
     "pre": ACCENT_BLUE,
     "post": ACCENT_RED,
@@ -1949,7 +1949,7 @@ def evaluate_alerts(
                 f"  First YELLOW alert: {first_yellow['date']} ({lead_days_y}d before event)",
             )
 
-        # N=1 case study — descriptive detection statistics only.
+        # N=1 case study - descriptive detection statistics only.
         # Sensitivity/specificity require an external validation cohort
         # and cannot be computed from a single retrospective event.
         event_window = set()
@@ -2440,7 +2440,7 @@ def bos_risk_integration(daily: pd.DataFrame, composite: pd.Series) -> dict[str,
     else:
         log(
             "BOS",
-            "  WARNING: spo2_bos_metrics.json unavailable — BOS score will be N/A",
+            "  WARNING: spo2_bos_metrics.json unavailable - BOS score will be N/A",
         )
 
     result: dict[str, Any] = {
@@ -2527,7 +2527,7 @@ def bos_risk_integration(daily: pd.DataFrame, composite: pd.Series) -> dict[str,
                 if systemic_mean > 40
                 else "LOW"
             ),
-            "note": "BOS component unavailable — systemic score only",
+            "note": "BOS component unavailable - systemic score only",
         }
     log(
         "BOS",
@@ -2622,7 +2622,7 @@ def generate_html_report(
 
     combined_score = bos_result.get("combined_risk", {}).get("combined_score", "N/A")
     combined_interp = bos_result.get("combined_risk", {}).get("interpretation", "N/A")
-    # LOW composite does NOT mean "normal" — patient has confirmed multi-organ cGvHD.
+    # LOW composite does NOT mean "normal" - patient has confirmed multi-organ cGvHD.
     # A low wearable-derived score means the model under-captures organ burden,
     # not that the patient is healthy.
     combined_status = (
@@ -2637,7 +2637,7 @@ def generate_html_report(
         if combined_interp == "HIGH"
         else "Elevated"
         if combined_interp in {"MODERATE", "ELEVATED"}
-        else "Low — model limited"
+        else "Low - model limited"
     )
 
     peak_label = "Critical" if peak_score != "N/A" else ""
@@ -2674,7 +2674,7 @@ def generate_html_report(
             if isinstance(combined_score, (int, float))
             else combined_score,
             status=combined_status,
-            detail=f"{combined_interp} — wearable signals only (14 organ systems affected)",
+            detail=f"{combined_interp} - wearable signals only (14 organ systems affected)",
             decimals=1,
             status_label=combined_label,
         ),
@@ -2837,8 +2837,18 @@ def generate_html_report(
         "and integrated with systemic GVHD composite. "
         "SpO2 trend analysis provides supplementary pulmonary assessment."
         "</div>"
+        '<div style="background:#FFF3CD;border-left:4px solid #FFC107;padding:12px 16px;margin:12px 0;'
+        'border-radius:4px;font-size:0.875rem">'
+        "<strong>Clinical limitation:</strong> "
+        "This BOS risk score reflects wearable SpO2 trend data only. "
+        "It does not incorporate spirometry, DLCO, or CT findings. "
+        "Clinical assessment may differ significantly. "
+        "In this patient, HRCT shows air trapping at 41% (pathological threshold: 28%), "
+        "DLCO has declined from 89% to 67% predicted, and all 5 lobes are affected - "
+        "findings consistent with a higher clinical BOS risk than the wearable-only score suggests."
+        "</div>"
         "<ul>"
-        f"<li>BOS Risk Score: {bos_result.get('bos_risk_score', 'N/A')} ({bos_result.get('bos_risk_level', 'N/A')})</li>"
+        f"<li>BOS Risk Score (SpO2 only): {bos_result.get('bos_risk_score', 'N/A')} ({bos_result.get('bos_risk_level', 'N/A')})</li>"
         f"<li>Combined Risk: {combined_score} ({combined_interp})</li>"
         f"<li>SpO2 Mean: {spo2_mean}%</li>"
         f"<li>SpO2 Trend: {spo2_trend} %/day</li>"
