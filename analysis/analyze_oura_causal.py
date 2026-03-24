@@ -2446,8 +2446,6 @@ def run_mediation_analysis(daily: pd.DataFrame) -> dict[str, Any]:
                 bootstrap_a.append(boot_est["a_path"])
                 bootstrap_b.append(boot_est["b_path"])
             except (ValueError, np.linalg.LinAlgError, KeyError) as e:
-                import logging
-
                 logging.debug(f"Mediation bootstrap iteration failed: {e}")
                 continue
 
