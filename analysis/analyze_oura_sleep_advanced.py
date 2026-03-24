@@ -1730,7 +1730,7 @@ def build_summary(
     # HRV coupling
     if not hrv_coupling["coupling_correct_deep_gt_light"]:
         interpretations.append(
-            "ABNORMAL: HRV is NOT higher during deep sleep than during light sleep. "
+            "Atypical: HRV is NOT higher during deep sleep than during light sleep. "
             "Normal parasympathetic dominance during deep sleep is absent - "
             "suggests autonomic dysfunction."
         )
