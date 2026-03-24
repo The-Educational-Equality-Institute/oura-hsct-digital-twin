@@ -2233,7 +2233,7 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
         )
     dominant_shift = float(dominant_state_stats.get("shift_sd", 0) or 0)
     dominant_direction = str(dominant_state_stats.get("direction", "stable"))
-    dominant_p = dominant_state_stats.get("mann_whitney_p")
+    dominant_p = dominant_state_stats.get("mann_whitney_p_value")
 
     valid_tau = [
         (name, tau)
