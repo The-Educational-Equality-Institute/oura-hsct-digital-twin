@@ -466,7 +466,7 @@ def init_database(db_path: str) -> sqlite3.Connection:
             weight REAL,
             height REAL,
             biological_sex TEXT,
-            email TEXT,
+            email_hash TEXT,  -- SHA-256 prefix of email (PII redacted)
             fetched_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
