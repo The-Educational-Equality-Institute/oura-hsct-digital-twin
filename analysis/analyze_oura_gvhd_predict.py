@@ -237,7 +237,7 @@ def load_all_data() -> dict[str, pd.DataFrame]:
            WHERE date >= ? AND date <= ?
            ORDER BY date""",
         conn,
-        params=(DATA_START, DATA_END),
+        params=(DATA_START, _get_data_end()),
         parse_dates=["date"],
     )
     log("DATA", f"  Readiness: {len(data['readiness'])} rows")
@@ -252,7 +252,7 @@ def load_all_data() -> dict[str, pd.DataFrame]:
            WHERE day >= ? AND day <= ?
            ORDER BY day""",
         conn,
-        params=(DATA_START, DATA_END),
+        params=(DATA_START, _get_data_end()),
         parse_dates=["date"],
     )
     log("DATA", f"  Sleep periods: {len(data['sleep'])} rows")
@@ -264,7 +264,7 @@ def load_all_data() -> dict[str, pd.DataFrame]:
            WHERE date >= ? AND date <= ? AND spo2_average > 0
            ORDER BY date""",
         conn,
-        params=(DATA_START, DATA_END),
+        params=(DATA_START, _get_data_end()),
         parse_dates=["date"],
     )
     log("DATA", f"  SpO2: {len(data['spo2'])} rows (after filtering zeros)")
@@ -275,7 +275,7 @@ def load_all_data() -> dict[str, pd.DataFrame]:
            WHERE substr(timestamp, 1, 10) >= ? AND substr(timestamp, 1, 10) <= ?
            ORDER BY timestamp""",
         conn,
-        params=(DATA_START, DATA_END),
+        params=(DATA_START, _get_data_end()),
     )
     # Parse timestamps with timezone awareness
     data["hrv"]["timestamp"] = pd.to_datetime(data["hrv"]["timestamp"], utc=True)
@@ -288,7 +288,7 @@ def load_all_data() -> dict[str, pd.DataFrame]:
            WHERE substr(timestamp, 1, 10) >= ? AND substr(timestamp, 1, 10) <= ?
            ORDER BY timestamp""",
         conn,
-        params=(DATA_START, DATA_END),
+        params=(DATA_START, _get_data_end()),
     )
     data["heart_rate"]["timestamp"] = pd.to_datetime(
         data["heart_rate"]["timestamp"], utc=True
@@ -302,7 +302,7 @@ def load_all_data() -> dict[str, pd.DataFrame]:
            WHERE date >= ? AND date <= ?
            ORDER BY date""",
         conn,
-        params=(DATA_START, DATA_END),
+        params=(DATA_START, _get_data_end()),
         parse_dates=["date"],
     )
     log("DATA", f"  Activity: {len(data['activity'])} rows")
@@ -313,7 +313,7 @@ def load_all_data() -> dict[str, pd.DataFrame]:
            WHERE date >= ? AND date <= ?
            ORDER BY date""",
         conn,
-        params=(DATA_START, DATA_END),
+        params=(DATA_START, _get_data_end()),
         parse_dates=["date"],
     )
     log("DATA", f"  Stress: {len(data['stress'])} rows")
@@ -326,7 +326,7 @@ def load_all_data() -> dict[str, pd.DataFrame]:
            WHERE sp.day >= ? AND sp.day <= ?
            ORDER BY e.period_id, e.epoch_index""",
         conn,
-        params=(DATA_START, DATA_END),
+        params=(DATA_START, _get_data_end()),
     )
     log("DATA", f"  Sleep epochs: {len(data['epochs'])} rows")
 
