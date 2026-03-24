@@ -2019,6 +2019,16 @@ def build_html_report(
         '<div class="odt-narrative">'
         f'<h3 style="margin-bottom:8px;color:{TEXT_PRIMARY}">Recommendation</h3>'
         f'<p style="margin-bottom:8px"><strong>{bos_risk["recommendation"]}</strong></p>'
+        '<div style="background:#FFF3CD;border-left:4px solid #FFC107;padding:12px 16px;margin:12px 0;'
+        'border-radius:4px;font-size:0.8125rem">'
+        "<strong>Clinical limitation:</strong> "
+        "This BOS risk score reflects wearable SpO2 trend data only. "
+        "It does not incorporate spirometry, DLCO, or CT findings. "
+        "Clinical assessment may differ significantly. "
+        "In this patient, HRCT shows air trapping at 41% (pathological threshold: 28%), "
+        "DLCO has declined from 89% to 67% predicted, and all 5 lobes are affected - "
+        "findings consistent with a higher clinical BOS risk than the wearable-only score suggests."
+        "</div>"
         f'<p style="font-size:0.8125rem;color:{TEXT_SECONDARY}"><em>Note: SpO2 monitoring is supplementary '
         "screening and cannot substitute for pulmonary function testing (spirometry). Normal SpO2 does not "
         "exclude early-stage BOS (bronchiolitis obliterans syndrome).</em></p>"
