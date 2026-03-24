@@ -732,7 +732,7 @@ def run_lstm_autoencoder(daily: pd.DataFrame) -> dict[str, Any]:
             loss.backward()
             optimizer.step()
             epoch_loss += loss.item()
-        avg_loss = epoch_loss / len(loader)
+        avg_loss = epoch_loss / max(len(loader), 1)
         results["training_loss"].append(avg_loss)
         if (epoch + 1) % 20 == 0:
             print(f"    Epoch {epoch + 1}/{LSTM_EPOCHS}, Loss: {avg_loss:.6f}")
