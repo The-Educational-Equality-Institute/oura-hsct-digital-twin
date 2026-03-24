@@ -98,6 +98,7 @@ from config import (
     ESC_RMSSD_DEFICIENCY,
     NOCTURNAL_HR_ELEVATED,
     POPULATION_RMSSD_MEDIAN,
+    HEV_DIAGNOSIS_DATE,
 )
 
 from _theme import (
@@ -3173,7 +3174,7 @@ def _build_statistical_power_section(
         )
         lead_html = f"""
     <p style="font-size: 1.05em; line-height: 1.7; color: {TEXT_PRIMARY};">
-        <strong>{strongest['label']}</strong> is the strongest hypothesis-generating raw p-value signal
+        <strong>{strongest['label']}</strong> is the strongest hypothesis-generating unadjusted p-value signal
         ({format_p_value(strongest['p_value'])}, q={strongest['q_value']:.3f}) but {strongest_q_sentence}.
     </p>"""
 
@@ -3221,7 +3222,7 @@ def _build_statistical_power_section(
     <div class="causal-method-note" style="margin-top: 20px;">
         <strong>Interpretation:</strong>
         With {n_post_days} post-intervention days, <strong>{strongest_label}</strong> is the strongest
-        raw p-value signal, but no stream remains significant after BH correction. {placebo_clause},
+        unadjusted p-value signal, but no stream remains significant after BH correction. {placebo_clause},
         so the current result should be treated as hypothesis-generating rather than confirmed.
         Autonomic metrics (HRV, lowest HR, REM) still trend in the expected direction and may
         stabilize with additional follow-up. A 14-day post-intervention window is expected to
@@ -3346,7 +3347,7 @@ def _build_clinical_interpretation(
             </div>
         </div>
         <ul>
-            <li><strong>{strongest_label}:</strong> strongest hypothesis-generating raw p-value signal
+            <li><strong>{strongest_label}:</strong> strongest hypothesis-generating unadjusted p-value signal
             (p={strongest_p:.4f}, q={strongest_q:.4f}). It {"survives" if strongest_q < 0.05 else "does not survive"}
             FDR correction, so confirmation still depends on more post-treatment follow-up.</li>
             <li><strong>CausalImpact:</strong> {sig_ci_raw} of {len(ci_streams)} biometric streams show
