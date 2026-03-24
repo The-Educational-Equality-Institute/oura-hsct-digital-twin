@@ -2312,12 +2312,16 @@ def generate_html_report(
     # --- Clinical context note ---
     body += (
         '<div class="clinical-note">'
-        "<strong>Clinical Context:</strong> Chronic GVHD affecting skin, liver, mouth (NIH 2014: moderate). "
+        "<strong>Clinical Context:</strong> Chronic GVHD confirmed in 10+ organs: "
+        "skin, liver, mouth, eyes, lungs (BOS), heart, brain, GI tract, musculoskeletal, fascia "
+        "(NIH 2014 consensus: moderate; clinically under-graded). "
         "Known acute decompensation on Feb 9, 2026 (validation target). "
         f"{state_model_label} classified Feb 9 as <strong>{viterbi_state}</strong>, while RED alerts were mostly off-window "
         f"({red_outside_window}/{total_red} outside ±3d), so treat this as a retrospective state-classification signal. "
         f"Top ranked features in this run: {top_feature_labels}. "
-        "Temperature deviation contributes inflammatory context but is not the leading feature."
+        "Temperature deviation contributes inflammatory context but is not the leading feature. "
+        "<strong>Note:</strong> The wearable-derived composite captures cardiovascular and sleep signals only. "
+        "Organ involvement beyond what a ring can measure (eyes, mouth, skin, fascia, GI) is not reflected in the score."
         "</div>"
     )
 
