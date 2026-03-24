@@ -1252,7 +1252,7 @@ def analyze_sensor_fusion(
             residuals[col] = {
                 "mean": round(float(np.mean(resid)), 4),
                 "std": round(float(np.std(resid)), 4),
-                "ljung_box_p": round(lb_pval, 4),
+                "ljung_box_p_value": round(lb_pval, 4),
                 "white_noise": lb_pval > 0.05,
                 "acf_lag1": round(float(acf_vals[0]), 4) if acf_vals else None,
             }
