@@ -33,9 +33,7 @@ def load_dynamic_stats() -> dict:
     # --- Determine data end date from the actual dataset (not wall clock) ---
     conn_tmp = sqlite3.connect(str(DATABASE_PATH))
     try:
-        row = conn_tmp.execute(
-            "SELECT MAX(day) FROM oura_sleep_periods"
-        ).fetchone()
+        row = conn_tmp.execute("SELECT MAX(day) FROM oura_sleep_periods").fetchone()
         data_end_str = row[0] if row and row[0] else None
     finally:
         conn_tmp.close()
@@ -152,23 +150,27 @@ def subject_cards(s: dict) -> str:
     control_subjects = s.get("control_subjects", {})
     if "family" in control_subjects:
         fc = control_subjects["family"]
-        cards.append(make_kpi_card(
-            fc.get("label", "Family Control"),
-            str(fc.get("nights", "?")),
-            "night" if fc.get("nights", 0) == 1 else "nights",
-            status="good",
-            detail=fc.get("detail", ""),
-        ))
+        cards.append(
+            make_kpi_card(
+                fc.get("label", "Family Control"),
+                str(fc.get("nights", "?")),
+                "night" if fc.get("nights", 0) == 1 else "nights",
+                status="good",
+                detail=fc.get("detail", ""),
+            )
+        )
     if "disease" in control_subjects:
         dc = control_subjects["disease"]
-        cards.append(make_kpi_card(
-            dc.get("label", "Disease Control"),
-            str(dc.get("nights", "?")),
-            "nights",
-            status="info",
-            status_label=dc.get("status_label", "Recruiting"),
-            detail=dc.get("detail", ""),
-        ))
+        cards.append(
+            make_kpi_card(
+                dc.get("label", "Disease Control"),
+                str(dc.get("nights", "?")),
+                "nights",
+                status="info",
+                status_label=dc.get("status_label", "Recruiting"),
+                detail=dc.get("detail", ""),
+            )
+        )
 
     return make_kpi_row(*cards)
 
@@ -316,7 +318,7 @@ same {s["n_modules"]}-module pipeline runs on his data. No code changes. Differe
 config file, different OAuth token, same analyses.</p>
 
 <h3>What this adds</h3>
-<p>Subject A has immune-mediated autonomic damage (GVHD, 10 organ systems).
+<p>Subject A has immune-mediated autonomic damage (GVHD, 14 organ systems per NIH 2014).
 Subject B has neurovascular autonomic damage (post-stroke). Both are 36M.
 Same hardware, same software, different pathology.</p>
 
