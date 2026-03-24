@@ -54,6 +54,7 @@ from _theme import (
     TEXT_PRIMARY, TEXT_SECONDARY, TEXT_TERTIARY,
     ACCENT_BLUE, ACCENT_GREEN, ACCENT_RED, ACCENT_AMBER, ACCENT_PURPLE, ACCENT_CYAN,
     STATUS_COLORS,
+    C_CRITICAL, C_ACCENT, C_PRE_TX, C_POST_TX,
 )
 from _bos_risk import BOS_COMPONENT_LABELS, bos_status, format_bos_label
 pio.templates.default = "clinical_dark"
