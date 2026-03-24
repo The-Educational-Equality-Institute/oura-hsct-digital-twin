@@ -2562,7 +2562,15 @@ def _build_method_summary(all_results: dict) -> str:
         elif method_name == "lstm_autoencoder":
             detail = f"{len(result.get('anomalies', []))} anomalies, threshold={result.get('threshold', 0):.4f}"
         elif method_name == "spc":
-            detail = "Shewhart + CUSUM + EWMA"
+            fdr_info = result.get("fdr_correction", {})
+            n_fdr = fdr_info.get("n_rejected_fdr_005", "?")
+            n_raw = fdr_info.get("n_rejected_raw_005", "?")
+            n_tests = fdr_info.get("n_tests", "?")
+            detail = (
+                f"Shewhart + CUSUM + EWMA "
+                f"(BH FDR: {n_fdr}/{n_tests} significant after correction, "
+                f"raw: {n_raw}/{n_tests})"
+            )
         elif method_name == "tsfresh":
             detail = f"{result.get('n_features_extracted', 0)} features, {result.get('n_outliers', 0)} outliers"
         else:
