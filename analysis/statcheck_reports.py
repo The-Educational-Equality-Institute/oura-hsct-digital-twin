@@ -91,6 +91,7 @@ class AuditResult:
     mismatches: list[Mismatch] = field(default_factory=list)
     sanity_issues: list[SanityIssue] = field(default_factory=list)
     unmatched_html: list[StatClaim] = field(default_factory=list)
+    json_errors: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
