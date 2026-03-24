@@ -1635,7 +1635,7 @@ def clinical_narrative(stats: dict) -> str:
 
       <!-- Collapsible references -->
       <details class="cs-refs">
-        <summary>References (7)</summary>
+        <summary>References (6)</summary>
         <div class="cs-refs-inner">
           <ol>
             <li>Task Force of ESC/NASPE. Heart rate variability: standards of measurement, physiological interpretation and clinical use. Circulation 1996;93:1043-65</li>
