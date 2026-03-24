@@ -123,8 +123,16 @@ HEV_DIAGNOSIS_DATE = str(HEV_DIAGNOSIS_DATE)  # Convert date->str
 HEV_DIAGNOSIS = HEV_DIAGNOSIS_DATE  # Hepatitis E diagnosed
 DATA_START = str(_DATA_START_DATE)  # String form for SQL queries
 # DATA_END is resolved dynamically from the database at load time.
-# _resolve_data_end() queries oura_heart_rate for the latest date.
-DATA_END: str = ""  # set by _resolve_data_end() before first use
+# Use _get_data_end() instead of DATA_END directly to ensure lazy resolution.
+DATA_END: str | None = None  # set by _get_data_end() before first use
+
+
+def _get_data_end() -> str:
+    """Lazy getter that resolves DATA_END on first access."""
+    global DATA_END
+    if DATA_END is None:
+        DATA_END = _resolve_data_end()
+    return DATA_END
 
 
 def _resolve_data_end() -> str:
