@@ -1037,10 +1037,10 @@ def fig_heart_rate(data: dict) -> go.Figure:
     fig.add_trace(
         go.Bar(
             x=list(zones.keys()),
-            y=[v / total * 100 for v in zones.values()],
+            y=[safe_divide(v, total) * 100 for v in zones.values()],
             marker_color=colors,
             marker_line=dict(color="rgba(255,255,255,0.1)", width=1),
-            text=[f"{v / total * 100:.1f}%" for v in zones.values()],
+            text=[f"{safe_divide(v, total) * 100:.1f}%" for v in zones.values()],
             textposition="outside",
             textfont=dict(size=11),
             name="HR Zones",
