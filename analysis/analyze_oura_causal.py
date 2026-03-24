@@ -1272,18 +1272,18 @@ def run_pcmci(daily: pd.DataFrame) -> dict[str, Any]:
                             "source": var_labels[i],
                             "target": var_labels[j],
                             "lag": int(tau),
-                            "val": round(float(val_matrix[i, j, tau]), 4),
+                            "correlation": round(float(val_matrix[i, j, tau]), 4),
                             "p_value": round(float(p_matrix[i, j, tau]), 6),
                         })
 
         # Sort by absolute correlation strength
-        sig_links.sort(key=lambda x: abs(x["val"]), reverse=True)
+        sig_links.sort(key=lambda x: abs(x["correlation"]), reverse=True)
 
         print(f"    Found {len(sig_links)} significant causal links (alpha={PCMCI_ALPHA})")
         for link in sig_links[:5]:
-            direction = "+" if link["val"] > 0 else "-"
+            direction = "+" if link["correlation"] > 0 else "-"
             print(f"      {link['source']} -> {link['target']} (lag={link['lag']}, "
-                  f"r={link['val']:{direction}.3f}, p={link['p_value']:.4f})")
+                  f"r={link['correlation']:{direction}.3f}, p={link['p_value']:.4f})")
 
         return {
             "n_observations": int(n_obs),
@@ -1426,14 +1426,14 @@ def plot_pcmci(pcmci_results: dict[str, Any]) -> list[go.Figure]:
             tgt_idx = var_labels.index(link["target"])
 
             # Color by sign: positive = blue/cyan, negative = red/pink
-            if link["val"] > 0:
+            if link["correlation"] > 0:
                 edge_color = ACCENT_BLUE
                 edge_glow = "rgba(59, 130, 246, 0.15)"
             else:
                 edge_color = ACCENT_RED
                 edge_glow = "rgba(239, 68, 68, 0.15)"
 
-            edge_width = max(1.5, min(7, abs(link["val"]) * 12))
+            edge_width = max(1.5, min(7, abs(link["correlation"]) * 12))
 
             # Offset for multiple lags
             offset = link["lag"] * 0.03
@@ -1459,7 +1459,7 @@ def plot_pcmci(pcmci_results: dict[str, Any]) -> list[go.Figure]:
                 hovertext=(
                     f"<b>{link['source']} -> {link['target']}</b><br>"
                     f"Lag: {link['lag']} day{'s' if link['lag'] != 1 else ''}<br>"
-                    f"r = {link['val']:+.3f}<br>"
+                    f"r = {link['correlation']:+.3f}<br>"
                     f"p = {link['p_value']:.4f}"
                 ),
                 showlegend=False,
@@ -2909,7 +2909,7 @@ def _build_pcmci_summary(pcmci_results: dict[str, Any]) -> str:
                 f'<td>{link["source"]}</td>'
                 f'<td>{link["target"]}</td>'
                 f'<td>{link["lag"]} days</td>'
-                f'<td>{link["val"]:+.3f}</td>'
+                f'<td>{link["correlation"]:+.3f}</td>'
                 f'<td>{link["p_value"]:.4f}</td>'
                 f'</tr>'
             )
