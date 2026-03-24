@@ -12,6 +12,11 @@ on:
 
 jobs:
   claude:
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+      (github.event_name == 'issues' && (github.event.action == 'assigned' && github.event.assignee.login == 'claude') || (github.event.action == 'labeled' && github.event.label.name == 'claude'))
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -25,7 +30,6 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
           claude_args: |
             --max-turns 25
           trigger_phrase: "@claude"
