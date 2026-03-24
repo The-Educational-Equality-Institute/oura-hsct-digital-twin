@@ -2333,7 +2333,7 @@ def generate_html_report(
         f"Top ranked features in this run: {top_feature_labels}. "
         "Temperature deviation contributes inflammatory context but is not the leading feature. "
         "<strong>Note:</strong> The wearable-derived composite captures cardiovascular and sleep signals only. "
-        "Organ involvement beyond what a ring can measure (eyes, mouth, skin, fascia, GI) is not reflected in the score."
+        "Organ involvement beyond what a ring can measure (eyes, mouth, skin, fascia, GI, genitalia, CNS) is not reflected in the score."
         "</div>"
     )
 
