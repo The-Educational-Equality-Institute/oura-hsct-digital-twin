@@ -57,8 +57,8 @@ else:
         INVESTIGATION_DB = _parent_inv
 
 if INVESTIGATION_DB is None:
-    print(
-        "INFO: Investigation DB not found — timeline features will be "
+    logging.info(
+        "Investigation DB not found - timeline features will be "
         "disabled. Looked in data/investigation.db and "
         "../database/investigation.db"
     )
