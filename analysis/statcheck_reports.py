@@ -658,9 +658,11 @@ def to_json(result: AuditResult) -> dict:
         "matches_ok": result.matches_found,
         "mismatches": [asdict(m) for m in result.mismatches],
         "sanity_issues": [asdict(s) for s in result.sanity_issues],
+        "json_errors": result.json_errors,
         "unmatched_count": len(result.unmatched_html),
         "pass": len(result.mismatches) == 0
-        and not any(s.severity == "error" for s in result.sanity_issues),
+        and not any(s.severity == "error" for s in result.sanity_issues)
+        and len(result.json_errors) == 0,
     }
 
 
