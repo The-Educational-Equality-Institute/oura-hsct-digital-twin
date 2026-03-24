@@ -990,7 +990,7 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
 /* === Metric Explainer === */
 .odt-kpi-explainer {{
   font-size: 0.6875rem;
-  color: rgba(255, 255, 255, 0.35);
+  color: rgba(255, 255, 255, 0.55);
   margin-top: 6px;
   line-height: 1.45;
 }}
