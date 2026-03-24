@@ -618,7 +618,8 @@ def compute_dfa(rmssd: np.ndarray) -> dict:
     # Use nolds for robust DFA
     try:
         alpha_full = nolds.dfa(rmssd, nvals=None, overlap=True, order=1)
-    except Exception:
+    except (ValueError, RuntimeError) as e:
+        logging.warning(f"DFA full-range computation failed: {e}")
         alpha_full = np.nan
 
     # Alpha-1: short-term (window 4-16)
@@ -626,7 +627,8 @@ def compute_dfa(rmssd: np.ndarray) -> dict:
         alpha1 = nolds.dfa(
             rmssd, nvals=range(4, min(17, len(rmssd) // 4)), overlap=True, order=1
         )
-    except Exception:
+    except (ValueError, RuntimeError) as e:
+        logging.warning(f"DFA alpha-1 computation failed: {e}")
         alpha1 = np.nan
 
     # Alpha-2: long-term (window 16-64+)
@@ -636,7 +638,8 @@ def compute_dfa(rmssd: np.ndarray) -> dict:
             alpha2 = nolds.dfa(rmssd, nvals=range(16, max_win), overlap=True, order=1)
         else:
             alpha2 = np.nan
-    except Exception:
+    except (ValueError, RuntimeError) as e:
+        logging.warning(f"DFA alpha-2 computation failed: {e}")
         alpha2 = np.nan
 
     rng = np.random.default_rng(42)
