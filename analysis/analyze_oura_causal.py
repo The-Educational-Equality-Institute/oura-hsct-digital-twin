@@ -699,11 +699,15 @@ def run_causal_impact(daily: pd.DataFrame) -> dict[str, Any]:
             inferences = ci.inferences
             try:
                 summary_text = ci.summary()
-            except Exception:
+            except Exception as e:
+                import warnings
+                warnings.warn(f"CausalImpact summary generation failed: {e}")
                 summary_text = "(summary generation failed)"
             try:
                 report_text = ci.summary("report")
-            except Exception:
+            except Exception as e:
+                import warnings
+                warnings.warn(f"CausalImpact report generation failed: {e}")
                 report_text = "(report generation failed)"
 
             # Compute effect metrics - use post_start (may have been adjusted)
