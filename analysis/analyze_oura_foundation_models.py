@@ -2582,8 +2582,9 @@ def main() -> int:
         )
         print(f"[REPORT] JSON metrics saved: {JSON_OUTPUT}")
     except Exception as e:
-        print(f"[ERROR] JSON save failed: {e}")
+        logging.error("Failed to write JSON metrics: %s", e)
         traceback.print_exc()
+        raise
 
     # Summary
     print("\n" + "=" * 70)
