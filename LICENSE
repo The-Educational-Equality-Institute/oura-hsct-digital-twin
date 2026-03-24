@@ -19,3 +19,20 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+MEDICAL DISCLAIMER
+
+This software is a research and personal health monitoring tool. It is NOT a
+medical device, NOT cleared or approved by any regulatory body (FDA, CE, etc.),
+and NOT intended to diagnose, treat, cure, or prevent any disease or condition.
+
+All clinical thresholds, risk scores, and analyses in this software are derived
+from published research and are provided for informational and research purposes
+only. They do not constitute medical advice.
+
+Do not make clinical decisions based solely on the output of this software.
+Always consult a qualified healthcare provider for medical interpretation,
+diagnosis, and treatment decisions.
+
+The authors and contributors accept no liability for any harm resulting from
+the use or misuse of this software or its outputs.
