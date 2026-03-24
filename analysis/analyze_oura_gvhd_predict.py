@@ -554,10 +554,10 @@ def analyze_temperature(daily: pd.DataFrame) -> dict[str, Any]:
     }
     log("TEMP", f"  Regime changes detected: {len(regime_changes)} at {regime_changes}")
 
-    # Pre-event temperature pattern (7 days before Feb 9)
+    # Pre-event temperature pattern (7 days before Feb 9: days -6 through 0 inclusive)
     event_date = pd.Timestamp(KNOWN_EVENT_DATE)
     pre_window = daily.loc[
-        (daily.index >= event_date - timedelta(days=7))
+        (daily.index >= event_date - timedelta(days=6))
         & (daily.index <= event_date),
         "temp_dev",
     ]
