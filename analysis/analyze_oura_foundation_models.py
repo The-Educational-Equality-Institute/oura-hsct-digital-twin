@@ -645,7 +645,9 @@ def run_chronos_nightly(
 
     if len(all_pvals) >= 2:
         reject, fdr_pvals, _, _ = multipletests(all_pvals, method="fdr_bh")
-        print(f"\n  [FDR] Benjamini-Hochberg correction across {len(all_pvals)} forecast points:")
+        print(
+            f"\n  [FDR] Benjamini-Hochberg correction across {len(all_pvals)} forecast points:"
+        )
 
         # Distribute FDR-corrected p-values back to each series
         idx = 0
@@ -1337,7 +1339,7 @@ def run_ruxolitinib_analysis(
                 print("  -> HR decreased: possible autonomic improvement")
 
             # Mann-Whitney U test: pre-period tail vs post-period
-            pre_tail = pre_data[col].values[-min(n_post, 14):]
+            pre_tail = pre_data[col].values[-min(n_post, 14) :]
             if len(pre_tail) >= 3 and len(post_actual) >= 3:
                 u_stat, u_p = scipy_stats.mannwhitneyu(
                     pre_tail, post_actual, alternative="two-sided"
@@ -1349,7 +1351,9 @@ def run_ruxolitinib_analysis(
             post_comparison = {
                 "n_post_nights": n_post,
                 "mean_shift": round(float(mean_shift), 2),
-                "mann_whitney_U": round(float(u_stat), 1) if not np.isnan(u_stat) else None,
+                "mann_whitney_U": round(float(u_stat), 1)
+                if not np.isnan(u_stat)
+                else None,
                 "mann_whitney_p": round(float(u_p), 6) if not np.isnan(u_p) else None,
                 "post_dates": [str(d) for d in post_data["date"].values],
                 "post_actual": [round(float(v), 2) for v in post_actual],
@@ -1403,10 +1407,12 @@ def run_ruxolitinib_analysis(
                 float(adj_p), 6
             )
             results[sname]["metrics"]["post_comparison"]["fdr_significant"] = bool(rej)
-            metrics[f"ruxolitinib_{sname}"]["post_comparison"]["mann_whitney_p_fdr"] = round(
-                float(adj_p), 6
+            metrics[f"ruxolitinib_{sname}"]["post_comparison"]["mann_whitney_p_fdr"] = (
+                round(float(adj_p), 6)
             )
-            metrics[f"ruxolitinib_{sname}"]["post_comparison"]["fdr_significant"] = bool(rej)
+            metrics[f"ruxolitinib_{sname}"]["post_comparison"]["fdr_significant"] = (
+                bool(rej)
+            )
             print(
                 f"    {sname.upper()}: raw p={raw_p:.4f}, FDR-adjusted p={adj_p:.4f}"
                 f" {'(significant)' if rej else '(not significant)'}"
@@ -2132,9 +2138,15 @@ def generate_simple_html_report(
     if chronos_available:
         sec1_title = "1. Nightly RMSSD and HR - Chronos-2 Probabilistic Forecast"
         # Summarize FDR anomaly counts
-        rmssd_fdr_n = metrics.get("chronos_nightly_rmssd", {}).get("n_anomalies_fdr_corrected")
-        hr_fdr_n = metrics.get("chronos_nightly_hr", {}).get("n_anomalies_fdr_corrected")
-        rmssd_raw_n = metrics.get("chronos_nightly_rmssd", {}).get("n_anomalies_outside_90pi")
+        rmssd_fdr_n = metrics.get("chronos_nightly_rmssd", {}).get(
+            "n_anomalies_fdr_corrected"
+        )
+        hr_fdr_n = metrics.get("chronos_nightly_hr", {}).get(
+            "n_anomalies_fdr_corrected"
+        )
+        rmssd_raw_n = metrics.get("chronos_nightly_rmssd", {}).get(
+            "n_anomalies_outside_90pi"
+        )
         hr_raw_n = metrics.get("chronos_nightly_hr", {}).get("n_anomalies_outside_90pi")
         fdr_note = ""
         if rmssd_fdr_n is not None or hr_fdr_n is not None:
@@ -2225,9 +2237,9 @@ def generate_simple_html_report(
             {feb9_rows if feb9_rows else '<tr><td colspan="4">Chronos retrospective not available in this run.</td></tr>'}
         </table>
         <p style="margin-top: 8px;">
-            Prospective {metrics.get('data_month', 'recent')} ensemble HIGH-confidence anomalies:
+            Prospective {metrics.get("data_month", "recent")} ensemble HIGH-confidence anomalies:
             <strong>{", ".join(high_dates) if high_dates else "None detected"}</strong><br>
-            Feb 9 in {metrics.get('data_month', 'recent')} ensemble consensus:
+            Feb 9 in {metrics.get("data_month", "recent")} ensemble consensus:
             <strong style="color:{ACCENT_RED if feb9_ens else TEXT_SECONDARY}">
             {"YES" if feb9_ens else "No"}</strong>
         </p>

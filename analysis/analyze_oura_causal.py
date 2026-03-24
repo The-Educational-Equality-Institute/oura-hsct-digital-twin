@@ -701,12 +701,14 @@ def run_causal_impact(daily: pd.DataFrame) -> dict[str, Any]:
                 summary_text = ci.summary()
             except Exception as e:
                 import warnings
+
                 warnings.warn(f"CausalImpact summary generation failed: {e}")
                 summary_text = "(summary generation failed)"
             try:
                 report_text = ci.summary("report")
             except Exception as e:
                 import warnings
+
                 warnings.warn(f"CausalImpact report generation failed: {e}")
                 report_text = "(report generation failed)"
 
@@ -1140,8 +1142,10 @@ def run_placebo_tests(
         "PASS" if n_sig_placebo == 0 else "PARTIAL" if n_sig_placebo <= 1 else "FAIL"
     )
 
-    print(f"\n  Placebo summary: {n_sig_placebo}/{len(valid_tests)} tests significant (raw), "
-          f"{n_sig_placebo_fdr}/{len(valid_tests)} after FDR")
+    print(
+        f"\n  Placebo summary: {n_sig_placebo}/{len(valid_tests)} tests significant (raw), "
+        f"{n_sig_placebo_fdr}/{len(valid_tests)} after FDR"
+    )
     print(f"  Validation: {results['placebo_validation']}")
 
     results["runtime_s"] = round(time.perf_counter() - t0, 2)
@@ -1493,18 +1497,24 @@ def run_pcmci(daily: pd.DataFrame) -> dict[str, Any]:
                         continue  # skip contemporaneous self-links
                     pval = float(p_matrix[i, j, tau])
                     if np.isfinite(pval):
-                        all_tests.append({
-                            "i": i, "j": j, "tau": tau,
-                            "p_value": pval,
-                            "correlation": float(val_matrix[i, j, tau]),
-                        })
+                        all_tests.append(
+                            {
+                                "i": i,
+                                "j": j,
+                                "tau": tau,
+                                "p_value": pval,
+                                "correlation": float(val_matrix[i, j, tau]),
+                            }
+                        )
 
         # Apply Benjamini-Hochberg FDR correction across all tested pairs
         n_fdr_corrected = 0
         if all_tests and MULTIPLETESTS_AVAILABLE:
             raw_pvals = np.array([t["p_value"] for t in all_tests])
             try:
-                reject, qvals, _, _ = multipletests(raw_pvals, method="fdr_bh", alpha=PCMCI_ALPHA)
+                reject, qvals, _, _ = multipletests(
+                    raw_pvals, method="fdr_bh", alpha=PCMCI_ALPHA
+                )
                 for idx_t, t in enumerate(all_tests):
                     t["q_value_bh"] = float(qvals[idx_t])
                     t["significant_fdr"] = bool(reject[idx_t])
@@ -1882,6 +1892,7 @@ def _discretize(series: np.ndarray, n_bins: int = TE_N_BINS) -> np.ndarray:
         return digitized
     except (ValueError, IndexError) as e:
         import warnings
+
         warnings.warn(f"Discretization failed, returning zeros: {e}")
         return np.zeros(len(series), dtype=int)
 
@@ -2442,6 +2453,7 @@ def run_mediation_analysis(daily: pd.DataFrame) -> dict[str, Any]:
                 bootstrap_b.append(boot_est["b_path"])
             except (ValueError, np.linalg.LinAlgError, KeyError) as e:
                 import logging
+
                 logging.debug(f"Mediation bootstrap iteration failed: {e}")
                 continue
 
@@ -2530,11 +2542,14 @@ def run_mediation_analysis(daily: pd.DataFrame) -> dict[str, Any]:
     # Benjamini-Hochberg FDR correction across mediation pathways
     # ------------------------------------------------------------------
     valid_pathway_keys = [
-        k for k, v in results["pathways"].items()
+        k
+        for k, v in results["pathways"].items()
         if "error" not in v and "p_indirect" in v
     ]
     if len(valid_pathway_keys) > 1 and MULTIPLETESTS_AVAILABLE:
-        raw_pvals = np.array([results["pathways"][k]["p_indirect"] for k in valid_pathway_keys])
+        raw_pvals = np.array(
+            [results["pathways"][k]["p_indirect"] for k in valid_pathway_keys]
+        )
         try:
             reject, qvals, _, _ = multipletests(raw_pvals, method="fdr_bh", alpha=0.05)
             for i, k in enumerate(valid_pathway_keys):
@@ -2548,12 +2563,20 @@ def run_mediation_analysis(daily: pd.DataFrame) -> dict[str, Any]:
         except Exception as fdr_err:
             print(f"\n  WARNING: FDR correction failed for mediation: {fdr_err}")
             for k in valid_pathway_keys:
-                results["pathways"][k]["q_indirect_bh"] = results["pathways"][k]["p_indirect"]
-                results["pathways"][k]["significant_fdr"] = results["pathways"][k]["p_indirect"] < 0.05
+                results["pathways"][k]["q_indirect_bh"] = results["pathways"][k][
+                    "p_indirect"
+                ]
+                results["pathways"][k]["significant_fdr"] = (
+                    results["pathways"][k]["p_indirect"] < 0.05
+                )
     else:
         for k in valid_pathway_keys:
-            results["pathways"][k]["q_indirect_bh"] = results["pathways"][k]["p_indirect"]
-            results["pathways"][k]["significant_fdr"] = results["pathways"][k]["p_indirect"] < 0.05
+            results["pathways"][k]["q_indirect_bh"] = results["pathways"][k][
+                "p_indirect"
+            ]
+            results["pathways"][k]["significant_fdr"] = (
+                results["pathways"][k]["p_indirect"] < 0.05
+            )
 
     results["runtime_s"] = round(time.perf_counter() - t0, 2)
     print(f"\n  Mediation Analysis complete in {results['runtime_s']}s")
@@ -3883,7 +3906,9 @@ def _build_clinical_interpretation(
     n_pathways_sig = 0
     pathways = all_results.get("mediation", {}).get("pathways", {})
     for p in pathways.values():
-        if isinstance(p, dict) and p.get("significant_fdr", p.get("p_indirect", 1) < 0.05):
+        if isinstance(p, dict) and p.get(
+            "significant_fdr", p.get("p_indirect", 1) < 0.05
+        ):
             n_pathways_sig += 1
 
     # Placebo validation
