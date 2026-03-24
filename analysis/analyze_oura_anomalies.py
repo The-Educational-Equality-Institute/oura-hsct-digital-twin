@@ -2129,7 +2129,7 @@ def _build_clinical_interpretation(
         </div>
         <div class="cs-metric">
           <span class="cs-metric-name">vs. deficiency threshold</span>
-          <span class="cs-metric-val">{'Below' if pd.notna(baseline_rmssd) and baseline_rmssd < ESC_RMSSD_DEFICIENCY else 'At'} {ESC_RMSSD_DEFICIENCY} ms (Kleiger 1987)</span>
+          <span class="cs-metric-val">{'Below' if pd.notna(baseline_rmssd) and baseline_rmssd < ESC_RMSSD_DEFICIENCY else 'At'} {ESC_RMSSD_DEFICIENCY} ms (ESC/NASPE 1996)</span>
         </div>
         <div class="cs-metric">
           <span class="cs-metric-name">vs. population median</span>
