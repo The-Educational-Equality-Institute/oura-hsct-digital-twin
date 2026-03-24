@@ -66,6 +66,8 @@ from config import (
     TREATMENT_START_STR,
     FONT_FAMILY,
 )
+# Config dates are datetime.date objects; this script uses string keys throughout
+KNOWN_EVENT_DATE = str(KNOWN_EVENT_DATE)
 from _theme import (
     wrap_html, make_kpi_card, make_kpi_row, make_section,
     COLORWAY, STATUS_COLORS, BG_PRIMARY, BG_SURFACE, BG_ELEVATED,
