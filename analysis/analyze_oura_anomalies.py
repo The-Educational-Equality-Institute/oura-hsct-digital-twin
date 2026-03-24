@@ -937,6 +937,12 @@ def run_spc(daily: pd.DataFrame) -> dict[str, Any]:
         }
 
         # Per-date composite SPC score (based on z-score magnitude)
+        # Convert z-scores to two-sided p-values for FDR correction
+        raw_pvalues = 2.0 * scipy_stats.norm.sf(np.abs(z_scores))
+        results["shewhart"][metric_name]["raw_pvalues"] = {
+            str(d): float(p) for d, p in zip(dates, raw_pvalues)
+        }
+
         for i, d in enumerate(dates):
             ds = str(d)
             z_mag = abs(z_scores[i]) / SPC_SIGMA_ACTION  # normalize so 3-sigma = 1.0
@@ -947,6 +953,51 @@ def run_spc(daily: pd.DataFrame) -> dict[str, Any]:
                 results["date_scores"][ds] = max(
                     results["date_scores"][ds], float(z_mag)
                 )
+
+    # --- FDR correction across all SPC Shewhart tests ---
+    # Collect all raw p-values from all metrics' Shewhart z-scores
+    all_spc_pvalues = []
+    all_spc_labels = []  # (metric_name, date_str) for tracking
+    for metric_name in metrics:
+        sh_data = results["shewhart"].get(metric_name, {})
+        raw_pvals = sh_data.get("raw_pvalues", {})
+        for d_str, p in sorted(raw_pvals.items()):
+            all_spc_pvalues.append(p)
+            all_spc_labels.append((metric_name, d_str))
+
+    if len(all_spc_pvalues) >= 2:
+        reject, fdr_pvalues, _, _ = multipletests(
+            all_spc_pvalues, alpha=0.05, method="fdr_bh"
+        )
+        # Store FDR-corrected p-values back into results
+        results["fdr_correction"] = {
+            "n_tests": len(all_spc_pvalues),
+            "n_rejected_raw_005": int(sum(1 for p in all_spc_pvalues if p < 0.05)),
+            "n_rejected_fdr_005": int(reject.sum()),
+            "method": "Benjamini-Hochberg",
+        }
+        # Build per-metric FDR-corrected p-value dicts
+        fdr_by_metric: dict[str, dict[str, float]] = {}
+        for i, (mn, ds) in enumerate(all_spc_labels):
+            if mn not in fdr_by_metric:
+                fdr_by_metric[mn] = {}
+            fdr_by_metric[mn][ds] = float(fdr_pvalues[i])
+        for mn, fdr_dict in fdr_by_metric.items():
+            results["shewhart"][mn]["fdr_pvalues"] = fdr_dict
+
+        n_raw = results["fdr_correction"]["n_rejected_raw_005"]
+        n_fdr = results["fdr_correction"]["n_rejected_fdr_005"]
+        print(
+            f"  FDR correction (BH): {len(all_spc_pvalues)} tests across {len(metrics)} metrics, "
+            f"raw p<0.05: {n_raw}, FDR q<0.05: {n_fdr}"
+        )
+    else:
+        results["fdr_correction"] = {
+            "n_tests": len(all_spc_pvalues),
+            "n_rejected_raw_005": 0,
+            "n_rejected_fdr_005": 0,
+            "method": "Benjamini-Hochberg (not applied - insufficient tests)",
+        }
 
     # Check Feb 9 across all SPC methods
     for metric_name in metrics:
