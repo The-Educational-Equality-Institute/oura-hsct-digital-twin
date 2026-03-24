@@ -121,12 +121,31 @@ def load_all_data(bio: sqlite3.Connection) -> dict:
         d["oura_hr"]["date"] = d["oura_hr"]["timestamp"].dt.date
         d["oura_hr"]["hour"] = d["oura_hr"]["timestamp"].dt.hour
 
-    # --- Oura Sleep (daily summary) ---
+    # --- Oura Sleep (daily summary from sleep_periods + sleep score) ---
+    # NOTE: oura_sleep has score but all biometric columns are NULL.
+    # oura_sleep_periods has the actual biometric data.
+    # We JOIN them: pick the longest sleep period per day for biometrics,
+    # and get the score from oura_sleep.
     d["oura_sleep"] = df_from(bio, """
-        SELECT date, score, total_sleep_duration, rem_sleep_duration,
-               deep_sleep_duration, light_sleep_duration, efficiency,
-               hr_lowest, hr_average, hrv_average, breath_average, temperature_delta
-        FROM oura_sleep WHERE score IS NOT NULL ORDER BY date
+        WITH longest AS (
+            SELECT day, total_sleep_duration, rem_sleep_duration,
+                   deep_sleep_duration, light_sleep_duration, efficiency,
+                   lowest_heart_rate AS hr_lowest,
+                   average_heart_rate AS hr_average,
+                   average_hrv AS hrv_average,
+                   average_breath AS breath_average,
+                   ROW_NUMBER() OVER (PARTITION BY day ORDER BY total_sleep_duration DESC) AS rn
+            FROM oura_sleep_periods
+            WHERE type = 'long_sleep'
+        )
+        SELECT s.date, s.score,
+               l.total_sleep_duration, l.rem_sleep_duration,
+               l.deep_sleep_duration, l.light_sleep_duration, l.efficiency,
+               l.hr_lowest, l.hr_average, l.hrv_average, l.breath_average
+        FROM oura_sleep s
+        LEFT JOIN longest l ON s.date = l.day AND l.rn = 1
+        WHERE s.score IS NOT NULL
+        ORDER BY s.date
     """)
     if not d["oura_sleep"].empty:
         d["oura_sleep"]["date"] = pd.to_datetime(d["oura_sleep"]["date"])
