@@ -712,10 +712,10 @@ def main() -> int:
         encoding="utf-8",
     )
 
-    # Exit code: 0 = pass, 1 = mismatches found
+    # Exit code: 0 = pass, 1 = mismatches or JSON errors found
     n_errors = len(result.mismatches) + len(
         [s for s in result.sanity_issues if s.severity == "error"]
-    )
+    ) + len(result.json_errors)
     return 1 if n_errors > 0 else 0
 
 
