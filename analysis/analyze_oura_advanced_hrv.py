@@ -713,7 +713,8 @@ def compute_entropy_measures(
 
     try:
         apen = float(antropy.app_entropy(data_sub, order=m))
-    except Exception:
+    except (ValueError, RuntimeError) as e:
+        logging.warning(f"Approximate entropy computation failed: {e}")
         apen = float("nan")
 
     try:
@@ -723,7 +724,8 @@ def compute_entropy_measures(
             if hasattr(sampen_arr, "__len__")
             else float(sampen_arr)
         )
-    except Exception:
+    except (ValueError, RuntimeError) as e:
+        logging.warning(f"Sample entropy computation failed: {e}")
         sampen = float("nan")
 
     # Classification
