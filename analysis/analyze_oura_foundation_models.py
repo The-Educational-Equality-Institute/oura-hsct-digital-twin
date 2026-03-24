@@ -2126,10 +2126,29 @@ def generate_simple_html_report(
     # --- Section 1: Nightly RMSSD and HR ---
     if chronos_available:
         sec1_title = "1. Nightly RMSSD and HR - Chronos-2 Probabilistic Forecast"
+        # Summarize FDR anomaly counts
+        rmssd_fdr_n = metrics.get("chronos_nightly_rmssd", {}).get("n_anomalies_fdr_corrected")
+        hr_fdr_n = metrics.get("chronos_nightly_hr", {}).get("n_anomalies_fdr_corrected")
+        rmssd_raw_n = metrics.get("chronos_nightly_rmssd", {}).get("n_anomalies_outside_90pi")
+        hr_raw_n = metrics.get("chronos_nightly_hr", {}).get("n_anomalies_outside_90pi")
+        fdr_note = ""
+        if rmssd_fdr_n is not None or hr_fdr_n is not None:
+            parts = []
+            if rmssd_raw_n is not None and rmssd_fdr_n is not None:
+                parts.append(f"RMSSD: {rmssd_raw_n} raw, {rmssd_fdr_n} FDR-corrected")
+            if hr_raw_n is not None and hr_fdr_n is not None:
+                parts.append(f"HR: {hr_raw_n} raw, {hr_fdr_n} FDR-corrected")
+            fdr_note = (
+                f"<br><strong>Anomalies (Benjamini-Hochberg FDR):</strong> "
+                + "; ".join(parts)
+                + "."
+            )
         sec1_desc = (
             f"<p>{CONTEXT_LENGTH} nights context, {FORECAST_HORIZON} nights forecast. "
             f"Shaded bands: 90% (light) and 50% (dark) prediction intervals. "
-            f"Cross = anomaly outside 90% PI.</p>"
+            f"Cross = anomaly outside 90% PI. Per-point exceedance p-values are "
+            f"FDR-corrected (Benjamini-Hochberg) across all forecast points and series."
+            f"{fdr_note}</p>"
         )
     else:
         sec1_title = "1. Nightly RMSSD and HR - Chronos unavailable"
