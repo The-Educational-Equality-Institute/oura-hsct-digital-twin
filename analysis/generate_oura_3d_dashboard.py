@@ -2842,6 +2842,54 @@ document.querySelectorAll('.dash-tab-section.active .chart-box').forEach(renderC
 
 
 # ===================================================================
+# JSON METRICS HELPERS — extract p-values for statcheck backing
+# ===================================================================
+
+def _extract_stream_p_values(outputs: dict) -> dict:
+    """Extract all CausalImpact stream p-values for JSON metrics backing."""
+    causal = outputs.get("causal", {})
+    streams = causal.get("causal_impact", {}).get("streams", {})
+    result: dict[str, dict] = {}
+    for name, s in streams.items():
+        if not isinstance(s, dict) or "p_value" not in s:
+            continue
+        result[name] = {
+            "p_value": s["p_value"],
+            "q_value_bh": s.get("q_value_bh"),
+            "relative_effect_pct": s.get("relative_effect_pct"),
+            "significant_fdr": s.get("significant_fdr", False),
+            "probability_of_effect": s.get("probability_of_effect"),
+        }
+    return result
+
+
+def _extract_ukf_p_values(outputs: dict) -> dict:
+    """Extract all UKF drug response Mann-Whitney p-values for JSON metrics backing."""
+    dt = outputs.get("digital_twin", {})
+    drug = dt.get("drug_response", {}).get("response_stats", {})
+    result: dict[str, dict] = {}
+    for name, s in drug.items():
+        if not isinstance(s, dict):
+            continue
+        result[name] = {
+            "mann_whitney_p": s.get("mann_whitney_p"),
+            "direction": s.get("direction"),
+            "shift_sd": s.get("shift_sd"),
+        }
+    return result
+
+
+def _extract_spo2_trend(outputs: dict) -> dict:
+    """Extract SpO2 trend p-value for JSON metrics backing."""
+    spo2 = outputs.get("spo2", {})
+    trend = spo2.get("trend", {})
+    return {
+        "p_value": trend.get("p_value"),
+        "slope_pct_per_day": trend.get("slope_pct_per_day"),
+    }
+
+
+# ===================================================================
 # MAIN
 # ===================================================================
 
