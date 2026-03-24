@@ -219,7 +219,7 @@ def load_oura_data() -> pd.DataFrame:
         """
         SELECT date AS day, spo2_average
         FROM oura_spo2
-        WHERE spo2_average > 0
+        WHERE spo2_average IS NOT NULL AND spo2_average > 0
         ORDER BY date
         """,
         conn,
