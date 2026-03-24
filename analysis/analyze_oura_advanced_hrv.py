@@ -1053,7 +1053,7 @@ def compute_allostatic_load(conn: sqlite3.Connection) -> dict:
       1. HR > 90th percentile for age (>90 bpm resting)
       2. HRV < 10th percentile for age (RMSSD < 15 ms)
       3. Sleep efficiency < 85%
-      4. Temperature deviation > 0.5C
+      4. Temperature deviation > 0.5 °C
       5. SpO2 < 95%
       6. Deep sleep < 10% of total
       7. REM sleep < 15% of total
@@ -1094,7 +1094,7 @@ def compute_allostatic_load(conn: sqlite3.Connection) -> dict:
         details["sleep_efficiency"] = {"value": round(avg_eff, 1), "threshold": 85,
                                        "exceeded": eff_flag, "unit": "%"}
 
-    # 4. Temperature deviation > 0.5C
+    # 4. Temperature deviation > 0.5 °C
     rows = conn.execute(
         "SELECT temperature_deviation FROM oura_readiness WHERE temperature_deviation IS NOT NULL"
     ).fetchall()
@@ -1103,7 +1103,7 @@ def compute_allostatic_load(conn: sqlite3.Connection) -> dict:
         temp_flag = avg_temp_dev > 0.5
         score += int(temp_flag)
         details["temp_deviation"] = {"value": round(avg_temp_dev, 3), "threshold": 0.5,
-                                     "exceeded": temp_flag, "unit": "C"}
+                                     "exceeded": temp_flag, "unit": "°C"}
 
     # 5. SpO2 < 95%
     rows = conn.execute(
@@ -1533,7 +1533,7 @@ def generate_html_report(metrics: dict, figures: dict) -> str:
         The high allostatic load ({allostatic.get('score', 0)}/7) indicates systemic
         physiological stress exceeding adaptive capacity.
         <br><br>
-        <em>Analysis based on Oura Ring Gen 4 data (Jan-Mar 2026). RMSSD epochs are 5-minute intervals
+        <em>Analysis based on Oura Ring Gen 4 data ({metrics.get('data_range', {}).get('start', '?')} to {metrics.get('data_range', {}).get('end', '?')}). RMSSD epochs are 5-minute intervals
         during sleep. DFA and SampEn are computed from RMSSD epochs (proxy) - not beat-to-beat RR intervals.
         Reference values from RR-interval studies are not directly comparable.
         Frequency domain values are approximations based on Lomb-Scargle periodogram, not
