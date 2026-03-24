@@ -1958,9 +1958,10 @@ def main() -> int:
             },
             "spo2_hr_coupling": {
                 "pearson_r": coupling.get("pearson_r"),
-                "pearson_p": coupling.get("pearson_p"),
+                "pearson_p_value": coupling.get("pearson_p"),
+                "pearson_correlation": coupling.get("pearson_r"),
                 "spearman_r": coupling.get("spearman_r"),
-                "spearman_p": coupling.get("spearman_p"),
+                "spearman_p_value": coupling.get("spearman_p"),
                 "coupling_status": coupling.get("coupling_status"),
                 "interpretation": coupling.get("interpretation"),
                 "coupling_assessable": coupling.get("coupling_assessable"),
