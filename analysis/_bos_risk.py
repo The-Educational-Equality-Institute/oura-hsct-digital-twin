@@ -72,6 +72,9 @@ def load_bos_risk(reports_dir: Path) -> dict[str, Any]:
             payload = json.load(f)
     except (OSError, json.JSONDecodeError, TypeError, ValueError):
         return {}
+    if not isinstance(payload, dict):
+        logging.warning("BOS risk data is not a dict, got %s", type(payload).__name__)
+        return {}
     bos = payload.get("bos_risk")
     if not isinstance(bos, dict):
         return {}
