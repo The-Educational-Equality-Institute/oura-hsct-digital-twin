@@ -2242,10 +2242,33 @@ def generate_simple_html_report(
     )
 
     # --- Section 5: Pre vs Post Ruxolitinib ---
+    # Build ruxolitinib p-value summary
+    rux_pval_parts = []
+    for sname in ["rmssd", "hr"]:
+        rux_m = metrics.get(f"ruxolitinib_{sname}", {}).get("post_comparison", {})
+        raw_p = rux_m.get("mann_whitney_p")
+        fdr_p = rux_m.get("mann_whitney_p_fdr")
+        fdr_sig = rux_m.get("fdr_significant")
+        if raw_p is not None:
+            sig_label = "significant" if fdr_sig else "not significant"
+            p_str = f"{sname.upper()}: raw p={raw_p:.4f}"
+            if fdr_p is not None:
+                p_str += f", FDR-adjusted p={fdr_p:.4f} ({sig_label})"
+            rux_pval_parts.append(p_str)
+    rux_pval_note = ""
+    if rux_pval_parts:
+        rux_pval_note = (
+            "<br><strong>Mann-Whitney U (BH FDR-corrected):</strong> "
+            + "; ".join(rux_pval_parts)
+            + "."
+        )
+
     sec5_desc = (
         "<p>Model trained on pre-ruxolitinib period and forecasts into treatment period. "
         "Narrower prediction intervals indicate stabilization, "
-        "systematic shift indicates treatment effect.</p>"
+        "systematic shift indicates treatment effect. "
+        "Pre vs post Mann-Whitney U p-values are FDR-corrected (Benjamini-Hochberg) "
+        f"across series.{rux_pval_note}</p>"
         if chronos_available
         else "<p>Pre/post-ruxolitinib Chronos regime analysis was skipped because the foundation model was unavailable.</p>"
     )
