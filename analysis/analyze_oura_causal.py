@@ -1272,7 +1272,7 @@ def run_pcmci(daily: pd.DataFrame) -> dict[str, Any]:
                             "source": var_labels[i],
                             "target": var_labels[j],
                             "lag": int(tau),
-                            "val": round(float(val_matrix[i, j, tau]), 4),
+                            "correlation": round(float(val_matrix[i, j, tau]), 4),
                             "p_value": round(float(p_matrix[i, j, tau]), 6),
                         })
 
