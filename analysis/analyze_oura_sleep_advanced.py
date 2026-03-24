@@ -1690,7 +1690,7 @@ def build_summary(
         fi_mean = summary["fragmentation"]["mean"]
         if fi_mean > NORMS["fragmentation_index"]["clinical_concern"]:
             interpretations.append(
-                f"SEVERE: Mean fragmentation index {fi_mean}/hr exceeds clinical "
+                f"Very Low: Mean fragmentation index {fi_mean}/hr exceeds clinical "
                 f"concern threshold ({NORMS['fragmentation_index']['clinical_concern']}/hr). "
                 "Indicates frequent awakenings disrupting sleep cycles."
             )
