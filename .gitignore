@@ -48,8 +48,9 @@ scripts/
 # Local MCP config
 .mcp.json
 
-# Generated report docs (keep .md out of repo too)
+# Internal report docs (audit logs, fix logs, review docs)
 reports/*.md
+!reports/DATA_METHODOLOGY.md
 
 # Build / deploy artifacts
 test-results/
