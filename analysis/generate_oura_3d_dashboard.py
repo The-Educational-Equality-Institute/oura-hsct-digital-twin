@@ -2022,7 +2022,7 @@ def build_html(
         </div>
         <div class="dash-hero-meta">
           Oura Ring Gen 4 &middot; {summary['n_unique_days']} days &middot;
-          {n_modules}/10 analysis modules &middot;
+          {n_modules}/{len([k for k in json_files if k != "causal_ts"])} analysis modules &middot;
           Ruxolitinib 10 mg BID from {RUXOLITINIB_START}
         </div>
       </div>
