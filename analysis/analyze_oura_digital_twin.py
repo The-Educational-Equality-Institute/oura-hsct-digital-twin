@@ -1061,7 +1061,7 @@ def analyze_drug_response(
             "pre_mean": round(pre_mean, 4),
             "post_mean": round(post_mean, 4),
             "shift_sd": round(shift_sd, 3),
-            "mann_whitney_p": round(float(pval), 4),
+            "mann_whitney_p_value": round(float(pval), 4),
             "direction": "improved" if (
                 (name in ["Autonomic Tone", "Cardiac Reserve", "Sleep Quality"] and shift_sd > 0.1)
                 or (name == "Inflammation Level" and shift_sd < -0.1)
