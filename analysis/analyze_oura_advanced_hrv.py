@@ -302,14 +302,14 @@ def compute_frequency_domain(timestamps: list[datetime], rmssd: np.ndarray) -> d
     pgram_full = lombscargle(t_seconds, rmssd_centered, angular_full, normalize=True)
 
     return {
-        "vlf_power": round(vlf_power, 4),
-        "lf_power": round(lf_power, 4),
-        "hf_power": round(hf_power, 4),
+        "proxy_band_low": round(proxy_band_low, 4),
+        "proxy_band_mid": round(proxy_band_mid, 4),
+        "proxy_band_high": round(proxy_band_high, 4),
         "total_power": round(total, 4),
-        "lf_hf_ratio": round(lf_hf_ratio, 3),
-        "vlf_pct": round(100 * vlf_power / total, 1) if total > 0 else 0,
-        "lf_pct": round(100 * lf_power / total, 1) if total > 0 else 0,
-        "hf_pct": round(100 * hf_power / total, 1) if total > 0 else 0,
+        "proxy_ratio": round(proxy_ratio, 3),
+        "proxy_low_pct": round(100 * proxy_band_low / total, 1) if total > 0 else 0,
+        "proxy_mid_pct": round(100 * proxy_band_mid / total, 1) if total > 0 else 0,
+        "proxy_high_pct": round(100 * proxy_band_high / total, 1) if total > 0 else 0,
         "freqs": freqs_full.tolist(),
         "power": pgram_full.tolist(),
         "note": "Lomb-Scargle from 5-min RMSSD epochs (proxy, not beat-to-beat)",
