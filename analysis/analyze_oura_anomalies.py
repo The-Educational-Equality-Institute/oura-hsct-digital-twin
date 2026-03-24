@@ -29,16 +29,15 @@ import sys
 import time
 import traceback
 import warnings
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
 from plotly.subplots import make_subplots
-from scipy import stats as scipy_stats
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -53,21 +52,35 @@ import logging
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from config import (
-    DATABASE_PATH, REPORTS_DIR, KNOWN_EVENT_DATE,
-    TREATMENT_START, TRANSPLANT_DATE,
-    ESC_RMSSD_DEFICIENCY, NOCTURNAL_HR_ELEVATED, POPULATION_RMSSD_MEDIAN,
+    DATABASE_PATH,
+    REPORTS_DIR,
+    KNOWN_EVENT_DATE,
+    TREATMENT_START,
+    ESC_RMSSD_DEFICIENCY,
+    NOCTURNAL_HR_ELEVATED,
+    POPULATION_RMSSD_MEDIAN,
     HSCT_RMSSD_RANGE,
     DATA_START,
     BASELINE_DAYS,
 )
+
 # Config dates are datetime.date objects; this script uses string keys throughout
 KNOWN_EVENT_DATE = str(KNOWN_EVENT_DATE)
 TREATMENT_START_STR = str(TREATMENT_START)
+from _hardening import safe_divide
 from _theme import (
-    wrap_html, make_kpi_card, make_kpi_row, make_section,
-    TEXT_SECONDARY, TEXT_TERTIARY,
-    ACCENT_BLUE, ACCENT_RED, ACCENT_AMBER, ACCENT_GREEN, ACCENT_PURPLE,
-    C_HR, C_HRV,
+    wrap_html,
+    make_kpi_card,
+    make_kpi_row,
+    make_section,
+    TEXT_SECONDARY,
+    TEXT_TERTIARY,
+    ACCENT_BLUE,
+    ACCENT_RED,
+    ACCENT_AMBER,
+    ACCENT_GREEN,
+    ACCENT_PURPLE,
+    C_HR,
 )
 
 pio.templates.default = "clinical_dark"
@@ -100,6 +113,7 @@ METHOD_SCORE_THRESHOLD = 0.5  # per-method score threshold for counting support
 # ===========================================================================
 # DATA LOADING
 # ===========================================================================
+
 
 def load_data() -> dict[str, pd.DataFrame]:
     """Load all Oura tables into DataFrames."""
@@ -179,7 +193,9 @@ def load_data() -> dict[str, pd.DataFrame]:
         if df.empty:
             print(f"  {name}: 0 rows (empty)")
         else:
-            print(f"  {name}: {len(df)} rows, date range: {df['date'].min()} to {df['date'].max()}")
+            print(
+                f"  {name}: {len(df)} rows, date range: {df['date'].min()} to {df['date'].max()}"
+            )
 
     return data
 
@@ -192,12 +208,14 @@ def build_daily_features(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     hrv_daily = (
         data["hrv"]
         .groupby("date")
-        .agg(mean_rmssd=("rmssd", "mean"),
-             std_rmssd=("rmssd", "std"),
-             min_rmssd=("rmssd", "min"),
-             max_rmssd=("rmssd", "max"),
-             median_rmssd=("rmssd", "median"),
-             hrv_count=("rmssd", "count"))
+        .agg(
+            mean_rmssd=("rmssd", "mean"),
+            std_rmssd=("rmssd", "std"),
+            min_rmssd=("rmssd", "min"),
+            max_rmssd=("rmssd", "max"),
+            median_rmssd=("rmssd", "median"),
+            hrv_count=("rmssd", "count"),
+        )
         .reset_index()
     )
 
@@ -205,42 +223,66 @@ def build_daily_features(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     hr_daily = (
         data["hr"]
         .groupby("date")
-        .agg(mean_hr=("bpm", "mean"),
-             std_hr=("bpm", "std"),
-             min_hr=("bpm", "min"),
-             max_hr=("bpm", "max"),
-             median_hr=("bpm", "median"),
-             hr_count=("bpm", "count"))
+        .agg(
+            mean_hr=("bpm", "mean"),
+            std_hr=("bpm", "std"),
+            min_hr=("bpm", "min"),
+            max_hr=("bpm", "max"),
+            median_hr=("bpm", "median"),
+            hr_count=("bpm", "count"),
+        )
         .reset_index()
     )
 
     # Sleep periods - already per-night
     sp = data["sleep_periods"].copy()
     sp["total_hours"] = sp["total_sleep_duration"] / 3600
-    sp["rem_pct"] = sp["rem_sleep_duration"] / sp["total_sleep_duration"].replace(0, np.nan) * 100
-    sp["deep_pct"] = sp["deep_sleep_duration"] / sp["total_sleep_duration"].replace(0, np.nan) * 100
-    sp["light_pct"] = sp["light_sleep_duration"] / sp["total_sleep_duration"].replace(0, np.nan) * 100
-    sp_features = sp[["date", "average_hrv", "average_heart_rate", "average_breath",
-                       "efficiency", "lowest_heart_rate", "total_hours",
-                       "rem_pct", "deep_pct", "light_pct"]].copy()
+    sp["rem_pct"] = (
+        sp["rem_sleep_duration"] / sp["total_sleep_duration"].replace(0, np.nan) * 100
+    )
+    sp["deep_pct"] = (
+        sp["deep_sleep_duration"] / sp["total_sleep_duration"].replace(0, np.nan) * 100
+    )
+    sp["light_pct"] = (
+        sp["light_sleep_duration"] / sp["total_sleep_duration"].replace(0, np.nan) * 100
+    )
+    sp_features = sp[
+        [
+            "date",
+            "average_hrv",
+            "average_heart_rate",
+            "average_breath",
+            "efficiency",
+            "lowest_heart_rate",
+            "total_hours",
+            "rem_pct",
+            "deep_pct",
+            "light_pct",
+        ]
+    ].copy()
 
     # Sleep score
-    sleep_score = data["sleep"][["date", "score"]].rename(columns={"score": "sleep_score"})
+    sleep_score = data["sleep"][["date", "score"]].rename(
+        columns={"score": "sleep_score"}
+    )
 
     # SpO2
     spo2 = data["spo2"][["date", "spo2_average"]].copy()
 
     # Readiness
-    readiness = data["readiness"][["date", "readiness_score", "temperature_deviation",
-                                    "recovery_index"]].copy()
+    readiness = data["readiness"][
+        ["date", "readiness_score", "temperature_deviation", "recovery_index"]
+    ].copy()
 
     # Merge all on date
     # Start with HRV daily (most complete)
-    all_dates = sorted(set(
-        hrv_daily["date"].tolist()
-        + hr_daily["date"].tolist()
-        + sp_features["date"].tolist()
-    ))
+    all_dates = sorted(
+        set(
+            hrv_daily["date"].tolist()
+            + hr_daily["date"].tolist()
+            + sp_features["date"].tolist()
+        )
+    )
     daily = pd.DataFrame({"date": all_dates})
 
     daily = daily.merge(hrv_daily, on="date", how="left")
@@ -265,6 +307,7 @@ def build_daily_features(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
 # ===========================================================================
 # METHOD 1: MATRIX PROFILE (stumpy)
 # ===========================================================================
+
 
 def run_matrix_profile(daily: pd.DataFrame) -> dict[str, Any]:
     """Matrix Profile discord detection on nightly RMSSD and HR time series."""
@@ -371,14 +414,21 @@ def run_matrix_profile(daily: pd.DataFrame) -> dict[str, Any]:
             else:
                 # Check if any date +-1 day from Feb 9 is there
                 adjacent = [
-                    str((datetime.strptime(KNOWN_EVENT_DATE, "%Y-%m-%d") + timedelta(days=d)).date())
+                    str(
+                        (
+                            datetime.strptime(KNOWN_EVENT_DATE, "%Y-%m-%d")
+                            + timedelta(days=d)
+                        ).date()
+                    )
                     for d in [-1, 0, 1]
                 ]
                 for adj in adjacent:
                     if adj in anomaly_dates:
                         results["feb9_detected"] = True
                         rank = anomaly_dates.index(adj) + 1
-                        print(f"    ** Feb 8-10 region detected as #{rank} discord ({adj})! **")
+                        print(
+                            f"    ** Feb 8-10 region detected as #{rank} discord ({adj})! **"
+                        )
                         break
 
             print(f"    Top 3 discords: {anomaly_dates[:3]}")
@@ -391,6 +441,7 @@ def run_matrix_profile(daily: pd.DataFrame) -> dict[str, Any]:
 # ===========================================================================
 # METHOD 2: ISOLATION FOREST
 # ===========================================================================
+
 
 def run_isolation_forest(daily: pd.DataFrame) -> dict[str, Any]:
     """Multivariate Isolation Forest anomaly detection."""
@@ -412,11 +463,22 @@ def run_isolation_forest(daily: pd.DataFrame) -> dict[str, Any]:
 
     # Select features for multivariate detection
     feature_cols = [
-        "mean_rmssd", "std_rmssd", "mean_hr", "std_hr", "min_hr",
-        "average_breath", "efficiency", "lowest_heart_rate",
-        "total_hours", "rem_pct", "deep_pct",
-        "spo2_average", "readiness_score", "temperature_deviation",
-        "recovery_index", "sleep_score",
+        "mean_rmssd",
+        "std_rmssd",
+        "mean_hr",
+        "std_hr",
+        "min_hr",
+        "average_breath",
+        "efficiency",
+        "lowest_heart_rate",
+        "total_hours",
+        "rem_pct",
+        "deep_pct",
+        "spo2_average",
+        "readiness_score",
+        "temperature_deviation",
+        "recovery_index",
+        "sleep_score",
     ]
 
     available_cols = [c for c in feature_cols if c in daily.columns]
@@ -474,7 +536,9 @@ def run_isolation_forest(daily: pd.DataFrame) -> dict[str, Any]:
 
     # Check Feb 9
     feb9_adjacent = [
-        str((datetime.strptime(KNOWN_EVENT_DATE, "%Y-%m-%d") + timedelta(days=d)).date())
+        str(
+            (datetime.strptime(KNOWN_EVENT_DATE, "%Y-%m-%d") + timedelta(days=d)).date()
+        )
         for d in [-1, 0, 1]
     ]
     for d in feb9_adjacent:
@@ -483,12 +547,16 @@ def run_isolation_forest(daily: pd.DataFrame) -> dict[str, Any]:
             break
 
     n_anomalies = len(anomaly_dates)
-    print(f"  Detected {n_anomalies} anomalous days ({n_anomalies / len(df) * 100:.1f}%)")
+    print(
+        f"  Detected {n_anomalies} anomalous days ({n_anomalies / len(df) * 100:.1f}%)"
+    )
     print(f"  Top 5 anomalies: {[str(d) for d in anomaly_dates[:5]]}")
     if results["feb9_detected"]:
-        print(f"  ** Feb 8-10 region detected as anomaly! **")
+        print("  ** Feb 8-10 region detected as anomaly! **")
     else:
-        print(f"  Feb 9 NOT detected (score: {results['date_scores'].get(KNOWN_EVENT_DATE, 'N/A')})")
+        print(
+            f"  Feb 9 NOT detected (score: {results['date_scores'].get(KNOWN_EVENT_DATE, 'N/A')})"
+        )
 
     # Feature importances (via isolation depth proxy)
     results["n_anomalies"] = int(n_anomalies)
@@ -502,6 +570,7 @@ def run_isolation_forest(daily: pd.DataFrame) -> dict[str, Any]:
 # ===========================================================================
 # METHOD 3: LSTM AUTOENCODER
 # ===========================================================================
+
 
 def run_lstm_autoencoder(daily: pd.DataFrame) -> dict[str, Any]:
     """LSTM Autoencoder for sequence-based anomaly detection."""
@@ -554,9 +623,14 @@ def run_lstm_autoencoder(daily: pd.DataFrame) -> dict[str, Any]:
 
     # Features for LSTM
     feature_cols = [
-        "mean_rmssd", "mean_hr", "lowest_heart_rate",
-        "efficiency", "deep_pct", "rem_pct",
-        "readiness_score", "recovery_index",
+        "mean_rmssd",
+        "mean_hr",
+        "lowest_heart_rate",
+        "efficiency",
+        "deep_pct",
+        "rem_pct",
+        "readiness_score",
+        "recovery_index",
     ]
     available_cols = [c for c in feature_cols if c in daily.columns]
     df = daily[["date"] + available_cols].copy()
@@ -573,6 +647,7 @@ def run_lstm_autoencoder(daily: pd.DataFrame) -> dict[str, Any]:
 
     # Normalize
     from sklearn.preprocessing import StandardScaler
+
     scaler = StandardScaler()
     X_all = scaler.fit_transform(df[available_cols].values)
 
@@ -589,7 +664,9 @@ def run_lstm_autoencoder(daily: pd.DataFrame) -> dict[str, Any]:
     # Find stable period (exclude Feb 8-10 from training)
     exclude_dates = set()
     for delta in range(-2, 3):
-        d = (datetime.strptime(KNOWN_EVENT_DATE, "%Y-%m-%d") + timedelta(days=delta)).strftime("%Y-%m-%d")
+        d = (
+            datetime.strptime(KNOWN_EVENT_DATE, "%Y-%m-%d") + timedelta(days=delta)
+        ).strftime("%Y-%m-%d")
         exclude_dates.add(d)
 
     train_mask = []
@@ -663,7 +740,9 @@ def run_lstm_autoencoder(daily: pd.DataFrame) -> dict[str, Any]:
     with torch.no_grad():
         X_all_tensor = X_tensor.to(device)
         reconstructed = model(X_all_tensor)
-        errors = torch.mean((X_all_tensor.cpu() - reconstructed.cpu()) ** 2, dim=(1, 2)).numpy()
+        errors = torch.mean(
+            (X_all_tensor.cpu() - reconstructed.cpu()) ** 2, dim=(1, 2)
+        ).numpy()
 
     # Normalize errors to 0-1
     err_min, err_max = errors.min(), errors.max()
@@ -676,25 +755,31 @@ def run_lstm_autoencoder(daily: pd.DataFrame) -> dict[str, Any]:
     train_errors = errors[train_indices]
     threshold = train_errors.mean() + 2 * train_errors.std()
     print(f"  Reconstruction error threshold: {threshold:.6f}")
-    print(f"  Training error: mean={train_errors.mean():.6f}, std={train_errors.std():.6f}")
+    print(
+        f"  Training error: mean={train_errors.mean():.6f}, std={train_errors.std():.6f}"
+    )
 
     anomaly_mask = errors > threshold
     for i in test_indices:
         d = str(window_dates[i])
         results["date_scores"][d] = float(norm_errors[i])
         if anomaly_mask[i]:
-            results["anomalies"].append({
-                "date": d,
-                "score": float(norm_errors[i]),
-                "raw_error": float(errors[i]),
-            })
+            results["anomalies"].append(
+                {
+                    "date": d,
+                    "score": float(norm_errors[i]),
+                    "raw_error": float(errors[i]),
+                }
+            )
 
     # Sort anomalies by score
     results["anomalies"].sort(key=lambda x: x["score"], reverse=True)
 
     # Check Feb 9
     feb9_adjacent = [
-        str((datetime.strptime(KNOWN_EVENT_DATE, "%Y-%m-%d") + timedelta(days=d)).date())
+        str(
+            (datetime.strptime(KNOWN_EVENT_DATE, "%Y-%m-%d") + timedelta(days=d)).date()
+        )
         for d in [-1, 0, 1]
     ]
     for a in results["anomalies"]:
@@ -705,7 +790,7 @@ def run_lstm_autoencoder(daily: pd.DataFrame) -> dict[str, Any]:
     print(f"  Detected {len(results['anomalies'])} anomalous windows")
     print(f"  Top 5: {[a['date'] for a in results['anomalies'][:5]]}")
     if results["feb9_detected"]:
-        print(f"  ** Feb 8-10 region detected as anomaly! **")
+        print("  ** Feb 8-10 region detected as anomaly! **")
 
     results["threshold"] = float(threshold)
     results["runtime_s"] = round(time.time() - t0, 2)
@@ -716,6 +801,7 @@ def run_lstm_autoencoder(daily: pd.DataFrame) -> dict[str, Any]:
 # ===========================================================================
 # METHOD 4: STATISTICAL PROCESS CONTROL
 # ===========================================================================
+
 
 def run_spc(daily: pd.DataFrame) -> dict[str, Any]:
     """Statistical Process Control: Shewhart, CUSUM, and EWMA charts."""
@@ -735,12 +821,15 @@ def run_spc(daily: pd.DataFrame) -> dict[str, Any]:
     }
 
     metrics = {
-        "RMSSD": ("mean_rmssd", "lower"),   # low is bad
-        "HR": ("mean_hr", "upper"),          # high is bad
+        "RMSSD": ("mean_rmssd", "lower"),  # low is bad
+        "HR": ("mean_hr", "upper"),  # high is bad
     }
 
     # Add SpO2 if available
-    if "spo2_average" in daily.columns and daily["spo2_average"].notna().sum() > BASELINE_DAYS:
+    if (
+        "spo2_average" in daily.columns
+        and daily["spo2_average"].notna().sum() > BASELINE_DAYS
+    ):
         metrics["SpO2"] = ("spo2_average", "lower")
 
     for metric_name, (col, direction) in metrics.items():
@@ -762,7 +851,9 @@ def run_spc(daily: pd.DataFrame) -> dict[str, Any]:
         if sigma < 1e-10:
             sigma = 1.0  # avoid division by zero
 
-        print(f"  {metric_name}: baseline mu={mu:.2f}, sigma={sigma:.2f} (from first {BASELINE_DAYS} days)")
+        print(
+            f"  {metric_name}: baseline mu={mu:.2f}, sigma={sigma:.2f} (from first {BASELINE_DAYS} days)"
+        )
 
         # --- Shewhart Chart ---
         z_scores = (values - mu) / sigma
@@ -851,7 +942,9 @@ def run_spc(daily: pd.DataFrame) -> dict[str, Any]:
             if ds not in results["date_scores"]:
                 results["date_scores"][ds] = float(z_mag)
             else:
-                results["date_scores"][ds] = max(results["date_scores"][ds], float(z_mag))
+                results["date_scores"][ds] = max(
+                    results["date_scores"][ds], float(z_mag)
+                )
 
     # Check Feb 9 across all SPC methods
     for metric_name in metrics:
@@ -859,7 +952,10 @@ def run_spc(daily: pd.DataFrame) -> dict[str, Any]:
             method_data = results[method_key].get(metric_name, {})
             alarm_lists = []
             if method_key == "shewhart":
-                alarm_lists = [method_data.get("warn_2sigma", []), method_data.get("action_3sigma", [])]
+                alarm_lists = [
+                    method_data.get("warn_2sigma", []),
+                    method_data.get("action_3sigma", []),
+                ]
             elif method_key == "cusum":
                 alarm_lists = [method_data.get("alarms", [])]
             elif method_key == "ewma":
@@ -867,7 +963,12 @@ def run_spc(daily: pd.DataFrame) -> dict[str, Any]:
 
             for alarms in alarm_lists:
                 for adj_d in range(-1, 2):
-                    d = str((datetime.strptime(KNOWN_EVENT_DATE, "%Y-%m-%d") + timedelta(days=adj_d)).date())
+                    d = str(
+                        (
+                            datetime.strptime(KNOWN_EVENT_DATE, "%Y-%m-%d")
+                            + timedelta(days=adj_d)
+                        ).date()
+                    )
                     if d in alarms:
                         results["feb9_detected"] = True
 
@@ -876,13 +977,15 @@ def run_spc(daily: pd.DataFrame) -> dict[str, Any]:
         sh = results["shewhart"].get(metric_name, {})
         cu = results["cusum"].get(metric_name, {})
         ew = results["ewma"].get(metric_name, {})
-        print(f"  {metric_name}: Shewhart 2s={len(sh.get('warn_2sigma', []))}, "
-              f"3s={len(sh.get('action_3sigma', []))}, "
-              f"CUSUM={len(cu.get('alarms', []))}, "
-              f"EWMA={len(ew.get('violations', []))}")
+        print(
+            f"  {metric_name}: Shewhart 2s={len(sh.get('warn_2sigma', []))}, "
+            f"3s={len(sh.get('action_3sigma', []))}, "
+            f"CUSUM={len(cu.get('alarms', []))}, "
+            f"EWMA={len(ew.get('violations', []))}"
+        )
 
     if results["feb9_detected"]:
-        print(f"  ** Feb 8-10 region detected by SPC! **")
+        print("  ** Feb 8-10 region detected by SPC! **")
 
     results["runtime_s"] = round(time.time() - t0, 2)
     print(f"  SPC complete in {results['runtime_s']}s")
@@ -892,6 +995,7 @@ def run_spc(daily: pd.DataFrame) -> dict[str, Any]:
 # ===========================================================================
 # METHOD 5: TSFRESH FEATURE EXTRACTION + CLUSTERING
 # ===========================================================================
+
 
 def run_tsfresh_clustering(data: dict[str, pd.DataFrame]) -> dict[str, Any]:
     """Extract features per night using tsfresh, then cluster to find outlier nights."""
@@ -953,7 +1057,7 @@ def run_tsfresh_clustering(data: dict[str, pd.DataFrame]) -> dict[str, Any]:
     )
     ts_df = ts_df.sort_values(["night_id", "time"]).reset_index(drop=True)
 
-    print(f"  Extracting tsfresh features (MinimalFCParameters)...")
+    print("  Extracting tsfresh features (MinimalFCParameters)...")
 
     try:
         features = extract_features(
@@ -998,7 +1102,11 @@ def run_tsfresh_clustering(data: dict[str, pd.DataFrame]) -> dict[str, Any]:
 
     # Compute distance from cluster centroid as anomaly score
     if len(X_scaled) > 0:
-        centroid = X_scaled[~outlier_mask].mean(axis=0) if (~outlier_mask).any() else X_scaled.mean(axis=0)
+        centroid = (
+            X_scaled[~outlier_mask].mean(axis=0)
+            if (~outlier_mask).any()
+            else X_scaled.mean(axis=0)
+        )
         distances = np.linalg.norm(X_scaled - centroid, axis=1)
         d_min, d_max = distances.min(), distances.max()
         if d_max > d_min:
@@ -1016,10 +1124,14 @@ def run_tsfresh_clustering(data: dict[str, pd.DataFrame]) -> dict[str, Any]:
     for od in outlier_dates:
         idx = date_to_id[od]
         pos = list(features.index).index(idx)
-        results["anomalies"].append({
-            "date": od,
-            "score": float(norm_distances[pos]) if len(norm_distances) > pos else 0.0,
-        })
+        results["anomalies"].append(
+            {
+                "date": od,
+                "score": float(norm_distances[pos])
+                if len(norm_distances) > pos
+                else 0.0,
+            }
+        )
 
     results["anomalies"].sort(key=lambda x: x["score"], reverse=True)
 
@@ -1027,7 +1139,12 @@ def run_tsfresh_clustering(data: dict[str, pd.DataFrame]) -> dict[str, Any]:
     feb9_adjacent = set()
     for delta in range(-1, 2):
         feb9_adjacent.add(
-            str((datetime.strptime(KNOWN_EVENT_DATE, "%Y-%m-%d") + timedelta(days=delta)).date())
+            str(
+                (
+                    datetime.strptime(KNOWN_EVENT_DATE, "%Y-%m-%d")
+                    + timedelta(days=delta)
+                ).date()
+            )
         )
     for a in results["anomalies"]:
         if a["date"] in feb9_adjacent:
@@ -1038,7 +1155,7 @@ def run_tsfresh_clustering(data: dict[str, pd.DataFrame]) -> dict[str, Any]:
     print(f"  DBSCAN found {n_clusters} clusters, {len(outlier_dates)} outlier nights")
     print(f"  Outlier dates: {outlier_dates}")
     if results["feb9_detected"]:
-        print(f"  ** Feb 8-10 region detected as outlier! **")
+        print("  ** Feb 8-10 region detected as outlier! **")
 
     results["n_clusters"] = n_clusters
     results["n_outliers"] = len(outlier_dates)
@@ -1051,6 +1168,7 @@ def run_tsfresh_clustering(data: dict[str, pd.DataFrame]) -> dict[str, Any]:
 # ===========================================================================
 # VALIDATION & SCORING
 # ===========================================================================
+
 
 def validate_feb9(all_results: dict[str, dict]) -> dict[str, Any]:
     """Validate all methods against the known Feb 9 acute event."""
@@ -1091,15 +1209,21 @@ def validate_feb9(all_results: dict[str, dict]) -> dict[str, Any]:
         score_str = f"{score:.3f}" if score is not None else "N/A"
         print(f"  {method_name}: {status} (score: {score_str})")
 
-    agreement_rate = validation["methods_detected"] / max(validation["methods_tested"], 1)
+    agreement_rate = validation["methods_detected"] / max(
+        validation["methods_tested"], 1
+    )
     validation["method_agreement_rate"] = agreement_rate
     validation["study_type"] = "N=1 retrospective case study"
-    print(f"\n  Method agreement: {validation['methods_detected']}/{validation['methods_tested']} ({agreement_rate:.0%}) [N=1 case study]")
+    print(
+        f"\n  Method agreement: {validation['methods_detected']}/{validation['methods_tested']} ({agreement_rate:.0%}) [N=1 case study]"
+    )
 
     return validation
 
 
-def compute_ensemble_scores(daily: pd.DataFrame, all_results: dict[str, dict]) -> pd.DataFrame:
+def compute_ensemble_scores(
+    daily: pd.DataFrame, all_results: dict[str, dict]
+) -> pd.DataFrame:
     """Compute ensemble anomaly scores across all methods."""
     print("\n[ENSEMBLE] Computing combined anomaly scores...")
 
@@ -1160,8 +1284,10 @@ def compute_ensemble_scores(daily: pd.DataFrame, all_results: dict[str, dict]) -
     top5 = ensemble.nlargest(5, "ensemble_score").dropna(subset=["ensemble_score"])
     print("  Top 5 anomaly days:")
     for _, row in top5.iterrows():
-        rank_str = str(int(row['rank'])) if pd.notna(row['rank']) else "N/A"
-        print(f"    {row['date']}: ensemble={row['ensemble_score']:.3f}, rank={rank_str}")
+        rank_str = str(int(row["rank"])) if pd.notna(row["rank"]) else "N/A"
+        print(
+            f"    {row['date']}: ensemble={row['ensemble_score']:.3f}, rank={rank_str}"
+        )
 
     return ensemble
 
@@ -1169,6 +1295,7 @@ def compute_ensemble_scores(daily: pd.DataFrame, all_results: dict[str, dict]) -
 # ===========================================================================
 # HTML REPORT GENERATION
 # ===========================================================================
+
 
 def generate_html_report(
     daily: pd.DataFrame,
@@ -1181,7 +1308,8 @@ def generate_html_report(
 
     # --- Fig 1: Ensemble Anomaly Timeline ---
     fig1 = make_subplots(
-        rows=4, cols=1,
+        rows=4,
+        cols=1,
         shared_xaxes=True,
         vertical_spacing=0.05,
         subplot_titles=(
@@ -1206,25 +1334,34 @@ def generate_html_report(
             marker_line_width=0,
             opacity=0.85,
             name="Ensemble Score",
-            hovertemplate="<b>%{x|%b %d}</b><br>Ensemble Score: %{y:.3f}<br>Status: " +
-                          "<extra></extra>",
+            hovertemplate="<b>%{x|%b %d}</b><br>Ensemble Score: %{y:.3f}<br>Status: "
+            + "<extra></extra>",
         ),
-        row=1, col=1,
+        row=1,
+        col=1,
     )
     # Threshold line
     threshold = ensemble["ensemble_score"].quantile(0.9)
     fig1.add_shape(
-        type="line", x0=dates_dt.min(), x1=dates_dt.max(),
-        y0=threshold, y1=threshold,
+        type="line",
+        x0=dates_dt.min(),
+        x1=dates_dt.max(),
+        y0=threshold,
+        y1=threshold,
         line=dict(color=ACCENT_RED, dash="dashdot", width=1.5),
-        row=1, col=1,
+        row=1,
+        col=1,
     )
     fig1.add_annotation(
-        x=dates_dt.max(), y=threshold,
+        x=dates_dt.max(),
+        y=threshold,
         text=f"90th percentile ({threshold:.2f})",
-        showarrow=False, xanchor="right", yanchor="bottom",
+        showarrow=False,
+        xanchor="right",
+        yanchor="bottom",
         font=dict(size=9, color=ACCENT_RED),
-        row=1, col=1,
+        row=1,
+        col=1,
     )
 
     # Row 2: RMSSD with gradient fill
@@ -1240,7 +1377,8 @@ def generate_html_report(
             showlegend=False,
             hoverinfo="skip",
         ),
-        row=2, col=1,
+        row=2,
+        col=1,
     )
     fig1.add_trace(
         go.Scatter(
@@ -1252,21 +1390,30 @@ def generate_html_report(
             marker=dict(size=3, color=ACCENT_PURPLE),
             hovertemplate="<b>%{x|%b %d}</b><br>RMSSD: %{y:.1f} ms<extra></extra>",
         ),
-        row=2, col=1,
+        row=2,
+        col=1,
     )
     # Clinical thresholds
     fig1.add_shape(
-        type="line", x0=rmssd_dates.min(), x1=rmssd_dates.max(),
-        y0=ESC_RMSSD_DEFICIENCY, y1=ESC_RMSSD_DEFICIENCY,
+        type="line",
+        x0=rmssd_dates.min(),
+        x1=rmssd_dates.max(),
+        y0=ESC_RMSSD_DEFICIENCY,
+        y1=ESC_RMSSD_DEFICIENCY,
         line=dict(color=ACCENT_RED, dash="dot", width=1),
-        row=2, col=1,
+        row=2,
+        col=1,
     )
     fig1.add_annotation(
-        x=rmssd_dates.max(), y=ESC_RMSSD_DEFICIENCY,
+        x=rmssd_dates.max(),
+        y=ESC_RMSSD_DEFICIENCY,
         text="Parasympathetic deficiency (ESC/NASPE 1996; Shaffer & Ginsberg 2017)",
-        showarrow=False, xanchor="right", yanchor="bottom",
+        showarrow=False,
+        xanchor="right",
+        yanchor="bottom",
         font=dict(size=9, color=ACCENT_RED),
-        row=2, col=1,
+        row=2,
+        col=1,
     )
 
     # Row 3: Heart Rate with gradient fill
@@ -1280,7 +1427,8 @@ def generate_html_report(
             showlegend=False,
             hoverinfo="skip",
         ),
-        row=3, col=1,
+        row=3,
+        col=1,
     )
     fig1.add_trace(
         go.Scatter(
@@ -1292,20 +1440,29 @@ def generate_html_report(
             marker=dict(size=3, color=C_HR),
             hovertemplate="<b>%{x|%b %d}</b><br>HR: %{y:.0f} bpm<extra></extra>",
         ),
-        row=3, col=1,
+        row=3,
+        col=1,
     )
     fig1.add_shape(
-        type="line", x0=rmssd_dates.min(), x1=rmssd_dates.max(),
-        y0=NOCTURNAL_HR_ELEVATED, y1=NOCTURNAL_HR_ELEVATED,
+        type="line",
+        x0=rmssd_dates.min(),
+        x1=rmssd_dates.max(),
+        y0=NOCTURNAL_HR_ELEVATED,
+        y1=NOCTURNAL_HR_ELEVATED,
         line=dict(color=ACCENT_AMBER, dash="dot", width=1),
-        row=3, col=1,
+        row=3,
+        col=1,
     )
     fig1.add_annotation(
-        x=rmssd_dates.max(), y=NOCTURNAL_HR_ELEVATED,
+        x=rmssd_dates.max(),
+        y=NOCTURNAL_HR_ELEVATED,
         text=f"Nocturnal concern ({NOCTURNAL_HR_ELEVATED} bpm)",
-        showarrow=False, xanchor="right", yanchor="bottom",
+        showarrow=False,
+        xanchor="right",
+        yanchor="bottom",
         font=dict(size=9, color=ACCENT_AMBER),
-        row=3, col=1,
+        row=3,
+        col=1,
     )
 
     # Anomaly highlighting: red markers on RMSSD and HR for flagged days
@@ -1320,7 +1477,9 @@ def generate_html_report(
         anom_scores = []
         for d in anom_rows["date"].values:
             row_match = ensemble[ensemble["date"] == d]
-            anom_scores.append(float(row_match["ensemble_score"].iloc[0]) if len(row_match) > 0 else 0)
+            anom_scores.append(
+                float(row_match["ensemble_score"].iloc[0]) if len(row_match) > 0 else 0
+            )
 
         # RMSSD anomaly markers - large and unmistakable
         fig1.add_trace(
@@ -1340,7 +1499,8 @@ def generate_html_report(
                 hovertemplate="<b>ANOMALY</b><br>%{x|%b %d}<br>RMSSD: %{y:.1f} ms<br>Score: %{customdata[0]:.3f}<extra></extra>",
                 showlegend=True,
             ),
-            row=2, col=1,
+            row=2,
+            col=1,
         )
         # HR anomaly markers
         fig1.add_trace(
@@ -1360,7 +1520,8 @@ def generate_html_report(
                 hovertemplate="<b>ANOMALY</b><br>%{x|%b %d}<br>HR: %{y:.0f} bpm<br>Score: %{customdata[0]:.3f}<extra></extra>",
                 showlegend=False,
             ),
-            row=3, col=1,
+            row=3,
+            col=1,
         )
 
     # Shade top-3 discord regions across RMSSD and HR rows
@@ -1375,7 +1536,12 @@ def generate_html_report(
                 for shade_row in [2, 3]:
                     yref = f"y{shade_row} domain"
                     fig1.add_shape(
-                        type="rect", x0=d0, x1=d1, y0=0, y1=1, yref=yref,
+                        type="rect",
+                        x0=d0,
+                        x1=d1,
+                        y0=0,
+                        y1=1,
+                        yref=yref,
                         fillcolor="rgba(239, 68, 68, 0.12)",
                         line=dict(width=0),
                         layer="below",
@@ -1395,7 +1561,9 @@ def generate_html_report(
             method_scores_by_date[d][mname] = row[col]
 
     for i, mname in enumerate(method_names):
-        y_vals = [method_scores_by_date.get(d, {}).get(mname, None) for d in ensemble["date"]]
+        y_vals = [
+            method_scores_by_date.get(d, {}).get(mname, None) for d in ensemble["date"]
+        ]
         fig1.add_trace(
             go.Scatter(
                 x=dates_dt,
@@ -1405,20 +1573,23 @@ def generate_html_report(
                     size=10,
                     color=y_vals,
                     colorscale="RdYlGn_r",
-                    cmin=0, cmax=1,
+                    cmin=0,
+                    cmax=1,
                     showscale=(i == 0),
                     colorbar=dict(title="Score", len=0.2, y=0.12) if i == 0 else None,
                 ),
                 name=mname,
                 hovertemplate=f"{mname}<br>Date: %{{x|%Y-%m-%d}}<br>Score: %{{marker.color:.3f}}<extra></extra>",
             ),
-            row=4, col=1,
+            row=4,
+            col=1,
         )
 
     fig1.update_yaxes(
         tickvals=list(range(len(method_names))),
         ticktext=method_names,
-        row=4, col=1,
+        row=4,
+        col=1,
     )
 
     # Add event marker and treatment start on all rows
@@ -1428,30 +1599,44 @@ def generate_html_report(
         # Known event vertical line
         fig1.add_shape(
             type="line",
-            x0=event_date, x1=event_date,
-            y0=0, y1=1, yref=yref,
+            x0=event_date,
+            x1=event_date,
+            y0=0,
+            y1=1,
+            yref=yref,
             line=dict(color=ACCENT_RED, width=2, dash="dash"),
         )
         # Treatment start vertical line
         fig1.add_shape(
             type="line",
-            x0=treatment_date, x1=treatment_date,
-            y0=0, y1=1, yref=yref,
+            x0=treatment_date,
+            x1=treatment_date,
+            y0=0,
+            y1=1,
+            yref=yref,
             line=dict(color=ACCENT_GREEN, width=2, dash="dash"),
         )
         if row_n == 1:
             fig1.add_annotation(
-                x=event_date, y=1, yref=yref,
+                x=event_date,
+                y=1,
+                yref=yref,
                 text="Acute event Feb 9",
-                showarrow=True, arrowhead=2,
-                ax=40, ay=-30,
+                showarrow=True,
+                arrowhead=2,
+                ax=40,
+                ay=-30,
                 font=dict(color=ACCENT_RED, size=11),
             )
             fig1.add_annotation(
-                x=treatment_date, y=0.9, yref=yref,
+                x=treatment_date,
+                y=0.9,
+                yref=yref,
                 text=f"Ruxolitinib start {TREATMENT_START}",
-                showarrow=True, arrowhead=2,
-                ax=-40, ay=-30,
+                showarrow=True,
+                arrowhead=2,
+                ax=-40,
+                ay=-30,
                 font=dict(color=ACCENT_GREEN, size=11),
             )
 
@@ -1470,21 +1655,30 @@ def generate_html_report(
         fig1.update_xaxes(
             tickformat="%d %b",
             gridcolor="rgba(255,255,255,0.05)",
-            showspikes=True, spikemode="across", spikethickness=1,
-            spikecolor="rgba(255,255,255,0.15)", spikedash="dot",
-            row=row_n, col=1,
+            showspikes=True,
+            spikemode="across",
+            spikethickness=1,
+            spikecolor="rgba(255,255,255,0.15)",
+            spikedash="dot",
+            row=row_n,
+            col=1,
         )
         fig1.update_yaxes(
             gridcolor="rgba(255,255,255,0.05)",
-            showspikes=True, spikemode="across", spikethickness=1,
-            spikecolor="rgba(255,255,255,0.15)", spikedash="dot",
-            row=row_n, col=1,
+            showspikes=True,
+            spikemode="across",
+            spikethickness=1,
+            spikecolor="rgba(255,255,255,0.15)",
+            spikedash="dot",
+            row=row_n,
+            col=1,
         )
 
     # --- Fig 2: SPC Charts ---
     spc_result = all_results.get("spc", {})
     fig2 = make_subplots(
-        rows=3, cols=1,
+        rows=3,
+        cols=1,
         shared_xaxes=True,
         vertical_spacing=0.08,
         subplot_titles=(
@@ -1513,16 +1707,30 @@ def generate_html_report(
 
         # Fill between 2-sigma limits (warning zone)
         fig2.add_trace(
-            go.Scatter(x=z_dates_dt, y=[ucl_2s] * len(z_dates_dt),
-                       mode="lines", line=dict(width=0), showlegend=False, hoverinfo="skip"),
-            row=1, col=1,
+            go.Scatter(
+                x=z_dates_dt,
+                y=[ucl_2s] * len(z_dates_dt),
+                mode="lines",
+                line=dict(width=0),
+                showlegend=False,
+                hoverinfo="skip",
+            ),
+            row=1,
+            col=1,
         )
         fig2.add_trace(
-            go.Scatter(x=z_dates_dt, y=[lcl_2s] * len(z_dates_dt),
-                       mode="lines", line=dict(width=0), fill="tonexty",
-                       fillcolor="rgba(16, 185, 129, 0.06)",
-                       showlegend=False, hoverinfo="skip"),
-            row=1, col=1,
+            go.Scatter(
+                x=z_dates_dt,
+                y=[lcl_2s] * len(z_dates_dt),
+                mode="lines",
+                line=dict(width=0),
+                fill="tonexty",
+                fillcolor="rgba(16, 185, 129, 0.06)",
+                showlegend=False,
+                hoverinfo="skip",
+            ),
+            row=1,
+            col=1,
         )
 
         # Identify out-of-control points (beyond 3-sigma)
@@ -1540,49 +1748,121 @@ def generate_html_report(
 
         # Main trace
         fig2.add_trace(
-            go.Scatter(x=z_dates_dt, y=rmssd_actual,
-                       mode="lines", name="RMSSD",
-                       line=dict(color=ACCENT_PURPLE, width=2.5),
-                       hovertemplate="<b>%{x|%b %d}</b><br>RMSSD: %{y:.1f} ms<extra></extra>"),
-            row=1, col=1,
+            go.Scatter(
+                x=z_dates_dt,
+                y=rmssd_actual,
+                mode="lines",
+                name="RMSSD",
+                line=dict(color=ACCENT_PURPLE, width=2.5),
+                hovertemplate="<b>%{x|%b %d}</b><br>RMSSD: %{y:.1f} ms<extra></extra>",
+            ),
+            row=1,
+            col=1,
         )
 
         # Out-of-control points highlighted dramatically
         if ooc_dates:
             fig2.add_trace(
-                go.Scatter(x=ooc_dates, y=ooc_vals,
-                           mode="markers", name="Out of Control",
-                           marker=dict(size=12, color=ACCENT_RED, symbol="x-thin-open",
-                                       line=dict(width=3, color=ACCENT_RED)),
-                           hovertemplate="<b>OUT OF CONTROL</b><br>%{x|%b %d}<br>RMSSD: %{y:.1f} ms<extra></extra>"),
-                row=1, col=1,
+                go.Scatter(
+                    x=ooc_dates,
+                    y=ooc_vals,
+                    mode="markers",
+                    name="Out of Control",
+                    marker=dict(
+                        size=12,
+                        color=ACCENT_RED,
+                        symbol="x-thin-open",
+                        line=dict(width=3, color=ACCENT_RED),
+                    ),
+                    hovertemplate="<b>OUT OF CONTROL</b><br>%{x|%b %d}<br>RMSSD: %{y:.1f} ms<extra></extra>",
+                ),
+                row=1,
+                col=1,
             )
 
         # Control limits with refined dash patterns
-        fig2.add_shape(type="line", x0=z_dates_dt.min(), x1=z_dates_dt.max(),
-                       y0=ucl_2s, y1=ucl_2s,
-                       line=dict(color=ACCENT_AMBER, dash="dashdot", width=1), row=1, col=1)
-        fig2.add_shape(type="line", x0=z_dates_dt.min(), x1=z_dates_dt.max(),
-                       y0=lcl_2s, y1=lcl_2s,
-                       line=dict(color=ACCENT_AMBER, dash="dashdot", width=1), row=1, col=1)
-        fig2.add_shape(type="line", x0=z_dates_dt.min(), x1=z_dates_dt.max(),
-                       y0=ucl_3s, y1=ucl_3s,
-                       line=dict(color=ACCENT_RED, dash="longdash", width=1.5), row=1, col=1)
-        fig2.add_shape(type="line", x0=z_dates_dt.min(), x1=z_dates_dt.max(),
-                       y0=lcl_3s, y1=lcl_3s,
-                       line=dict(color=ACCENT_RED, dash="longdash", width=1.5), row=1, col=1)
+        fig2.add_shape(
+            type="line",
+            x0=z_dates_dt.min(),
+            x1=z_dates_dt.max(),
+            y0=ucl_2s,
+            y1=ucl_2s,
+            line=dict(color=ACCENT_AMBER, dash="dashdot", width=1),
+            row=1,
+            col=1,
+        )
+        fig2.add_shape(
+            type="line",
+            x0=z_dates_dt.min(),
+            x1=z_dates_dt.max(),
+            y0=lcl_2s,
+            y1=lcl_2s,
+            line=dict(color=ACCENT_AMBER, dash="dashdot", width=1),
+            row=1,
+            col=1,
+        )
+        fig2.add_shape(
+            type="line",
+            x0=z_dates_dt.min(),
+            x1=z_dates_dt.max(),
+            y0=ucl_3s,
+            y1=ucl_3s,
+            line=dict(color=ACCENT_RED, dash="longdash", width=1.5),
+            row=1,
+            col=1,
+        )
+        fig2.add_shape(
+            type="line",
+            x0=z_dates_dt.min(),
+            x1=z_dates_dt.max(),
+            y0=lcl_3s,
+            y1=lcl_3s,
+            line=dict(color=ACCENT_RED, dash="longdash", width=1.5),
+            row=1,
+            col=1,
+        )
         # Center line
-        fig2.add_shape(type="line", x0=z_dates_dt.min(), x1=z_dates_dt.max(),
-                       y0=mu, y1=mu,
-                       line=dict(color=ACCENT_GREEN, dash="solid", width=1.5),
-                       row=1, col=1)
+        fig2.add_shape(
+            type="line",
+            x0=z_dates_dt.min(),
+            x1=z_dates_dt.max(),
+            y0=mu,
+            y1=mu,
+            line=dict(color=ACCENT_GREEN, dash="solid", width=1.5),
+            row=1,
+            col=1,
+        )
         # Limit labels
-        fig2.add_annotation(x=z_dates_dt.max(), y=ucl_3s, text="UCL (3s)",
-                           showarrow=False, xanchor="left", font=dict(size=9, color=ACCENT_RED), row=1, col=1)
-        fig2.add_annotation(x=z_dates_dt.max(), y=lcl_3s, text="LCL (3s)",
-                           showarrow=False, xanchor="left", font=dict(size=9, color=ACCENT_RED), row=1, col=1)
-        fig2.add_annotation(x=z_dates_dt.max(), y=mu, text=f"CL ({mu:.1f})",
-                           showarrow=False, xanchor="left", font=dict(size=9, color=ACCENT_GREEN), row=1, col=1)
+        fig2.add_annotation(
+            x=z_dates_dt.max(),
+            y=ucl_3s,
+            text="UCL (3s)",
+            showarrow=False,
+            xanchor="left",
+            font=dict(size=9, color=ACCENT_RED),
+            row=1,
+            col=1,
+        )
+        fig2.add_annotation(
+            x=z_dates_dt.max(),
+            y=lcl_3s,
+            text="LCL (3s)",
+            showarrow=False,
+            xanchor="left",
+            font=dict(size=9, color=ACCENT_RED),
+            row=1,
+            col=1,
+        )
+        fig2.add_annotation(
+            x=z_dates_dt.max(),
+            y=mu,
+            text=f"CL ({mu:.1f})",
+            showarrow=False,
+            xanchor="left",
+            font=dict(size=9, color=ACCENT_GREEN),
+            row=1,
+            col=1,
+        )
 
     # CUSUM for RMSSD
     cu_rmssd = spc_result.get("cusum", {}).get("RMSSD", {})
@@ -1597,32 +1877,62 @@ def generate_html_report(
 
         # Fill under CUSUM+ (subtle)
         fig2.add_trace(
-            go.Scatter(x=cu_dates_dt, y=cp_vals,
-                       mode="none", fill="tozeroy",
-                       fillcolor="rgba(59, 130, 246, 0.06)",
-                       showlegend=False, hoverinfo="skip"),
-            row=2, col=1,
+            go.Scatter(
+                x=cu_dates_dt,
+                y=cp_vals,
+                mode="none",
+                fill="tozeroy",
+                fillcolor="rgba(59, 130, 246, 0.06)",
+                showlegend=False,
+                hoverinfo="skip",
+            ),
+            row=2,
+            col=1,
         )
         fig2.add_trace(
-            go.Scatter(x=cu_dates_dt, y=cp_vals,
-                       mode="lines", name="CUSUM+",
-                       line=dict(color=ACCENT_BLUE, width=2.5),
-                       hovertemplate="<b>%{x|%b %d}</b><br>CUSUM+: %{y:.2f}<extra></extra>"),
-            row=2, col=1,
+            go.Scatter(
+                x=cu_dates_dt,
+                y=cp_vals,
+                mode="lines",
+                name="CUSUM+",
+                line=dict(color=ACCENT_BLUE, width=2.5),
+                hovertemplate="<b>%{x|%b %d}</b><br>CUSUM+: %{y:.2f}<extra></extra>",
+            ),
+            row=2,
+            col=1,
         )
         fig2.add_trace(
-            go.Scatter(x=cu_dates_dt, y=cn_vals,
-                       mode="lines", name="CUSUM-",
-                       line=dict(color=ACCENT_RED, width=2.5),
-                       hovertemplate="<b>%{x|%b %d}</b><br>CUSUM-: %{y:.2f}<extra></extra>"),
-            row=2, col=1,
+            go.Scatter(
+                x=cu_dates_dt,
+                y=cn_vals,
+                mode="lines",
+                name="CUSUM-",
+                line=dict(color=ACCENT_RED, width=2.5),
+                hovertemplate="<b>%{x|%b %d}</b><br>CUSUM-: %{y:.2f}<extra></extra>",
+            ),
+            row=2,
+            col=1,
         )
-        fig2.add_shape(type="line", x0=cu_dates_dt.min(), x1=cu_dates_dt.max(),
-                       y0=h_val, y1=h_val,
-                       line=dict(color=ACCENT_RED, dash="longdash", width=1.5),
-                       row=2, col=1)
-        fig2.add_annotation(x=cu_dates_dt.max(), y=h_val, text=f"Decision boundary (h={h_val:.1f})",
-                           showarrow=False, xanchor="left", font=dict(size=9, color=ACCENT_RED), row=2, col=1)
+        fig2.add_shape(
+            type="line",
+            x0=cu_dates_dt.min(),
+            x1=cu_dates_dt.max(),
+            y0=h_val,
+            y1=h_val,
+            line=dict(color=ACCENT_RED, dash="longdash", width=1.5),
+            row=2,
+            col=1,
+        )
+        fig2.add_annotation(
+            x=cu_dates_dt.max(),
+            y=h_val,
+            text=f"Decision boundary (h={h_val:.1f})",
+            showarrow=False,
+            xanchor="left",
+            font=dict(size=9, color=ACCENT_RED),
+            row=2,
+            col=1,
+        )
 
     # EWMA for RMSSD
     ew_rmssd = spc_result.get("ewma", {}).get("RMSSD", {})
@@ -1638,49 +1948,86 @@ def generate_html_report(
 
         # Fill between UCL and LCL (control band)
         fig2.add_trace(
-            go.Scatter(x=ew_dates_dt, y=ucl_vals,
-                       mode="lines", line=dict(width=0), showlegend=False, hoverinfo="skip"),
-            row=3, col=1,
+            go.Scatter(
+                x=ew_dates_dt,
+                y=ucl_vals,
+                mode="lines",
+                line=dict(width=0),
+                showlegend=False,
+                hoverinfo="skip",
+            ),
+            row=3,
+            col=1,
         )
         fig2.add_trace(
-            go.Scatter(x=ew_dates_dt, y=lcl_vals,
-                       mode="lines", line=dict(width=0), fill="tonexty",
-                       fillcolor="rgba(139, 92, 246, 0.06)",
-                       showlegend=False, hoverinfo="skip"),
-            row=3, col=1,
+            go.Scatter(
+                x=ew_dates_dt,
+                y=lcl_vals,
+                mode="lines",
+                line=dict(width=0),
+                fill="tonexty",
+                fillcolor="rgba(139, 92, 246, 0.06)",
+                showlegend=False,
+                hoverinfo="skip",
+            ),
+            row=3,
+            col=1,
         )
 
         fig2.add_trace(
-            go.Scatter(x=ew_dates_dt, y=ew_vals,
-                       mode="lines", name="EWMA",
-                       line=dict(color=ACCENT_PURPLE, width=2.5),
-                       hovertemplate="<b>%{x|%b %d}</b><br>EWMA: %{y:.1f} ms<extra></extra>"),
-            row=3, col=1,
+            go.Scatter(
+                x=ew_dates_dt,
+                y=ew_vals,
+                mode="lines",
+                name="EWMA",
+                line=dict(color=ACCENT_PURPLE, width=2.5),
+                hovertemplate="<b>%{x|%b %d}</b><br>EWMA: %{y:.1f} ms<extra></extra>",
+            ),
+            row=3,
+            col=1,
         )
         fig2.add_trace(
-            go.Scatter(x=ew_dates_dt, y=ucl_vals,
-                       mode="lines", name="UCL",
-                       line=dict(color=ACCENT_RED, dash="longdash", width=1.5)),
-            row=3, col=1,
+            go.Scatter(
+                x=ew_dates_dt,
+                y=ucl_vals,
+                mode="lines",
+                name="UCL",
+                line=dict(color=ACCENT_RED, dash="longdash", width=1.5),
+            ),
+            row=3,
+            col=1,
         )
         fig2.add_trace(
-            go.Scatter(x=ew_dates_dt, y=lcl_vals,
-                       mode="lines", name="LCL",
-                       line=dict(color=ACCENT_RED, dash="longdash", width=1.5)),
-            row=3, col=1,
+            go.Scatter(
+                x=ew_dates_dt,
+                y=lcl_vals,
+                mode="lines",
+                name="LCL",
+                line=dict(color=ACCENT_RED, dash="longdash", width=1.5),
+            ),
+            row=3,
+            col=1,
         )
 
     # Event + treatment markers
     for row_n in range(1, 4):
         yref = "y domain" if row_n == 1 else f"y{row_n} domain"
         fig2.add_shape(
-            type="line", x0=event_date, x1=event_date,
-            y0=0, y1=1, yref=yref,
+            type="line",
+            x0=event_date,
+            x1=event_date,
+            y0=0,
+            y1=1,
+            yref=yref,
             line=dict(color=ACCENT_RED, width=2, dash="dash"),
         )
         fig2.add_shape(
-            type="line", x0=treatment_date, x1=treatment_date,
-            y0=0, y1=1, yref=yref,
+            type="line",
+            x0=treatment_date,
+            x1=treatment_date,
+            y0=0,
+            y1=1,
+            yref=yref,
             line=dict(color=ACCENT_GREEN, width=2, dash="dash"),
         )
 
@@ -1695,24 +2042,36 @@ def generate_html_report(
         fig2.update_xaxes(
             tickformat="%d %b",
             gridcolor="rgba(255,255,255,0.05)",
-            showspikes=True, spikemode="across", spikethickness=1,
-            spikecolor="rgba(255,255,255,0.15)", spikedash="dot",
-            row=spc_row, col=1,
+            showspikes=True,
+            spikemode="across",
+            spikethickness=1,
+            spikecolor="rgba(255,255,255,0.15)",
+            spikedash="dot",
+            row=spc_row,
+            col=1,
         )
         fig2.update_yaxes(
             zeroline=False,
             gridcolor="rgba(255,255,255,0.05)",
-            showspikes=True, spikemode="across", spikethickness=1,
-            spikecolor="rgba(255,255,255,0.15)", spikedash="dot",
-            row=spc_row, col=1,
+            showspikes=True,
+            spikemode="across",
+            spikethickness=1,
+            spikecolor="rgba(255,255,255,0.15)",
+            spikedash="dot",
+            row=spc_row,
+            col=1,
         )
     fig2.update_yaxes(title_text="RMSSD (ms)", row=1, col=1)
     fig2.update_yaxes(title_text="CUSUM", row=2, col=1)
     fig2.update_yaxes(title_text="EWMA (ms)", row=3, col=1)
     fig2.add_annotation(
         text="Note: SPC baseline = patient's early January 2026 values, not population reference.",
-        xref="paper", yref="paper", x=0, y=-0.08,
-        showarrow=False, font=dict(size=10, color=TEXT_TERTIARY),
+        xref="paper",
+        yref="paper",
+        x=0,
+        y=-0.08,
+        showarrow=False,
+        font=dict(size=10, color=TEXT_TERTIARY),
     )
 
     # --- Fig 3: LSTM Training Loss ---
@@ -1722,29 +2081,37 @@ def generate_html_report(
         training_loss = lstm_result["training_loss"]
         epochs = list(range(1, len(training_loss) + 1))
         # Subtle fill below the curve
-        fig3.add_trace(go.Scatter(
-            x=epochs,
-            y=training_loss,
-            mode="none",
-            fill="tozeroy",
-            fillcolor="rgba(59, 130, 246, 0.08)",
-            showlegend=False,
-            hoverinfo="skip",
-        ))
-        fig3.add_trace(go.Scatter(
-            x=epochs,
-            y=training_loss,
-            mode="lines",
-            name="Training Loss",
-            line=dict(color=ACCENT_BLUE, width=2.5, shape="spline"),
-            hovertemplate="<b>Epoch %{x}</b><br>MSE Loss: %{y:.6f}<extra></extra>",
-        ))
+        fig3.add_trace(
+            go.Scatter(
+                x=epochs,
+                y=training_loss,
+                mode="none",
+                fill="tozeroy",
+                fillcolor="rgba(59, 130, 246, 0.08)",
+                showlegend=False,
+                hoverinfo="skip",
+            )
+        )
+        fig3.add_trace(
+            go.Scatter(
+                x=epochs,
+                y=training_loss,
+                mode="lines",
+                name="Training Loss",
+                line=dict(color=ACCENT_BLUE, width=2.5, shape="spline"),
+                hovertemplate="<b>Epoch %{x}</b><br>MSE Loss: %{y:.6f}<extra></extra>",
+            )
+        )
         # Final loss annotation
         final_loss = training_loss[-1]
         fig3.add_annotation(
-            x=epochs[-1], y=final_loss,
+            x=epochs[-1],
+            y=final_loss,
             text=f"Final: {final_loss:.6f}",
-            showarrow=True, arrowhead=2, ax=-60, ay=-25,
+            showarrow=True,
+            arrowhead=2,
+            ax=-60,
+            ay=-25,
             font=dict(size=10, color=ACCENT_BLUE),
         )
         fig3.update_layout(
@@ -1756,8 +2123,11 @@ def generate_html_report(
         )
         fig3.update_xaxes(
             gridcolor="rgba(255,255,255,0.05)",
-            showspikes=True, spikemode="across", spikethickness=1,
-            spikecolor="rgba(255,255,255,0.15)", spikedash="dot",
+            showspikes=True,
+            spikemode="across",
+            spikethickness=1,
+            spikecolor="rgba(255,255,255,0.15)",
+            spikedash="dot",
         )
         fig3.update_yaxes(
             zeroline=False,
@@ -1769,28 +2139,58 @@ def generate_html_report(
     clinical_html = _build_clinical_interpretation(daily, ensemble, all_results)
 
     # Executive summary stats
-    n_anomaly_days = int(ensemble["is_anomaly"].sum()) if "is_anomaly" in ensemble.columns else 0
-    n_high = int((ensemble["ensemble_score"] >= 0.7).sum()) if "ensemble_score" in ensemble.columns else 0
-    n_moderate = int(((ensemble["ensemble_score"] >= 0.4) & (ensemble["ensemble_score"] < 0.7)).sum()) if "ensemble_score" in ensemble.columns else 0
+    n_anomaly_days = (
+        int(ensemble["is_anomaly"].sum()) if "is_anomaly" in ensemble.columns else 0
+    )
+    n_high = (
+        int((ensemble["ensemble_score"] >= 0.7).sum())
+        if "ensemble_score" in ensemble.columns
+        else 0
+    )
+    n_moderate = (
+        int(
+            (
+                (ensemble["ensemble_score"] >= 0.4) & (ensemble["ensemble_score"] < 0.7)
+            ).sum()
+        )
+        if "ensemble_score" in ensemble.columns
+        else 0
+    )
     feb9_detected = validation.get("methods_detected", 0) > 0
     feb9_agreement = validation.get("method_agreement_rate", 0)
 
     # Post-ruxolitinib changes
     tx_date_str = str(TREATMENT_START)
-    post_tx = ensemble[ensemble["date"] >= tx_date_str] if "date" in ensemble.columns else pd.DataFrame()
-    pre_tx = ensemble[ensemble["date"] < tx_date_str] if "date" in ensemble.columns else pd.DataFrame()
-    post_tx_mean = post_tx["ensemble_score"].mean() if len(post_tx) > 0 else float("nan")
+    post_tx = (
+        ensemble[ensemble["date"] >= tx_date_str]
+        if "date" in ensemble.columns
+        else pd.DataFrame()
+    )
+    pre_tx = (
+        ensemble[ensemble["date"] < tx_date_str]
+        if "date" in ensemble.columns
+        else pd.DataFrame()
+    )
+    post_tx_mean = (
+        post_tx["ensemble_score"].mean() if len(post_tx) > 0 else float("nan")
+    )
     pre_tx_mean = pre_tx["ensemble_score"].mean() if len(pre_tx) > 0 else float("nan")
     post_tx_change = ""
     if len(post_tx) > 0 and not pd.isna(pre_tx_mean) and not pd.isna(post_tx_mean):
-        diff_pct = ((post_tx_mean - pre_tx_mean) / pre_tx_mean * 100) if pre_tx_mean != 0 else 0
+        diff_pct = (
+            ((post_tx_mean - pre_tx_mean) / pre_tx_mean * 100)
+            if pre_tx_mean != 0
+            else 0
+        )
         direction = "lower" if diff_pct < 0 else "higher"
         post_tx_change = f"{abs(diff_pct):.0f}% {direction} mean anomaly score after ruxolitinib ({len(post_tx)} days)"
     else:
         post_tx_change = "Insufficient data after treatment start"
 
     feb9_status = "normal" if feb9_detected else "critical"
-    feb9_label = f"{validation.get('methods_detected', 0)}/{validation.get('methods_tested', 0)}"
+    feb9_label = (
+        f"{validation.get('methods_detected', 0)}/{validation.get('methods_tested', 0)}"
+    )
 
     anomaly_days_status = "warning" if n_anomaly_days > 5 else "info"
     anomaly_days_label = "Elevated" if n_anomaly_days > 5 else ""
@@ -1805,10 +2205,38 @@ def generate_html_report(
 
     # KPI row
     body += make_kpi_row(
-        make_kpi_card("Anomaly Days", n_anomaly_days, "", status=anomaly_days_status, detail="Above 90th percentile", status_label=anomaly_days_label),
-        make_kpi_card("Feb 9 Detection", feb9_label, "", status=feb9_status, detail=f"{feb9_agreement:.0%} method agreement (N=1)", status_label=feb9_status_label),
-        make_kpi_card("High Severity", n_high, "", status=high_status, detail="Score >= 0.7", status_label=high_label),
-        make_kpi_card("Moderate", n_moderate, "", status=moderate_status, detail="Score 0.4-0.7", status_label=moderate_label),
+        make_kpi_card(
+            "Anomaly Days",
+            n_anomaly_days,
+            "",
+            status=anomaly_days_status,
+            detail="Above 90th percentile",
+            status_label=anomaly_days_label,
+        ),
+        make_kpi_card(
+            "Feb 9 Detection",
+            feb9_label,
+            "",
+            status=feb9_status,
+            detail=f"{feb9_agreement:.0%} method agreement (N=1)",
+            status_label=feb9_status_label,
+        ),
+        make_kpi_card(
+            "High Severity",
+            n_high,
+            "",
+            status=high_status,
+            detail="Score >= 0.7",
+            status_label=high_label,
+        ),
+        make_kpi_card(
+            "Moderate",
+            n_moderate,
+            "",
+            status=moderate_status,
+            detail="Score 0.4-0.7",
+            status_label=moderate_label,
+        ),
     )
 
     # Post-tx narrative
@@ -1817,10 +2245,10 @@ def generate_html_report(
     # Data period info
     body += (
         f'<div class="odt-narrative">'
-        f'<strong>Data period:</strong> {daily["date"].iloc[0]} to {daily["date"].iloc[-1]} '
-        f'({len(daily)} days) &middot; '
-        f'<strong>Known acute event:</strong> {KNOWN_EVENT_DATE}'
-        f'</div>'
+        f"<strong>Data period:</strong> {daily['date'].iloc[0]} to {daily['date'].iloc[-1]} "
+        f"({len(daily)} days) &middot; "
+        f"<strong>Known acute event:</strong> {KNOWN_EVENT_DATE}"
+        f"</div>"
     )
 
     # Validation section
@@ -1836,7 +2264,9 @@ def generate_html_report(
     body += make_section("LSTM Autoencoder - Training Curve", fig3_html)
 
     # Top anomalies table
-    body += make_section("Top Anomalies (Ensemble Scoring)", _build_top_anomalies_table(ensemble, daily))
+    body += make_section(
+        "Top Anomalies (Ensemble Scoring)", _build_top_anomalies_table(ensemble, daily)
+    )
 
     # Clinical interpretation
     body += make_section("Clinical Interpretation", clinical_html)
@@ -1879,7 +2309,9 @@ def generate_html_report(
     return html_content
 
 
-def _build_validation_html(validation: dict, all_results: dict, daily: pd.DataFrame) -> str:
+def _build_validation_html(
+    validation: dict, all_results: dict, daily: pd.DataFrame
+) -> str:
     """Build validation section HTML."""
     n_detected = validation["methods_detected"]
     n_total = validation["methods_tested"]
@@ -1899,10 +2331,20 @@ def _build_validation_html(validation: dict, all_results: dict, daily: pd.DataFr
     agreement_label = "Strong" if agreement_rate >= AGREEMENT_THRESHOLD else "Weak"
 
     kpi_row = make_kpi_row(
-        make_kpi_card("Methods Detected", f"{n_detected}/{n_total}", "",
-                      status=methods_status, status_label=methods_label),
-        make_kpi_card("Method Agreement (N=1)", f"{agreement_rate:.0%}", "",
-                      status=agreement_status, status_label=agreement_label),
+        make_kpi_card(
+            "Methods Detected",
+            f"{n_detected}/{n_total}",
+            "",
+            status=methods_status,
+            status_label=methods_label,
+        ),
+        make_kpi_card(
+            "Method Agreement (N=1)",
+            f"{agreement_rate:.0%}",
+            "",
+            status=agreement_status,
+            status_label=agreement_label,
+        ),
     )
 
     event_row = daily[daily["date"] == KNOWN_EVENT_DATE]
@@ -1920,7 +2362,7 @@ def _build_validation_html(validation: dict, all_results: dict, daily: pd.DataFr
     {kpi_row}
     <div style="margin-top: 12px;">
         <p><strong>Detection results per method:</strong></p>
-        <p>{''.join(badges)}</p>
+        <p>{"".join(badges)}</p>
         <p style="color: {TEXT_SECONDARY}; font-size: 0.875rem;"><em>The Feb 8-9, 2026 event is a clinically confirmed acute episode
         (nightly mean HR {hr_txt}, nightly mean RMSSD {rmssd_txt}, readiness score {ready_txt}).
         All anomaly detectors are validated against this event.</em></p>
@@ -1932,7 +2374,8 @@ def _build_top_anomalies_table(ensemble: pd.DataFrame, daily: pd.DataFrame) -> s
     top = ensemble.nlargest(15, "ensemble_score").copy()
     top = top.merge(
         daily[["date", "mean_rmssd", "mean_hr", "efficiency", "readiness_score"]],
-        on="date", how="left",
+        on="date",
+        how="left",
     )
 
     rows = []
@@ -1943,23 +2386,29 @@ def _build_top_anomalies_table(ensemble: pd.DataFrame, daily: pd.DataFrame) -> s
         rmssd = f"{r['mean_rmssd']:.1f}" if pd.notna(r.get("mean_rmssd")) else "-"
         hr = f"{r['mean_hr']:.0f}" if pd.notna(r.get("mean_hr")) else "-"
         eff = f"{r['efficiency']:.0f}" if pd.notna(r.get("efficiency")) else "-"
-        ready = f"{r['readiness_score']:.0f}" if pd.notna(r.get("readiness_score")) else "-"
+        ready = (
+            f"{r['readiness_score']:.0f}" if pd.notna(r.get("readiness_score")) else "-"
+        )
 
         # Count how many methods flagged this date
         score_cols = [c for c in ensemble.columns if c.startswith("score_")]
-        n_methods = sum(1 for c in score_cols if pd.notna(r.get(c)) and r[c] > METHOD_SCORE_THRESHOLD)
+        n_methods = sum(
+            1
+            for c in score_cols
+            if pd.notna(r.get(c)) and r[c] > METHOD_SCORE_THRESHOLD
+        )
 
         rows.append(
-            f'<tr{cls}>'
-            f'<td>{int(r["rank"])}</td>'
-            f'<td><strong>{r["date"]}{event_mark}</strong></td>'
-            f'<td>{r["ensemble_score"]:.3f}</td>'
-            f'<td>{rmssd}</td>'
-            f'<td>{hr}</td>'
-            f'<td>{eff}%</td>'
-            f'<td>{ready}</td>'
-            f'<td>{n_methods}/{len(score_cols)}</td>'
-            f'</tr>'
+            f"<tr{cls}>"
+            f"<td>{int(r['rank'])}</td>"
+            f"<td><strong>{r['date']}{event_mark}</strong></td>"
+            f"<td>{r['ensemble_score']:.3f}</td>"
+            f"<td>{rmssd}</td>"
+            f"<td>{hr}</td>"
+            f"<td>{eff}%</td>"
+            f"<td>{ready}</td>"
+            f"<td>{n_methods}/{len(score_cols)}</td>"
+            f"</tr>"
         )
 
     return f"""
@@ -1970,7 +2419,7 @@ def _build_top_anomalies_table(ensemble: pd.DataFrame, daily: pd.DataFrame) -> s
                     <th>HR (bpm)</th><th>Efficiency</th><th>Readiness</th><th>Methods (score &gt; 0.5)</th>
                 </tr>
             </thead>
-            <tbody>{''.join(rows)}</tbody>
+            <tbody>{"".join(rows)}</tbody>
         </table>
         <p style="font-size: 0.8125rem; color: {TEXT_SECONDARY};"><em>** = known acute event. Methods (score &gt; 0.5) is a soft support count and is not the same as strict Feb 9 detection validation above.</em></p>"""
 
@@ -1982,7 +2431,11 @@ def _build_method_summary(all_results: dict) -> str:
         label = method_name.replace("_", " ").title()
         runtime = result.get("runtime_s", "N/A")
         detected = result.get("feb9_detected", False)
-        status = '<span class="detected">Yes</span>' if detected else '<span class="missed">No</span>'
+        status = (
+            '<span class="detected">Yes</span>'
+            if detected
+            else '<span class="missed">No</span>'
+        )
 
         if method_name == "matrix_profile":
             detail = f"{len(result.get('anomalies_by_window', {}))} signals x windows"
@@ -2002,13 +2455,13 @@ def _build_method_summary(all_results: dict) -> str:
             detail = f'<span class="missed">{error}</span>'
 
         rows.append(
-            f'<tr><td>{label}</td><td>{runtime}s</td><td>{status}</td><td>{detail}</td></tr>'
+            f"<tr><td>{label}</td><td>{runtime}s</td><td>{status}</td><td>{detail}</td></tr>"
         )
 
     return f"""
         <table>
             <thead><tr><th>Method</th><th>Runtime</th><th>Feb 9 Detected</th><th>Details</th></tr></thead>
-            <tbody>{''.join(rows)}</tbody>
+            <tbody>{"".join(rows)}</tbody>
         </table>"""
 
 
@@ -2037,9 +2490,18 @@ def _build_clinical_interpretation(
         event_rmssd = event_row["mean_rmssd"].iloc[0]
         event_hr = event_row["mean_hr"].iloc[0]
         event_readiness = event_row["readiness_score"].iloc[0]
-        event_recovery = event_row["recovery_index"].iloc[0] if "recovery_index" in event_row.columns else np.nan
+        event_recovery = (
+            event_row["recovery_index"].iloc[0]
+            if "recovery_index" in event_row.columns
+            else np.nan
+        )
     else:
-        event_rmssd, event_hr, event_readiness, event_recovery = np.nan, np.nan, np.nan, np.nan
+        event_rmssd, event_hr, event_readiness, event_recovery = (
+            np.nan,
+            np.nan,
+            np.nan,
+            np.nan,
+        )
 
     rmssd_txt = f"{event_rmssd:.1f}" if pd.notna(event_rmssd) else "N/A"
     hr_txt = f"{event_hr:.0f}" if pd.notna(event_hr) else "N/A"
@@ -2047,9 +2509,15 @@ def _build_clinical_interpretation(
     recovery_txt = f"{event_recovery:.0f}" if pd.notna(event_recovery) else "N/A"
 
     # Baseline RMSSD from the full window
-    baseline_rmssd = daily["mean_rmssd"].median() if "mean_rmssd" in daily.columns else np.nan
+    baseline_rmssd = (
+        daily["mean_rmssd"].median() if "mean_rmssd" in daily.columns else np.nan
+    )
     baseline_rmssd_txt = f"{baseline_rmssd:.1f}" if pd.notna(baseline_rmssd) else "~10"
-    pct_below_median = (1 - baseline_rmssd / POPULATION_RMSSD_MEDIAN) * 100 if pd.notna(baseline_rmssd) else 80
+    pct_below_median = (
+        (1 - baseline_rmssd / POPULATION_RMSSD_MEDIAN) * 100
+        if pd.notna(baseline_rmssd)
+        else 80
+    )
 
     # Verdict banner
     verdict_html = f"""
@@ -2057,7 +2525,7 @@ def _build_clinical_interpretation(
       <div class="cs-verdict-dot"></div>
       <div class="cs-verdict-text">
         <strong>{n_methods_detecting}/{n_methods} algorithms detected the acute event</strong> —
-        ranked #{feb9_rank if feb9_rank else 'N/A'} in ensemble scoring across {len(daily)} days.
+        ranked #{feb9_rank if feb9_rank else "N/A"} in ensemble scoring across {len(daily)} days.
       </div>
     </div>"""
 
@@ -2089,11 +2557,25 @@ def _build_clinical_interpretation(
         score = row["ensemble_score"]
         is_event = d == KNOWN_EVENT_DATE
         sev = "critical" if score >= 0.7 else "severe" if score >= 0.5 else "moderate"
-        sev_label = "Critical" if score >= 0.7 else "Severe" if score >= 0.5 else "Moderate"
+        sev_label = (
+            "Critical" if score >= 0.7 else "Severe" if score >= 0.5 else "Moderate"
+        )
         drow = daily[daily["date"] == d]
-        r_val = f'{drow["mean_rmssd"].iloc[0]:.1f} ms' if not drow.empty and pd.notna(drow["mean_rmssd"].iloc[0]) else "-"
-        h_val = f'{drow["mean_hr"].iloc[0]:.0f} bpm' if not drow.empty and pd.notna(drow["mean_hr"].iloc[0]) else "-"
-        event_tag = ' <span style="color:#FCA5A5;font-size:0.6875rem">(known event)</span>' if is_event else ""
+        r_val = (
+            f"{drow['mean_rmssd'].iloc[0]:.1f} ms"
+            if not drow.empty and pd.notna(drow["mean_rmssd"].iloc[0])
+            else "-"
+        )
+        h_val = (
+            f"{drow['mean_hr'].iloc[0]:.0f} bpm"
+            if not drow.empty and pd.notna(drow["mean_hr"].iloc[0])
+            else "-"
+        )
+        event_tag = (
+            ' <span style="color:#FCA5A5;font-size:0.6875rem">(known event)</span>'
+            if is_event
+            else ""
+        )
         top_cards.append(f"""
         <div class="cs-finding">
           <div class="cs-finding-header">
@@ -2102,7 +2584,7 @@ def _build_clinical_interpretation(
           </div>
           <div class="cs-metric">
             <span class="cs-metric-name">Ensemble score</span>
-            <span class="cs-metric-val{'  critical' if score >= 0.7 else ''}">{score:.3f}</span>
+            <span class="cs-metric-val{"  critical" if score >= 0.7 else ""}">{score:.3f}</span>
           </div>
           <div class="cs-metric">
             <span class="cs-metric-name">RMSSD</span>
@@ -2116,7 +2598,7 @@ def _build_clinical_interpretation(
 
     findings_html = f"""
     <div class="cs-findings-grid">
-      {''.join(top_cards)}
+      {"".join(top_cards)}
     </div>"""
 
     # Clinical relevance as a finding card
@@ -2133,7 +2615,7 @@ def _build_clinical_interpretation(
         </div>
         <div class="cs-metric">
           <span class="cs-metric-name">vs. deficiency threshold</span>
-          <span class="cs-metric-val">{'Below' if pd.notna(baseline_rmssd) and baseline_rmssd < ESC_RMSSD_DEFICIENCY else 'At'} {ESC_RMSSD_DEFICIENCY} ms (ESC/NASPE 1996)</span>
+          <span class="cs-metric-val">{"Below" if pd.notna(baseline_rmssd) and baseline_rmssd < ESC_RMSSD_DEFICIENCY else "At"} {ESC_RMSSD_DEFICIENCY} ms (ESC/NASPE 1996)</span>
         </div>
         <div class="cs-metric">
           <span class="cs-metric-name">vs. population median</span>
@@ -2177,6 +2659,7 @@ def _build_clinical_interpretation(
 # MAIN
 # ===========================================================================
 
+
 def main() -> int:
     """Run all anomaly detection methods and generate report."""
     print("=" * 70)
@@ -2198,7 +2681,11 @@ def main() -> int:
     except Exception as e:
         print(f"  [ERROR] Matrix Profile failed: {e}")
         traceback.print_exc()
-        all_results["matrix_profile"] = {"method": "Matrix Profile", "feb9_detected": False, "error": str(e)}
+        all_results["matrix_profile"] = {
+            "method": "Matrix Profile",
+            "feb9_detected": False,
+            "error": str(e),
+        }
 
     # 2. Isolation Forest
     try:
@@ -2206,7 +2693,11 @@ def main() -> int:
     except Exception as e:
         print(f"  [ERROR] Isolation Forest failed: {e}")
         traceback.print_exc()
-        all_results["isolation_forest"] = {"method": "Isolation Forest", "feb9_detected": False, "error": str(e)}
+        all_results["isolation_forest"] = {
+            "method": "Isolation Forest",
+            "feb9_detected": False,
+            "error": str(e),
+        }
 
     # 3. LSTM Autoencoder
     try:
@@ -2214,7 +2705,11 @@ def main() -> int:
     except Exception as e:
         print(f"  [ERROR] LSTM Autoencoder failed: {e}")
         traceback.print_exc()
-        all_results["lstm_autoencoder"] = {"method": "LSTM Autoencoder", "feb9_detected": False, "error": str(e)}
+        all_results["lstm_autoencoder"] = {
+            "method": "LSTM Autoencoder",
+            "feb9_detected": False,
+            "error": str(e),
+        }
 
     # 4. SPC
     try:
@@ -2230,7 +2725,11 @@ def main() -> int:
     except Exception as e:
         print(f"  [ERROR] tsfresh failed: {e}")
         traceback.print_exc()
-        all_results["tsfresh"] = {"method": "tsfresh", "feb9_detected": False, "error": str(e)}
+        all_results["tsfresh"] = {
+            "method": "tsfresh",
+            "feb9_detected": False,
+            "error": str(e),
+        }
 
     # Validate against known event
     validation = validate_feb9(all_results)
@@ -2255,10 +2754,14 @@ def main() -> int:
         "validation": validation,
         "methods": {},
         "ensemble": {
-            "top_10_anomalies": ensemble.nlargest(10, "ensemble_score")[["date", "ensemble_score"]].to_dict("records"),
+            "top_10_anomalies": ensemble.nlargest(10, "ensemble_score")[
+                ["date", "ensemble_score"]
+            ].to_dict("records"),
             "threshold_90pct": float(ensemble["ensemble_score"].quantile(0.9)),
             "n_anomaly_days": int(ensemble["is_anomaly"].sum()),
-            "daily_scores": ensemble[["date", "ensemble_score"]].dropna(subset=["ensemble_score"]).to_dict("records"),
+            "daily_scores": ensemble[["date", "ensemble_score"]]
+            .dropna(subset=["ensemble_score"])
+            .to_dict("records"),
         },
         "total_runtime_s": round(time.time() - t_total, 2),
     }
@@ -2275,13 +2778,17 @@ def main() -> int:
             ),
         }
 
-    JSON_OUTPUT.write_text(json.dumps(json_metrics, indent=2, ensure_ascii=False), encoding="utf-8")
+    JSON_OUTPUT.write_text(
+        json.dumps(json_metrics, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
     print(f"[REPORT] JSON metrics saved to: {JSON_OUTPUT}")
 
     total_time = round(time.time() - t_total, 2)
     print(f"\n{'=' * 70}")
     print(f"  COMPLETE - Total runtime: {total_time}s")
-    print(f"  Methods detecting Feb 9: {validation['methods_detected']}/{validation['methods_tested']}")
+    print(
+        f"  Methods detecting Feb 9: {validation['methods_detected']}/{validation['methods_tested']}"
+    )
     print(f"{'=' * 70}")
 
     return 0
