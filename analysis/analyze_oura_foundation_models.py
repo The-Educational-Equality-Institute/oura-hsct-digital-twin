@@ -2166,7 +2166,7 @@ def generate_simple_html_report(
 
     # --- Section 2: Continuous Hourly HR ---
     sec2_desc = (
-        "<p>21K+ HR readings downsampled to hourly means. "
+        f"<p>{metrics.get('n_raw_hr_readings', 0):,} HR readings downsampled to hourly means. "
         "Sliding window detection identifies anomalous segments.</p>"
         if chronos_available
         else "<p>Hourly Chronos analysis was skipped because the Chronos pipeline was unavailable.</p>"
