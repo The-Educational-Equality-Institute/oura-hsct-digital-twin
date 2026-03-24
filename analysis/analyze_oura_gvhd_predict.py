@@ -882,10 +882,10 @@ def compute_gvhd_composite(daily: pd.DataFrame) -> tuple[pd.Series, dict[str, An
     # Rolling 7-day smoothed composite
     composite_7d = composite.rolling(7, min_periods=3).mean()
 
-    # Backtest: correlation with known events
+    # Backtest: correlation with known events (7-day window: days -6 through 0 inclusive)
     event_date = pd.Timestamp(KNOWN_EVENT_DATE)
     pre_event_composite = composite.loc[
-        (composite.index >= event_date - timedelta(days=7))
+        (composite.index >= event_date - timedelta(days=6))
         & (composite.index <= event_date)
     ]
     post_event_composite = composite.loc[
