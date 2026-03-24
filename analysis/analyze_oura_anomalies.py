@@ -1330,16 +1330,76 @@ def compute_ensemble_scores(
     threshold = ensemble["ensemble_score"].quantile(0.9)
     ensemble["is_anomaly"] = ensemble["ensemble_score"] >= threshold
 
+    # --- FDR correction for per-method anomaly scores ---
+    # Each method's score distribution is used to derive empirical p-values
+    # (fraction of dates with score >= this date's score). Then BH correction
+    # is applied across all (date x method) tests.
+    score_cols = [c for c in ensemble.columns if c.startswith("score_")]
+    all_pvalues = []
+    all_pvalue_labels = []  # (date, method_col)
+    for col in score_cols:
+        valid = ensemble[col].dropna()
+        if len(valid) < 2:
+            continue
+        for idx, row in ensemble.iterrows():
+            if pd.isna(row[col]):
+                continue
+            # Empirical p-value: proportion of scores >= this score
+            n_ge = (valid >= row[col]).sum()
+            p_emp = max(n_ge / len(valid), 1.0 / len(valid))  # floor at 1/n
+            all_pvalues.append(p_emp)
+            all_pvalue_labels.append((row["date"], col))
+
+    if len(all_pvalues) >= 2:
+        reject_fdr, fdr_qvalues, _, _ = multipletests(
+            all_pvalues, alpha=0.05, method="fdr_bh"
+        )
+        # Map FDR q-values back to ensemble DataFrame
+        fdr_col_map: dict[str, list] = {}  # col -> list of (date, qval)
+        for i, (d, col) in enumerate(all_pvalue_labels):
+            if col not in fdr_col_map:
+                fdr_col_map[col] = []
+            fdr_col_map[col].append((d, float(fdr_qvalues[i]), all_pvalues[i]))
+
+        # Store per-date minimum FDR q-value across methods
+        date_min_q: dict[str, float] = {}
+        date_min_rawp: dict[str, float] = {}
+        for col, entries in fdr_col_map.items():
+            for d, q, rawp in entries:
+                if d not in date_min_q or q < date_min_q[d]:
+                    date_min_q[d] = q
+                if d not in date_min_rawp or rawp < date_min_rawp[d]:
+                    date_min_rawp[d] = rawp
+
+        ensemble["min_raw_pvalue"] = ensemble["date"].map(date_min_rawp)
+        ensemble["min_fdr_qvalue"] = ensemble["date"].map(date_min_q)
+        ensemble["is_anomaly_fdr"] = ensemble["min_fdr_qvalue"].fillna(1.0) < 0.05
+
+        n_raw_sig = int((ensemble["min_raw_pvalue"].fillna(1.0) < 0.05).sum())
+        n_fdr_sig = int(ensemble["is_anomaly_fdr"].sum())
+        print(
+            f"  FDR correction (BH): {len(all_pvalues)} tests across {len(score_cols)} methods, "
+            f"raw p<0.05: {n_raw_sig}, FDR q<0.05: {n_fdr_sig}"
+        )
+    else:
+        ensemble["min_raw_pvalue"] = np.nan
+        ensemble["min_fdr_qvalue"] = np.nan
+        ensemble["is_anomaly_fdr"] = ensemble["is_anomaly"]
+
     n_anomalies = ensemble["is_anomaly"].sum()
     print(f"  Ensemble threshold (90th pct): {threshold:.3f}")
-    print(f"  Anomalous days: {n_anomalies}")
+    print(f"  Anomalous days (90th pct): {n_anomalies}")
+    if "is_anomaly_fdr" in ensemble.columns:
+        n_fdr_anom = int(ensemble["is_anomaly_fdr"].sum())
+        print(f"  Anomalous days (FDR q<0.05): {n_fdr_anom}")
 
     top5 = ensemble.nlargest(5, "ensemble_score").dropna(subset=["ensemble_score"])
     print("  Top 5 anomaly days:")
     for _, row in top5.iterrows():
         rank_str = str(int(row["rank"])) if pd.notna(row["rank"]) else "N/A"
+        q_str = f", q={row['min_fdr_qvalue']:.4f}" if pd.notna(row.get("min_fdr_qvalue")) else ""
         print(
-            f"    {row['date']}: ensemble={row['ensemble_score']:.3f}, rank={rank_str}"
+            f"    {row['date']}: ensemble={row['ensemble_score']:.3f}, rank={rank_str}{q_str}"
         )
 
     return ensemble
