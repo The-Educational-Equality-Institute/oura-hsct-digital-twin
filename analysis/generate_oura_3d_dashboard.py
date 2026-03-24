@@ -1600,6 +1600,7 @@ def build_hr_terrain(hr_df: pd.DataFrame, sleep_df: pd.DataFrame) -> go.Figure:
             bt_end = pd.to_datetime(row["bedtime_end"], utc=True)
         except (ValueError, TypeError) as e:
             import logging
+
             logging.debug(f"Skipping night with unparseable bedtime: {e}")
             continue
         nights.append(

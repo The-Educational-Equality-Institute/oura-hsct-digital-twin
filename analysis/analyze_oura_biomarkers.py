@@ -531,7 +531,8 @@ def compute_recovery_index(df: pd.DataFrame) -> pd.Series:
     # HR score: inverted (lower is better). Score = expected / actual * 100
     hr_score = np.clip(
         np.where(df["sleep_hr_mean"] > 0, expected_hr / df["sleep_hr_mean"] * 100, 0),
-        0, 100,
+        0,
+        100,
     )
 
     # Sleep quality score: efficiency vs expected 85%
