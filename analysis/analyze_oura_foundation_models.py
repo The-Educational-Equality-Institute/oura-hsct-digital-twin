@@ -1261,7 +1261,7 @@ def run_ruxolitinib_analysis(
         )
 
         # Compare pre vs post uncertainty
-        if pre_pi_width is not None:
+        if pre_pi_width is not None and pre_pi_width > 0:
             uncertainty_change = ((post_pi_width - pre_pi_width) / pre_pi_width) * 100
             print(f"  Pre-period 90% PI width: {pre_pi_width:.2f}")
             print(f"  Post-period 90% PI width: {post_pi_width:.2f}")
