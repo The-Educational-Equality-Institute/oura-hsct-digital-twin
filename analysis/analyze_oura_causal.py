@@ -3577,9 +3577,11 @@ def _build_mediation_summary(mediation_results: dict[str, Any]) -> str:
                 continue
 
             fav_class = "favorable" if p.get("favorable") else "unfavorable"
+            q_indirect = p.get("q_indirect_bh", p.get("p_indirect", 1))
+            sig_fdr = p.get("significant_fdr", p.get("p_indirect", 1) < 0.05)
             sig_badge = (
-                '<span class="badge badge-sig">Sig</span>'
-                if p.get("p_indirect", 1) < 0.05
+                '<span class="badge badge-sig">FDR-sig</span>'
+                if sig_fdr
                 else '<span class="badge badge-ns">NS</span>'
             )
 
@@ -3593,7 +3595,8 @@ def _build_mediation_summary(mediation_results: dict[str, Any]) -> str:
                 f'<td class="{fav_class}">{p["indirect_effect"]:+.4f}<br>'
                 f"<small>[{p['indirect_ci_lower']:+.4f}, {p['indirect_ci_upper']:+.4f}]</small></td>"
                 f"<td>{p['proportion_mediated']:.1f}%</td>"
-                f"<td>{p['p_indirect']:.4f} {sig_badge}</td>"
+                f"<td>{p['p_indirect']:.4f}</td>"
+                f"<td>{q_indirect:.4f} {sig_badge}</td>"
                 f"</tr>"
             )
 
@@ -3602,7 +3605,7 @@ def _build_mediation_summary(mediation_results: dict[str, Any]) -> str:
             <thead><tr>
                 <th>Pathway</th><th>Mediator (pre->post)</th><th>a (T->M)</th>
                 <th>b (M->Y)</th><th>Indirect effect [95% CI]</th>
-                <th>% mediated</th><th>p-value</th>
+                <th>% mediated</th><th>Raw p-value</th><th>q-value (BH)</th>
             </tr></thead>
             <tbody>{"".join(rows)}</tbody>
         </table>""")
