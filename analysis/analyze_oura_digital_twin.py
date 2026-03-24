@@ -2461,7 +2461,7 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
         f'<td>{state_interpretation.get(name, "Interpret relative to model definition")}</td>'
         f'<td><span class="tag tag-{resp_stats.get(name, {}).get("direction", "stable")}">'
         f'{str(resp_stats.get(name, {}).get("direction", "stable")).title()} (pre/post drug)</span></td>'
-        f'<td>{_fmt_p(resp_stats.get(name, {}).get("mann_whitney_p"))}</td>'
+        f'<td>{_fmt_p(resp_stats.get(name, {}).get("mann_whitney_p_value"))}</td>'
         f'<td>{f"{_fmt_num(tau_list.get(name), 1)} days" if tau_list.get(name) else "N/A"}</td>'
         f'</tr>'
         for name in STATE_NAMES
