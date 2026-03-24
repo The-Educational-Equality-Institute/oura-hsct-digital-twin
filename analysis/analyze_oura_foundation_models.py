@@ -2555,8 +2555,9 @@ def main() -> int:
         HTML_OUTPUT.write_text(html, encoding="utf-8")
         print(f"[REPORT] HTML report saved: {HTML_OUTPUT}")
     except Exception as e:
-        print(f"[ERROR] HTML generation failed: {e}")
+        logging.error("Failed to write HTML report: %s", e)
         traceback.print_exc()
+        raise
 
     # Save JSON metrics
     try:
