@@ -42,7 +42,7 @@ import logging
 import sqlite3
 import sys
 from collections import Counter, defaultdict
-from datetime import datetime, date, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -58,16 +58,31 @@ from scipy import signal, stats
 # ---------------------------------------------------------------------------
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from config import (
-    DATABASE_PATH, REPORTS_DIR, TREATMENT_START,
-    TREATMENT_START_STR, PATIENT_LABEL,
+    DATABASE_PATH,
+    REPORTS_DIR,
+    TREATMENT_START,
+    TREATMENT_START_STR,
+    PATIENT_LABEL,
 )
 from _theme import (
-    wrap_html as _theme_wrap_html, make_kpi_card, make_kpi_row, make_section,
-    BG_PRIMARY, BG_SURFACE, BG_ELEVATED, TEXT_SECONDARY, TEXT_TERTIARY,
-    BORDER_SUBTLE, C_SLEEP,
-    C_CRITICAL, C_WARNING, C_GOOD,
-    ACCENT_BLUE, ACCENT_GREEN, ACCENT_PURPLE, ACCENT_RED, ACCENT_AMBER,
-    ACCENT_ORANGE, ACCENT_CYAN,
+    wrap_html as _theme_wrap_html,
+    make_kpi_card,
+    make_kpi_row,
+    make_section,
+    BG_PRIMARY,
+    TEXT_SECONDARY,
+    TEXT_TERTIARY,
+    BORDER_SUBTLE,
+    C_SLEEP,
+    C_CRITICAL,
+    C_WARNING,
+    C_GOOD,
+    ACCENT_BLUE,
+    ACCENT_GREEN,
+    ACCENT_PURPLE,
+    ACCENT_RED,
+    ACCENT_AMBER,
+    ACCENT_ORANGE,
 )
 
 pio.templates.default = "clinical_dark"
@@ -78,24 +93,43 @@ JSON_OUT = REPORTS_DIR / "advanced_sleep_metrics.json"
 # Sleep stage mapping (Oura epoch encoding)
 PHASE_MAP = {1: "deep", 2: "light", 3: "REM", 4: "awake"}
 PHASE_LABELS = ["deep", "light", "REM", "awake"]
-PHASE_COLORS = {"deep": ACCENT_BLUE, "light": C_SLEEP, "REM": ACCENT_PURPLE, "awake": ACCENT_RED}
+PHASE_COLORS = {
+    "deep": ACCENT_BLUE,
+    "light": C_SLEEP,
+    "REM": ACCENT_PURPLE,
+    "awake": ACCENT_RED,
+}
 
 # Movement classification mapping (Oura movement encoding)
 MOVEMENT_MAP = {1: "still", 2: "restless", 3: "toss/turn", 4: "active"}
 
 # Derived palette aliases (mapped from theme constants)
-C_RUX = ACCENT_ORANGE       # Ruxolitinib marker colour
-C_OK = C_GOOD               # Healthy norms
-C_BLUE = C_SLEEP            # Primary data traces (sleep-associated indigo)
+C_RUX = ACCENT_ORANGE  # Ruxolitinib marker colour
+C_OK = C_GOOD  # Healthy norms
+C_BLUE = C_SLEEP  # Primary data traces (sleep-associated indigo)
 
 # Published norms for comparison
 NORMS = {
-    "fragmentation_index": {"healthy": 5.0, "clinical_concern": 10.0, "unit": "transitions/hr"},
-    "rem_latency": {"normal_min": 70, "normal_max": 120, "elevated": 120, "unit": "min"},
+    "fragmentation_index": {
+        "healthy": 5.0,
+        "clinical_concern": 10.0,
+        "unit": "transitions/hr",
+    },
+    "rem_latency": {
+        "normal_min": 70,
+        "normal_max": 120,
+        "elevated": 120,
+        "unit": "min",
+    },
     "cycles_per_night": {"healthy_min": 4, "healthy_max": 6},
     "cycle_duration": {"normal_min": 80, "normal_max": 100, "unit": "min"},
     "efficiency": {"healthy": 85, "poor": 75, "unit": "%"},
-    "ultradian_period": {"expected": 90, "range_min": 80, "range_max": 110, "unit": "min"},
+    "ultradian_period": {
+        "expected": 90,
+        "range_min": 80,
+        "range_max": 110,
+        "unit": "min",
+    },
 }
 
 
@@ -117,7 +151,9 @@ def _safe_read(sql: str, con: sqlite3.Connection) -> pd.DataFrame:
     try:
         return pd.read_sql_query(sql, con)
     except Exception:
-        logging.warning("Query failed (table may be missing), returning empty DataFrame")
+        logging.warning(
+            "Query failed (table may be missing), returning empty DataFrame"
+        )
         return pd.DataFrame()
 
 
@@ -231,14 +267,16 @@ def compute_fragmentation_index(epochs: pd.DataFrame) -> pd.DataFrame:
         sleep_hours = sleep_epochs * 5.0 / 60.0
 
         fi = frag_count / sleep_hours if sleep_hours > 0 else np.nan
-        results.append({
-            "day": day,
-            "period_id": pid,
-            "frag_count": frag_count,
-            "sleep_epochs": int(sleep_epochs),
-            "sleep_hours": round(sleep_hours, 2),
-            "fragmentation_index": round(fi, 2) if not np.isnan(fi) else None,
-        })
+        results.append(
+            {
+                "day": day,
+                "period_id": pid,
+                "frag_count": frag_count,
+                "sleep_epochs": int(sleep_epochs),
+                "sleep_hours": round(sleep_hours, 2),
+                "fragmentation_index": round(fi, 2) if not np.isnan(fi) else None,
+            }
+        )
     return pd.DataFrame(results).sort_values("day").reset_index(drop=True)
 
 
@@ -272,13 +310,15 @@ def compute_transition_matrix(epochs: pd.DataFrame) -> tuple[np.ndarray, np.ndar
 
 
 # Published healthy norms (approximation from Kishi et al. 2011, Feinberg & Floyd 1979)
-HEALTHY_TRANSITION_PROBS = np.array([
-    # deep   light   REM    awake
-    [0.55,   0.40,   0.02,  0.03],   # from deep
-    [0.10,   0.65,   0.15,  0.10],   # from light
-    [0.02,   0.20,   0.65,  0.13],   # from REM
-    [0.05,   0.50,   0.10,  0.35],   # from awake
-])
+HEALTHY_TRANSITION_PROBS = np.array(
+    [
+        # deep   light   REM    awake
+        [0.55, 0.40, 0.02, 0.03],  # from deep
+        [0.10, 0.65, 0.15, 0.10],  # from light
+        [0.02, 0.20, 0.65, 0.13],  # from REM
+        [0.05, 0.50, 0.10, 0.35],  # from awake
+    ]
+)
 
 
 # ---------------------------------------------------------------------------
@@ -306,8 +346,14 @@ def compute_rem_latency(epochs: pd.DataFrame) -> pd.DataFrame:
                 break
 
         if sleep_onset_idx is None:
-            results.append({"day": day, "period_id": pid, "rem_latency_min": None,
-                            "has_rem": False})
+            results.append(
+                {
+                    "day": day,
+                    "period_id": pid,
+                    "rem_latency_min": None,
+                    "has_rem": False,
+                }
+            )
             continue
 
         # Find first REM epoch
@@ -318,17 +364,25 @@ def compute_rem_latency(epochs: pd.DataFrame) -> pd.DataFrame:
                 break
 
         if first_rem_idx is None:
-            results.append({"day": day, "period_id": pid, "rem_latency_min": None,
-                            "has_rem": False})
+            results.append(
+                {
+                    "day": day,
+                    "period_id": pid,
+                    "rem_latency_min": None,
+                    "has_rem": False,
+                }
+            )
         else:
             latency_epochs = indices[first_rem_idx] - indices[sleep_onset_idx]
             latency_min = latency_epochs * 5
-            results.append({
-                "day": day,
-                "period_id": pid,
-                "rem_latency_min": int(latency_min),
-                "has_rem": True,
-            })
+            results.append(
+                {
+                    "day": day,
+                    "period_id": pid,
+                    "rem_latency_min": int(latency_min),
+                    "has_rem": True,
+                }
+            )
 
     return pd.DataFrame(results).sort_values("day").reset_index(drop=True)
 
@@ -395,13 +449,15 @@ def detect_sleep_cycles(epochs: pd.DataFrame) -> pd.DataFrame:
             cycles.append(cycle_len * 5)
 
         mean_dur = np.mean(cycles) if cycles else None
-        results.append({
-            "day": day,
-            "period_id": pid,
-            "cycle_count": len(cycles),
-            "mean_cycle_duration_min": round(mean_dur, 1) if mean_dur else None,
-            "cycle_durations_min": cycles,
-        })
+        results.append(
+            {
+                "day": day,
+                "period_id": pid,
+                "cycle_count": len(cycles),
+                "mean_cycle_duration_min": round(mean_dur, 1) if mean_dur else None,
+                "cycle_durations_min": cycles,
+            }
+        )
 
     return pd.DataFrame(results).sort_values("day").reset_index(drop=True)
 
@@ -425,8 +481,15 @@ def compute_movement_density(movements: pd.DataFrame, epochs: pd.DataFrame) -> d
         total = len(grp)
         restless_plus = grp["classification"].isin([2, 3, 4]).sum()
         idx = restless_plus / total if total > 0 else np.nan
-        nightly.append({"day": day, "period_id": pid, "restlessness_index": round(idx, 4),
-                        "total_movements": total, "restless_count": int(restless_plus)})
+        nightly.append(
+            {
+                "day": day,
+                "period_id": pid,
+                "restlessness_index": round(idx, 4),
+                "total_movements": total,
+                "restless_count": int(restless_plus),
+            }
+        )
     nightly_df = pd.DataFrame(nightly).sort_values("day").reset_index(drop=True)
 
     # Movement by sleep stage (cross-reference via period_id and index mapping)
@@ -452,7 +515,9 @@ def compute_movement_density(movements: pd.DataFrame, epochs: pd.DataFrame) -> d
     hourly_intensity: dict[int, list[int]] = defaultdict(list)
     for pid, grp in movements.groupby("period_id"):
         n_mov = len(grp)
-        time_in_bed = grp["time_in_bed"].iloc[0] if "time_in_bed" in grp.columns else n_mov * 30
+        time_in_bed = (
+            grp["time_in_bed"].iloc[0] if "time_in_bed" in grp.columns else n_mov * 30
+        )
         total_hours = time_in_bed / 3600.0
         if total_hours <= 0:
             continue
@@ -467,7 +532,9 @@ def compute_movement_density(movements: pd.DataFrame, epochs: pd.DataFrame) -> d
             intensity = np.mean(chunk) if len(chunk) > 0 else 1.0
             hourly_intensity[hour_bin].append(float(intensity))
 
-    hourly_avg = {h: round(np.mean(vals), 3) for h, vals in sorted(hourly_intensity.items())}
+    hourly_avg = {
+        h: round(np.mean(vals), 3) for h, vals in sorted(hourly_intensity.items())
+    }
 
     return {
         "nightly": nightly_df,
@@ -479,7 +546,9 @@ def compute_movement_density(movements: pd.DataFrame, epochs: pd.DataFrame) -> d
 # ---------------------------------------------------------------------------
 # Analysis 6: Sleep Efficiency Trends
 # ---------------------------------------------------------------------------
-def compute_efficiency_trends(periods: pd.DataFrame, epochs: pd.DataFrame) -> pd.DataFrame:
+def compute_efficiency_trends(
+    periods: pd.DataFrame, epochs: pd.DataFrame
+) -> pd.DataFrame:
     """
     Compute nightly sleep efficiency from both Oura aggregate and epoch data.
 
@@ -495,10 +564,14 @@ def compute_efficiency_trends(periods: pd.DataFrame, epochs: pd.DataFrame) -> pd
         total = len(grp)
         sleep = (grp["phase"] != 4).sum()
         day = grp["day"].iloc[0]
-        epoch_eff.append({
-            "period_id": pid,
-            "epoch_efficiency": round(sleep / total * 100, 1) if total > 0 else None,
-        })
+        epoch_eff.append(
+            {
+                "period_id": pid,
+                "epoch_efficiency": round(sleep / total * 100, 1)
+                if total > 0
+                else None,
+            }
+        )
     epoch_df = pd.DataFrame(epoch_eff)
 
     result = eff.merge(epoch_df, on="period_id", how="left").sort_values("day")
@@ -547,13 +620,13 @@ def compute_ultradian_rhythm(epochs: pd.DataFrame) -> dict:
         depth = np.zeros(len(phases))
         for i, p in enumerate(phases):
             if p == 1:
-                depth[i] = 3.0   # deep
+                depth[i] = 3.0  # deep
             elif p == 2:
-                depth[i] = 2.0   # light
+                depth[i] = 2.0  # light
             elif p == 3:
-                depth[i] = 1.0   # REM
+                depth[i] = 1.0  # REM
             else:
-                depth[i] = 0.0   # awake
+                depth[i] = 0.0  # awake
 
         # Remove mean (DC component)
         depth = depth - depth.mean()
@@ -578,10 +651,12 @@ def compute_ultradian_rhythm(epochs: pd.DataFrame) -> dict:
             top_k = min(3, len(filtered_power))
             top_indices = np.argsort(filtered_power)[-top_k:][::-1]
             for ti in top_indices:
-                all_peaks.append({
-                    "period_min": round(float(filtered_periods[ti]), 1),
-                    "power": round(float(filtered_power[ti]), 4),
-                })
+                all_peaks.append(
+                    {
+                        "period_min": round(float(filtered_periods[ti]), 1),
+                        "power": round(float(filtered_power[ti]), 4),
+                    }
+                )
 
     mean_dominant = round(float(np.mean(all_dominant)), 1) if all_dominant else None
 
@@ -592,8 +667,10 @@ def compute_ultradian_rhythm(epochs: pd.DataFrame) -> dict:
         peak_bins[bin_center].append(p["power"])
 
     spectral_summary = sorted(
-        [{"period_min": k, "mean_power": round(np.mean(v), 4), "count": len(v)}
-         for k, v in peak_bins.items()],
+        [
+            {"period_min": k, "mean_power": round(np.mean(v), 4), "count": len(v)}
+            for k, v in peak_bins.items()
+        ],
         key=lambda x: x["mean_power"],
         reverse=True,
     )[:5]
@@ -754,11 +831,17 @@ def compare_pre_post_ruxolitinib(
             result["pre_mean"] = round(float(np.mean(pre)), 2)
             result["pre_median"] = round(float(np.median(pre)), 2)
             result["pre_std"] = round(float(np.std(pre)), 2)
-            result["post_mean"] = round(float(np.mean(post)), 2) if len(post) > 0 else None
-            result["post_median"] = round(float(np.median(post)), 2) if len(post) > 0 else None
+            result["post_mean"] = (
+                round(float(np.mean(post)), 2) if len(post) > 0 else None
+            )
+            result["post_median"] = (
+                round(float(np.median(post)), 2) if len(post) > 0 else None
+            )
             if len(post) >= 2:
                 try:
-                    u_stat, p_val = stats.mannwhitneyu(pre, post, alternative="two-sided")
+                    u_stat, p_val = stats.mannwhitneyu(
+                        pre, post, alternative="two-sided"
+                    )
                     result["mann_whitney_U"] = float(u_stat)
                     result["p_value"] = float(p_val)
                 except Exception:
@@ -823,15 +906,16 @@ def compare_pre_post_ruxolitinib(
 
     # Deep sleep %
     lsp_calc = lsp.copy()
+    total_dur = lsp_calc["total_sleep_duration"].replace(0, np.nan)
     lsp_calc["deep_pct"] = (
-        lsp_calc["deep_sleep_duration"] / lsp_calc["total_sleep_duration"] * 100
+        lsp_calc["deep_sleep_duration"] / total_dur * 100
     ).round(1)
     pre_dp, post_dp = split_pre_post(lsp_calc, "deep_pct")
     comparisons.append(run_comparison(pre_dp, post_dp, "deep_sleep_%"))
 
     # REM sleep %
     lsp_calc["rem_pct"] = (
-        lsp_calc["rem_sleep_duration"] / lsp_calc["total_sleep_duration"] * 100
+        lsp_calc["rem_sleep_duration"] / total_dur * 100
     ).round(1)
     pre_rp, post_rp = split_pre_post(lsp_calc, "rem_pct")
     comparisons.append(run_comparison(pre_rp, post_rp, "rem_sleep_%"))
@@ -911,7 +995,9 @@ def build_dashboard(
         # Subtle fill below the line
         fig.add_trace(
             go.Scatter(
-                x=days, y=fi_vals, mode="lines+markers",
+                x=days,
+                y=fi_vals,
+                mode="lines+markers",
                 name="Fragmentation Index",
                 marker=dict(size=4, color=C_BLUE, line=dict(width=0)),
                 line=dict(color=C_BLUE, width=2),
@@ -919,31 +1005,47 @@ def build_dashboard(
                 fillcolor="rgba(99, 102, 241, 0.1)",
                 hovertemplate="<b>%{x}</b><br>Fragmentation: %{y:.1f} transitions/hour<extra></extra>",
             ),
-            row=1, col=1,
+            row=1,
+            col=1,
         )
         # Clinical threshold line
         fig.add_hline(
             y=NORMS["fragmentation_index"]["clinical_concern"],
-            line_dash="dash", line_color=C_CRITICAL, annotation_text="Clinical concern",
-            row=1, col=1,
+            line_dash="dash",
+            line_color=C_CRITICAL,
+            annotation_text="Clinical concern",
+            row=1,
+            col=1,
         )
         fig.add_hline(
             y=NORMS["fragmentation_index"]["healthy"],
-            line_dash="dot", line_color=C_OK, annotation_text="Healthy norm",
-            row=1, col=1,
+            line_dash="dot",
+            line_color=C_OK,
+            annotation_text="Healthy norm",
+            row=1,
+            col=1,
         )
         # Ruxolitinib marker
         fig.add_shape(
-            type="line", x0=str(TREATMENT_START), x1=str(TREATMENT_START),
-            y0=0, y1=1, yref="y domain",
+            type="line",
+            x0=str(TREATMENT_START),
+            x1=str(TREATMENT_START),
+            y0=0,
+            y1=1,
+            yref="y domain",
             line=dict(color=C_RUX, width=1.5, dash="dash"),
-            row=1, col=1,
+            row=1,
+            col=1,
         )
         fig.add_annotation(
-            x=str(TREATMENT_START), y=0.95, yref="y domain",
-            text="Rux Start", showarrow=False,
+            x=str(TREATMENT_START),
+            y=0.95,
+            yref="y domain",
+            text="Rux Start",
+            showarrow=False,
             font=dict(color=C_RUX, size=9),
-            row=1, col=1,
+            row=1,
+            col=1,
         )
 
     # ---- Panel 2: Transition Matrix Heatmap ----
@@ -965,7 +1067,9 @@ def build_dashboard(
             ],
             showscale=True,
             colorbar=dict(
-                len=0.12, y=0.93, thickness=10,
+                len=0.12,
+                y=0.93,
+                thickness=10,
                 title=dict(text="P", font=dict(size=10)),
                 tickfont=dict(size=9),
                 outlinewidth=0,
@@ -974,7 +1078,8 @@ def build_dashboard(
             xgap=2,
             ygap=2,
         ),
-        row=1, col=2,
+        row=1,
+        col=2,
     )
 
     # ---- Panel 3: REM Latency ----
@@ -984,7 +1089,9 @@ def build_dashboard(
 
         fig.add_trace(
             go.Scatter(
-                x=days, y=lat_vals, mode="lines+markers",
+                x=days,
+                y=lat_vals,
+                mode="lines+markers",
                 name="REM Latency",
                 marker=dict(size=4, color=ACCENT_PURPLE, line=dict(width=0)),
                 line=dict(color=ACCENT_PURPLE, width=2),
@@ -992,17 +1099,27 @@ def build_dashboard(
                 fillcolor="rgba(139, 92, 246, 0.08)",
                 hovertemplate="<b>%{x}</b><br>REM Latency: %{y} min<extra></extra>",
             ),
-            row=2, col=1,
+            row=2,
+            col=1,
         )
         fig.add_hline(
-            y=NORMS["rem_latency"]["elevated"], line_dash="dash",
-            line_color=C_WARNING, annotation_text="Elevated (>120 min)",
-            row=2, col=1,
+            y=NORMS["rem_latency"]["elevated"],
+            line_dash="dash",
+            line_color=C_WARNING,
+            annotation_text="Elevated (>120 min)",
+            row=2,
+            col=1,
         )
         fig.add_shape(
-            type="line", x0=str(TREATMENT_START), x1=str(TREATMENT_START),
-            y0=0, y1=1, yref="y2 domain",
-            line=dict(color=C_RUX, width=1.5, dash="dash"), row=2, col=1,
+            type="line",
+            x0=str(TREATMENT_START),
+            x1=str(TREATMENT_START),
+            y0=0,
+            y1=1,
+            yref="y2 domain",
+            line=dict(color=C_RUX, width=1.5, dash="dash"),
+            row=2,
+            col=1,
         )
 
     # ---- Panel 4: Sleep Cycles per Night ----
@@ -1012,7 +1129,9 @@ def build_dashboard(
 
         fig.add_trace(
             go.Bar(
-                x=days, y=cc_vals, name="Cycles/night",
+                x=days,
+                y=cc_vals,
+                name="Cycles/night",
                 marker=dict(
                     color=ACCENT_PURPLE,
                     line=dict(color="rgba(139, 92, 246, 0.6)", width=1),
@@ -1020,12 +1139,16 @@ def build_dashboard(
                 ),
                 hovertemplate="<b>%{x}</b><br>Cycles: %{y}<extra></extra>",
             ),
-            row=2, col=2,
+            row=2,
+            col=2,
         )
         fig.add_hline(
-            y=NORMS["cycles_per_night"]["healthy_min"], line_dash="dot",
-            line_color=C_OK, annotation_text="Min. healthy (4)",
-            row=2, col=2,
+            y=NORMS["cycles_per_night"]["healthy_min"],
+            line_dash="dot",
+            line_color=C_OK,
+            annotation_text="Min. healthy (4)",
+            row=2,
+            col=2,
         )
 
     # ---- Panel 5: Movement by Sleep Stage ----
@@ -1047,7 +1170,9 @@ def build_dashboard(
         vals = [stage_mv.get(stage, {}).get(cat, 0) for stage in PHASE_LABELS]
         fig.add_trace(
             go.Bar(
-                x=PHASE_LABELS, y=vals, name=cat,
+                x=PHASE_LABELS,
+                y=vals,
+                name=cat,
                 marker=dict(
                     color=mv_colors.get(cat, TEXT_SECONDARY),
                     line=dict(color=mv_edge_colors.get(cat, TEXT_TERTIARY), width=1),
@@ -1055,7 +1180,8 @@ def build_dashboard(
                 ),
                 hovertemplate="<b>%{x}</b><br>" + cat + ": %{y:,}<extra></extra>",
             ),
-            row=3, col=1,
+            row=3,
+            col=1,
         )
 
     # ---- Panel 6: Sleep Efficiency ----
@@ -1064,49 +1190,72 @@ def build_dashboard(
         # Subtle scatter behind the trend line
         fig.add_trace(
             go.Scatter(
-                x=days, y=eff_long["efficiency"].values,
-                mode="markers", name="Nightly eff. (Oura)",
+                x=days,
+                y=eff_long["efficiency"].values,
+                mode="markers",
+                name="Nightly eff. (Oura)",
                 marker=dict(size=3, color=C_BLUE, opacity=0.35),
                 hovertemplate="<b>%{x}</b><br>Oura Efficiency: %{y:.0f}%<extra></extra>",
             ),
-            row=3, col=2,
+            row=3,
+            col=2,
         )
         if "epoch_efficiency" in eff_long.columns:
             fig.add_trace(
                 go.Scatter(
-                    x=days, y=eff_long["epoch_efficiency"].values,
-                    mode="markers", name="Epoch-based eff.",
-                    marker=dict(size=3, color=ACCENT_PURPLE, opacity=0.30, symbol="diamond"),
+                    x=days,
+                    y=eff_long["epoch_efficiency"].values,
+                    mode="markers",
+                    name="Epoch-based eff.",
+                    marker=dict(
+                        size=3, color=ACCENT_PURPLE, opacity=0.30, symbol="diamond"
+                    ),
                     hovertemplate="<b>%{x}</b><br>Epoch Efficiency: %{y:.1f}%<extra></extra>",
                 ),
-                row=3, col=2,
+                row=3,
+                col=2,
             )
         # Prominent rolling average trend line
         if "rolling_7d_efficiency" in eff_long.columns:
             rolling = eff_long["rolling_7d_efficiency"].values
             fig.add_trace(
                 go.Scatter(
-                    x=days, y=rolling,
-                    mode="lines", name="7d avg",
+                    x=days,
+                    y=rolling,
+                    mode="lines",
+                    name="7d avg",
                     line=dict(color=ACCENT_BLUE, width=3),
                     hovertemplate="<b>%{x}</b><br>7-day Avg: %{y:.1f}%<extra></extra>",
                 ),
-                row=3, col=2,
+                row=3,
+                col=2,
             )
         fig.add_hline(
-            y=NORMS["efficiency"]["healthy"], line_dash="dot",
-            line_color=C_OK, annotation_text="Healthy (85%)",
-            row=3, col=2,
+            y=NORMS["efficiency"]["healthy"],
+            line_dash="dot",
+            line_color=C_OK,
+            annotation_text="Healthy (85%)",
+            row=3,
+            col=2,
         )
         fig.add_hline(
-            y=NORMS["efficiency"]["poor"], line_dash="dash",
-            line_color=C_WARNING, annotation_text="Poor (75%)",
-            row=3, col=2,
+            y=NORMS["efficiency"]["poor"],
+            line_dash="dash",
+            line_color=C_WARNING,
+            annotation_text="Poor (75%)",
+            row=3,
+            col=2,
         )
         fig.add_shape(
-            type="line", x0=str(TREATMENT_START), x1=str(TREATMENT_START),
-            y0=0, y1=1, yref="y6 domain",
-            line=dict(color=C_RUX, width=1.5, dash="dash"), row=3, col=2,
+            type="line",
+            x0=str(TREATMENT_START),
+            x1=str(TREATMENT_START),
+            y0=0,
+            y1=1,
+            yref="y6 domain",
+            line=dict(color=C_RUX, width=1.5, dash="dash"),
+            row=3,
+            col=2,
         )
 
     # ---- Panel 7: Ultradian FFT Peaks ----
@@ -1127,13 +1276,17 @@ def build_dashboard(
                 textfont=dict(size=10, color=TEXT_SECONDARY),
                 hovertemplate="<b>%{x} min</b><br>Spectral Power: %{y:.4f}<br>Nights: %{text}<extra></extra>",
             ),
-            row=4, col=1,
+            row=4,
+            col=1,
         )
         # Mark 90-min expected peak
         fig.add_vline(
-            x=NORMS["ultradian_period"]["expected"], line_dash="dash",
-            line_color=C_OK, annotation_text="Expected 90 min",
-            row=4, col=1,
+            x=NORMS["ultradian_period"]["expected"],
+            line_dash="dash",
+            line_color=C_OK,
+            annotation_text="Expected 90 min",
+            row=4,
+            col=1,
         )
 
     # ---- Panel 8: HRV per Sleep Stage ----
@@ -1143,7 +1296,9 @@ def build_dashboard(
     hrv_ns = [coupling[s].get("n") or 0 for s in PHASE_LABELS]
     fig.add_trace(
         go.Bar(
-            x=PHASE_LABELS, y=hrv_means, name="Mean RMSSD",
+            x=PHASE_LABELS,
+            y=hrv_means,
+            name="Mean RMSSD",
             marker=dict(
                 color=[PHASE_COLORS[s] for s in PHASE_LABELS],
                 line=dict(
@@ -1153,13 +1308,17 @@ def build_dashboard(
                 opacity=0.85,
             ),
             error_y=dict(
-                type="data", array=hrv_stds, visible=True,
-                color=TEXT_SECONDARY, thickness=1.5,
+                type="data",
+                array=hrv_stds,
+                visible=True,
+                color=TEXT_SECONDARY,
+                thickness=1.5,
             ),
             customdata=list(zip(hrv_ns, hrv_stds)),
             hovertemplate="<b>%{x}</b><br>RMSSD: %{y:.1f} ms<br>SD: %{customdata[1]:.1f} ms<br>n=%{customdata[0]}<extra></extra>",
         ),
-        row=4, col=2,
+        row=4,
+        col=2,
     )
 
     # ---- Panels 9a/9b: Pre/Post Ruxolitinib ----
@@ -1175,7 +1334,8 @@ def build_dashboard(
         p_text = f"p={p_val:.4f}" if p_val is not None else ""
         fig.add_trace(
             go.Bar(
-                x=labels, y=vals,
+                x=labels,
+                y=vals,
                 marker=dict(
                     color=colors,
                     line=dict(color=[C_BLUE, C_RUX], width=1),
@@ -1184,30 +1344,39 @@ def build_dashboard(
                 name="Fragmentation",
                 hovertemplate="<b>%{x}</b><br>Fragmentation: %{y:.2f} transitions/hour<extra></extra>",
             ),
-            row=5, col=1,
+            row=5,
+            col=1,
         )
         if frag_comp.get("pre_std"):
             post_std = frag_comp.get("post_std", 0) if frag_comp.get("post_std") else 0
             fig.add_trace(
                 go.Scatter(
-                    x=labels, y=vals,
+                    x=labels,
+                    y=vals,
                     error_y=dict(
                         type="data",
                         array=[frag_comp["pre_std"], post_std],
                         visible=True,
-                        color=TEXT_SECONDARY, thickness=1.5,
+                        color=TEXT_SECONDARY,
+                        thickness=1.5,
                     ),
-                    mode="markers", marker=dict(size=0.1, color="rgba(0,0,0,0)"),
+                    mode="markers",
+                    marker=dict(size=0.1, color="rgba(0,0,0,0)"),
                     showlegend=False,
                     hoverinfo="skip",
                 ),
-                row=5, col=1,
+                row=5,
+                col=1,
             )
         # Add p-value annotation if available
         if p_text:
             fig.add_annotation(
-                x=0.5, y=1.0, xref="x9 domain", yref="y9 domain",
-                text=p_text, showarrow=False,
+                x=0.5,
+                y=1.0,
+                xref="x9 domain",
+                yref="y9 domain",
+                text=p_text,
+                showarrow=False,
                 font=dict(size=10, color=TEXT_SECONDARY),
             )
 
@@ -1219,7 +1388,8 @@ def build_dashboard(
         p_text = f"p={p_val:.4f}" if p_val is not None else ""
         fig.add_trace(
             go.Bar(
-                x=labels, y=vals,
+                x=labels,
+                y=vals,
                 marker=dict(
                     color=colors,
                     line=dict(color=[C_BLUE, C_RUX], width=1),
@@ -1228,12 +1398,17 @@ def build_dashboard(
                 name="Efficiency",
                 hovertemplate="<b>%{x}</b><br>Efficiency: %{y:.1f}%<extra></extra>",
             ),
-            row=5, col=2,
+            row=5,
+            col=2,
         )
         if p_text:
             fig.add_annotation(
-                x=0.5, y=1.0, xref="x10 domain", yref="y10 domain",
-                text=p_text, showarrow=False,
+                x=0.5,
+                y=1.0,
+                xref="x10 domain",
+                yref="y10 domain",
+                text=p_text,
+                showarrow=False,
                 font=dict(size=10, color=TEXT_SECONDARY),
             )
 
@@ -1246,8 +1421,10 @@ def build_dashboard(
         barmode="stack",
         legend=dict(
             orientation="h",
-            yanchor="top", y=-0.02,
-            xanchor="left", x=0,
+            yanchor="top",
+            y=-0.02,
+            xanchor="left",
+            x=0,
             font=dict(size=10),
             bgcolor="rgba(26, 29, 39, 0.8)",
             bordercolor=BORDER_SUBTLE,
@@ -1285,7 +1462,8 @@ def build_dashboard(
             spikethickness=1,
             spikecolor=TEXT_TERTIARY,
             spikedash="dot",
-            row=row, col=col,
+            row=row,
+            col=col,
         )
         fig.update_yaxes(
             showspikes=True,
@@ -1293,7 +1471,8 @@ def build_dashboard(
             spikethickness=1,
             spikecolor=TEXT_TERTIARY,
             spikedash="dot",
-            row=row, col=col,
+            row=row,
+            col=col,
         )
 
     # Axis labels with color matching
@@ -1303,7 +1482,9 @@ def build_dashboard(
     fig.update_yaxes(title_text="Minutes", title_font_color=ACCENT_PURPLE, row=2, col=1)
     fig.update_yaxes(title_text="Cycle count", row=2, col=2)
     fig.update_yaxes(title_text="Movement count", row=3, col=1)
-    fig.update_yaxes(title_text="Efficiency (%)", title_font_color=ACCENT_BLUE, row=3, col=2)
+    fig.update_yaxes(
+        title_text="Efficiency (%)", title_font_color=ACCENT_BLUE, row=3, col=2
+    )
     fig.update_yaxes(title_text="Spectral power", row=4, col=1)
     fig.update_xaxes(title_text="Period (minutes)", row=4, col=1)
     fig.update_yaxes(title_text="RMSSD (ms)", row=4, col=2)
@@ -1313,8 +1494,10 @@ def build_dashboard(
     # Date axis formatting for time series panels -- consistent format
     for row, col in [(1, 1), (2, 1), (2, 2), (3, 2)]:
         fig.update_xaxes(
-            tickformat="%d %b", tickangle=-30,
-            row=row, col=col,
+            tickformat="%d %b",
+            tickangle=-30,
+            row=row,
+            col=col,
         )
 
     # Disable grid on heatmap and categorical panels where it adds noise
@@ -1384,10 +1567,16 @@ def build_summary(
             "min": round(float(fi_vals.min()), 2),
             "max": round(float(fi_vals.max()), 2),
             "pct_above_clinical": round(
-                float((fi_vals > NORMS["fragmentation_index"]["clinical_concern"]).mean() * 100), 1
+                float(
+                    (fi_vals > NORMS["fragmentation_index"]["clinical_concern"]).mean()
+                    * 100
+                ),
+                1,
             ),
             "healthy_norm": NORMS["fragmentation_index"]["healthy"],
-            "clinical_concern_threshold": NORMS["fragmentation_index"]["clinical_concern"],
+            "clinical_concern_threshold": NORMS["fragmentation_index"][
+                "clinical_concern"
+            ],
             "unit": "transitions/hour",
         }
 
@@ -1402,12 +1591,15 @@ def build_summary(
         for j, to_stage in enumerate(PHASE_LABELS):
             diff = trans_probs[i, j] - HEALTHY_TRANSITION_PROBS[i, j]
             if abs(diff) >= 0.10:
-                summary["transition_matrix"]["key_deviations"].append({
-                    "from": fr_stage, "to": to_stage,
-                    "patient": round(float(trans_probs[i, j]), 3),
-                    "healthy": round(float(HEALTHY_TRANSITION_PROBS[i, j]), 3),
-                    "difference": round(float(diff), 3),
-                })
+                summary["transition_matrix"]["key_deviations"].append(
+                    {
+                        "from": fr_stage,
+                        "to": to_stage,
+                        "patient": round(float(trans_probs[i, j]), 3),
+                        "healthy": round(float(HEALTHY_TRANSITION_PROBS[i, j]), 3),
+                        "difference": round(float(diff), 3),
+                    }
+                )
 
     # 3. REM latency
     if not rem_long.empty:
@@ -1419,9 +1611,13 @@ def build_summary(
             "pct_elevated": round(
                 float((rl_vals > NORMS["rem_latency"]["elevated"]).mean() * 100), 1
             ),
-            "nights_without_rem": int((~rem_latency_df[
-                rem_latency_df["period_id"].isin(long_pids)
-            ]["has_rem"]).sum()),
+            "nights_without_rem": int(
+                (
+                    ~rem_latency_df[rem_latency_df["period_id"].isin(long_pids)][
+                        "has_rem"
+                    ]
+                ).sum()
+            ),
             "elevated_threshold_min": NORMS["rem_latency"]["elevated"],
         }
 
@@ -1433,12 +1629,16 @@ def build_summary(
             "mean_cycles_per_night": round(float(cc_vals.mean()), 1),
             "median_cycles_per_night": round(float(cc_vals.median()), 1),
             "pct_below_4_cycles": round(float((cc_vals < 4).mean() * 100), 1),
-            "mean_cycle_duration_min": round(float(dur_vals.mean()), 1) if not dur_vals.empty else None,
+            "mean_cycle_duration_min": round(float(dur_vals.mean()), 1)
+            if not dur_vals.empty
+            else None,
             "healthy_range": f"{NORMS['cycles_per_night']['healthy_min']}-{NORMS['cycles_per_night']['healthy_max']}",
         }
 
     # 5. Movement density
-    rest_long = movement_data["nightly"][movement_data["nightly"]["period_id"].isin(long_pids)]
+    rest_long = movement_data["nightly"][
+        movement_data["nightly"]["period_id"].isin(long_pids)
+    ]
     if not rest_long.empty:
         ri_vals = rest_long["restlessness_index"]
         summary["movement"] = {
@@ -1455,7 +1655,9 @@ def build_summary(
         summary["efficiency"] = {
             "oura_mean": round(float(oura_eff.mean()), 1),
             "oura_median": round(float(oura_eff.median()), 1),
-            "epoch_mean": round(float(epoch_eff.mean()), 1) if not epoch_eff.empty else None,
+            "epoch_mean": round(float(epoch_eff.mean()), 1)
+            if not epoch_eff.empty
+            else None,
             "pct_below_75": round(float((oura_eff < 75).mean() * 100), 1),
             "pct_below_85": round(float((oura_eff < 85).mean() * 100), 1),
             "healthy_threshold": NORMS["efficiency"]["healthy"],
@@ -1467,7 +1669,9 @@ def build_summary(
     # 8. HRV coupling
     coupling_summary = {
         "stage_stats": {k: v for k, v in hrv_coupling["stage_stats"].items()},
-        "coupling_correct_deep_gt_light": hrv_coupling["coupling_correct_deep_gt_light"],
+        "coupling_correct_deep_gt_light": hrv_coupling[
+            "coupling_correct_deep_gt_light"
+        ],
         "kruskal_wallis": hrv_coupling["kruskal_wallis"],
         "matched_hrv_epochs": hrv_coupling["matched_hrv_epochs"],
     }
@@ -1552,84 +1756,112 @@ def print_summary(summary: dict) -> None:
     print(f"  ADVANCED SLEEP ARCHITECTURE ANALYSIS - {PATIENT_LABEL.upper()}")
     print("=" * 80)
     print(f"  Data: {summary['meta']['data_range']}")
-    print(f"  Nights: {summary['meta']['total_nights']} total, "
-          f"{summary['meta']['long_sleep_nights']} long sleep")
+    print(
+        f"  Nights: {summary['meta']['total_nights']} total, "
+        f"{summary['meta']['long_sleep_nights']} long sleep"
+    )
     print(f"  Ruxolitinib start: {summary['meta']['ruxolitinib_start']}")
     print("=" * 80)
 
     if "fragmentation" in summary:
         f = summary["fragmentation"]
-        print(f"\n--- 1. SLEEP FRAGMENTATION ---")
-        print(f"  Mean: {f['mean']}/hr (healthy: <{f['healthy_norm']}, "
-              f"clinical: >{f['clinical_concern_threshold']})")
+        print("\n--- 1. SLEEP FRAGMENTATION ---")
+        print(
+            f"  Mean: {f['mean']}/hr (healthy: <{f['healthy_norm']}, "
+            f"clinical: >{f['clinical_concern_threshold']})"
+        )
         print(f"  Median: {f['median']}/hr | SD: {f['std']}")
         print(f"  Range: {f['min']} - {f['max']}/hr")
         print(f"  Nights above clinical threshold: {f['pct_above_clinical']}%")
 
     if "transition_matrix" in summary:
         tm = summary["transition_matrix"]
-        print(f"\n--- 2. TRANSITION MATRIX (Markov) ---")
+        print("\n--- 2. TRANSITION MATRIX (Markov) ---")
         print("  Patient vs healthy (probabilities):")
         for dev in tm["key_deviations"]:
             direction = "+" if dev["difference"] > 0 else ""
-            print(f"    {dev['from']} -> {dev['to']}: {dev['patient']:.3f} "
-                  f"(healthy: {dev['healthy']:.3f}, diff: {direction}{dev['difference']:.3f})")
+            print(
+                f"    {dev['from']} -> {dev['to']}: {dev['patient']:.3f} "
+                f"(healthy: {dev['healthy']:.3f}, diff: {direction}{dev['difference']:.3f})"
+            )
 
     if "rem_latency" in summary:
         rl = summary["rem_latency"]
-        print(f"\n--- 3. REM LATENCY ---")
+        print("\n--- 3. REM LATENCY ---")
         print(f"  Mean: {rl['mean_min']} min | Median: {rl['median_min']} min")
         print(f"  Elevated (>120 min): {rl['pct_elevated']}% of nights")
         print(f"  Nights without REM: {rl['nights_without_rem']}")
 
     if "sleep_cycles" in summary:
         sc = summary["sleep_cycles"]
-        print(f"\n--- 4. SLEEP CYCLES ---")
-        print(f"  Mean: {sc['mean_cycles_per_night']} cycles/night "
-              f"(healthy: {sc['healthy_range']})")
+        print("\n--- 4. SLEEP CYCLES ---")
+        print(
+            f"  Mean: {sc['mean_cycles_per_night']} cycles/night "
+            f"(healthy: {sc['healthy_range']})"
+        )
         print(f"  Below 4 cycles: {sc['pct_below_4_cycles']}% of nights")
         if sc["mean_cycle_duration_min"]:
-            print(f"  Average cycle duration: {sc['mean_cycle_duration_min']} min "
-                  f"(expected 80-100)")
+            print(
+                f"  Average cycle duration: {sc['mean_cycle_duration_min']} min "
+                f"(expected 80-100)"
+            )
 
     if "movement" in summary:
         mv = summary["movement"]
-        print(f"\n--- 5. MOVEMENT ANALYSIS ---")
+        print("\n--- 5. MOVEMENT ANALYSIS ---")
         print(f"  Mean restlessness index: {mv['mean_restlessness_index']:.4f}")
 
     if "efficiency" in summary:
         ef = summary["efficiency"]
-        print(f"\n--- 6. SLEEP EFFICIENCY ---")
-        print(f"  Oura mean: {ef['oura_mean']}% | Epoch-based: {ef.get('epoch_mean', 'N/A')}%")
+        print("\n--- 6. SLEEP EFFICIENCY ---")
+        print(
+            f"  Oura mean: {ef['oura_mean']}% | Epoch-based: {ef.get('epoch_mean', 'N/A')}%"
+        )
         print(f"  Below 75%: {ef['pct_below_75']}% | Below 85%: {ef['pct_below_85']}%")
 
-    print(f"\n--- 7. ULTRADIAN RHYTHM ---")
+    print("\n--- 7. ULTRADIAN RHYTHM ---")
     ul = summary["ultradian_rhythm"]
     if ul["dominant_period_min"]:
-        print(f"  Dominant period: {ul['dominant_period_min']} min "
-              f"(expected: ~90 min) over {ul['n_nights']} nights")
+        print(
+            f"  Dominant period: {ul['dominant_period_min']} min "
+            f"(expected: ~90 min) over {ul['n_nights']} nights"
+        )
         if ul["spectral_peaks"]:
             print("  Top spectral peaks:")
             for p in ul["spectral_peaks"][:3]:
-                print(f"    {p['period_min']} min (power: {p['mean_power']:.4f}, "
-                      f"n={p['count']} nights)")
+                print(
+                    f"    {p['period_min']} min (power: {p['mean_power']:.4f}, "
+                    f"n={p['count']} nights)"
+                )
     else:
         print("  Insufficient data for FFT analysis")
 
-    print(f"\n--- 8. HRV-SLEEP COUPLING ---")
+    print("\n--- 8. HRV-SLEEP COUPLING ---")
     hc = summary["hrv_coupling"]
     for stage in PHASE_LABELS:
         ss = hc["stage_stats"].get(stage, {})
         if ss.get("mean_rmssd"):
-            print(f"  {stage}: RMSSD = {ss['mean_rmssd']:.1f} ms "
-                  f"(SD {ss.get('std_rmssd', 0):.1f}, n={ss['n']})")
+            print(
+                f"  {stage}: RMSSD = {ss['mean_rmssd']:.1f} ms "
+                f"(SD {ss.get('std_rmssd', 0):.1f}, n={ss['n']})"
+            )
     kw = hc["kruskal_wallis"]
     if kw["H"]:
-        sig = "***" if kw["p"] < 0.001 else "**" if kw["p"] < 0.01 else "*" if kw["p"] < 0.05 else "ns"
+        sig = (
+            "***"
+            if kw["p"] < 0.001
+            else "**"
+            if kw["p"] < 0.01
+            else "*"
+            if kw["p"] < 0.05
+            else "ns"
+        )
         print(f"  Kruskal-Wallis: H={kw['H']}, p={kw['p']:.4e} ({sig})")
-    print(f"  Coupling deep>light: {'YES' if hc['coupling_correct_deep_gt_light'] else 'NO (abnormal)'}")
+    print(
+        f"  Coupling deep>light: {'YES' if hc['coupling_correct_deep_gt_light'] else 'NO (abnormal)'}"
+    )
 
-    print(f"\n--- 9. PRE/POST RUXOLITINIB ---")
+    print("\n--- 9. PRE/POST RUXOLITINIB ---")
     rux = summary["ruxolitinib_comparison"]
     print(f"  Cutoff: {rux['cutoff_date']}")
     for comp in rux["comparisons"]:
@@ -1657,8 +1889,8 @@ def print_summary(summary: dict) -> None:
             print(f"\n  * {interp}")
 
     print(f"\n{'=' * 80}")
-    print(f"  Report: reports/advanced_sleep_analysis.html")
-    print(f"  Metrics: reports/advanced_sleep_metrics.json")
+    print("  Report: reports/advanced_sleep_analysis.html")
+    print("  Metrics: reports/advanced_sleep_metrics.json")
     print("=" * 80 + "\n")
 
 
@@ -1675,77 +1907,116 @@ def assemble_html(plotly_div: str, summary: dict) -> str:
 
     if "fragmentation" in summary:
         f = summary["fragmentation"]
-        frag_status = "critical" if f["mean"] > NORMS["fragmentation_index"]["clinical_concern"] else (
-            "warning" if f["mean"] > NORMS["fragmentation_index"]["healthy"] else "normal"
+        frag_status = (
+            "critical"
+            if f["mean"] > NORMS["fragmentation_index"]["clinical_concern"]
+            else (
+                "warning"
+                if f["mean"] > NORMS["fragmentation_index"]["healthy"]
+                else "normal"
+            )
         )
         frag_label = "Elevated" if frag_status in ("warning", "critical") else ""
-        kpi_cards.append(make_kpi_card(
-            "Fragmentation", f["mean"], "transitions/hour",
-            status=frag_status,
-            status_label=frag_label,
-            detail=f"{f['pct_above_clinical']}% above clinical threshold",
-        ))
+        kpi_cards.append(
+            make_kpi_card(
+                "Fragmentation",
+                f["mean"],
+                "transitions/hour",
+                status=frag_status,
+                status_label=frag_label,
+                detail=f"{f['pct_above_clinical']}% above clinical threshold",
+            )
+        )
 
     if "efficiency" in summary:
         ef = summary["efficiency"]
-        eff_status = "critical" if ef["oura_mean"] < 75 else (
-            "warning" if ef["oura_mean"] < 85 else "normal"
+        eff_status = (
+            "critical"
+            if ef["oura_mean"] < 75
+            else ("warning" if ef["oura_mean"] < 85 else "normal")
         )
         eff_label = "Low" if eff_status in ("warning", "critical") else ""
-        kpi_cards.append(make_kpi_card(
-            "Sleep Efficiency", ef["oura_mean"], "%",
-            status=eff_status,
-            status_label=eff_label,
-            detail=f"{ef['pct_below_85']}% of nights below 85%",
-        ))
+        kpi_cards.append(
+            make_kpi_card(
+                "Sleep Efficiency",
+                ef["oura_mean"],
+                "%",
+                status=eff_status,
+                status_label=eff_label,
+                detail=f"{ef['pct_below_85']}% of nights below 85%",
+            )
+        )
 
     if "sleep_cycles" in summary:
         sc = summary["sleep_cycles"]
         cyc_status = "warning" if sc["pct_below_4_cycles"] > 50 else "normal"
         cyc_label = "Low" if cyc_status in ("warning", "critical") else ""
-        kpi_cards.append(make_kpi_card(
-            "Sleep Cycles", sc["mean_cycles_per_night"], "/night",
-            status=cyc_status,
-            status_label=cyc_label,
-            detail=f"{sc['pct_below_4_cycles']}% below 4 cycles",
-        ))
+        kpi_cards.append(
+            make_kpi_card(
+                "Sleep Cycles",
+                sc["mean_cycles_per_night"],
+                "/night",
+                status=cyc_status,
+                status_label=cyc_label,
+                detail=f"{sc['pct_below_4_cycles']}% below 4 cycles",
+            )
+        )
 
     if "rem_latency" in summary:
         rl = summary["rem_latency"]
-        rl_status = "critical" if rl["pct_elevated"] > 30 else (
-            "warning" if rl["pct_elevated"] > 15 else "normal"
+        rl_status = (
+            "critical"
+            if rl["pct_elevated"] > 30
+            else ("warning" if rl["pct_elevated"] > 15 else "normal")
         )
         rl_label = "Elevated" if rl_status in ("warning", "critical") else ""
-        kpi_cards.append(make_kpi_card(
-            "REM Latency", rl["mean_min"], "min",
-            status=rl_status,
-            status_label=rl_label,
-            detail=f"{rl['pct_elevated']}% above 120 min",
-        ))
+        kpi_cards.append(
+            make_kpi_card(
+                "REM Latency",
+                rl["mean_min"],
+                "min",
+                status=rl_status,
+                status_label=rl_label,
+                detail=f"{rl['pct_elevated']}% above 120 min",
+            )
+        )
 
     if "hrv_coupling" in summary:
         hc = summary["hrv_coupling"]
         coupling_ok = hc["coupling_correct_deep_gt_light"]
         coupling_label = "" if coupling_ok else "Abnormal"
-        kpi_cards.append(make_kpi_card(
-            "HRV Coupling", "Normal" if coupling_ok else "Abnormal", "",
-            status="normal" if coupling_ok else "critical",
-            status_label=coupling_label,
-            detail="Deep > light parasympathetic" if coupling_ok else "Abnormal autonomic regulation",
-            decimals=0,
-        ))
+        kpi_cards.append(
+            make_kpi_card(
+                "HRV Coupling",
+                "Normal" if coupling_ok else "Abnormal",
+                "",
+                status="normal" if coupling_ok else "critical",
+                status_label=coupling_label,
+                detail="Deep > light parasympathetic"
+                if coupling_ok
+                else "Abnormal autonomic regulation",
+                decimals=0,
+            )
+        )
 
-    if "ultradian_rhythm" in summary and summary["ultradian_rhythm"]["dominant_period_min"]:
+    if (
+        "ultradian_rhythm" in summary
+        and summary["ultradian_rhythm"]["dominant_period_min"]
+    ):
         ul = summary["ultradian_rhythm"]
         dom = ul["dominant_period_min"]
         ul_status = "normal" if abs(dom - 90) <= 20 else "warning"
         ul_label = "Abnormal" if ul_status in ("warning", "critical") else ""
-        kpi_cards.append(make_kpi_card(
-            "Ultradian Period", dom, "min",
-            status=ul_status,
-            status_label=ul_label,
-            detail=f"Expected ~90 min ({ul['n_nights']} nights)",
-        ))
+        kpi_cards.append(
+            make_kpi_card(
+                "Ultradian Period",
+                dom,
+                "min",
+                status=ul_status,
+                status_label=ul_label,
+                detail=f"Expected ~90 min ({ul['n_nights']} nights)",
+            )
+        )
 
     body = make_kpi_row(*kpi_cards)
 
@@ -1757,9 +2028,9 @@ def assemble_html(plotly_div: str, summary: dict) -> str:
         )
         callout = (
             f'<div class="odt-narrative">'
-            f'<strong>Clinical Interpretation</strong>'
+            f"<strong>Clinical Interpretation</strong>"
             f'<ul style="margin-top: 8px; padding-left: 20px;">{interp_items}</ul>'
-            f'</div>'
+            f"</div>"
         )
         body += callout
 
@@ -1801,8 +2072,10 @@ def main() -> int:
         hrv = load_hrv(conn)
         hr_ts = load_hr_timeseries(conn)
 
-        print(f"  Periods: {len(periods)}, Epochs: {len(epochs)}, "
-              f"Movements: {len(movements)}, HRV: {len(hrv)}, HR-ts: {len(hr_ts)}")
+        print(
+            f"  Periods: {len(periods)}, Epochs: {len(epochs)}, "
+            f"Movements: {len(movements)}, HRV: {len(hrv)}, HR-ts: {len(hr_ts)}"
+        )
 
         # 1. Fragmentation
         print("Analysis 1/9: Sleep fragmentation index...")
@@ -1839,15 +2112,28 @@ def main() -> int:
         # 9. Pre/post ruxolitinib
         print("Analysis 9/9: Pre/post ruxolitinib comparison...")
         rux_comparison = compare_pre_post_ruxolitinib(
-            periods, frag_df, rem_latency_df, cycles_df, efficiency_df, movement_data["nightly"]
+            periods,
+            frag_df,
+            rem_latency_df,
+            cycles_df,
+            efficiency_df,
+            movement_data["nightly"],
         )
     finally:
         conn.close()
 
     # Build summary
     summary = build_summary(
-        frag_df, trans_probs, rem_latency_df, cycles_df, movement_data,
-        efficiency_df, ultradian, hrv_coupling, rux_comparison, periods,
+        frag_df,
+        trans_probs,
+        rem_latency_df,
+        cycles_df,
+        movement_data,
+        efficiency_df,
+        ultradian,
+        hrv_coupling,
+        rux_comparison,
+        periods,
     )
 
     # Save JSON
@@ -1859,8 +2145,17 @@ def main() -> int:
     # Build and save dashboard
     print("Building interactive dashboard...")
     plotly_div = build_dashboard(
-        frag_df, trans_counts, trans_probs, rem_latency_df, cycles_df,
-        movement_data, efficiency_df, ultradian, hrv_coupling, rux_comparison, periods,
+        frag_df,
+        trans_counts,
+        trans_probs,
+        rem_latency_df,
+        cycles_df,
+        movement_data,
+        efficiency_df,
+        ultradian,
+        hrv_coupling,
+        rux_comparison,
+        periods,
     )
     html = assemble_html(plotly_div, summary)
     with open(HTML_OUT, "w", encoding="utf-8") as f:
