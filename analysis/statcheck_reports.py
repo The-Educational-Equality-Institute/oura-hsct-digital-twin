@@ -630,17 +630,22 @@ def print_summary(result: AuditResult) -> None:
             print(f"      Context: ...{s.context[:80]}...")
             print()
 
-    if not result.mismatches and not result.sanity_issues:
+    if not result.mismatches and not result.sanity_issues and not result.json_errors:
         print("\n  All statistical claims verified. No issues found.")
+
+    if result.json_errors:
+        print(f"\n  JSON LOAD FAILURES ({len(result.json_errors)}):")
+        for je in result.json_errors:
+            print(f"    - {je}")
 
     n_problems = len(result.mismatches) + len(
         [s for s in result.sanity_issues if s.severity == "error"]
-    )
+    ) + len(result.json_errors)
     print(f"\n{'=' * 70}")
     if n_problems == 0:
         print("  RESULT: PASS")
     else:
-        print(f"  RESULT: {n_problems} PROBLEM(S) FOUND")
+        print(f"  RESULT: FAIL - {n_problems} PROBLEM(S) FOUND")
     print(f"{'=' * 70}")
 
 
