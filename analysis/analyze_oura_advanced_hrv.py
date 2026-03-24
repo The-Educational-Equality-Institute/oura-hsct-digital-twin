@@ -352,7 +352,8 @@ def _bootstrap_dfa_ci(
         boot_data = _moving_block_bootstrap(rmssd, rng, block_size)
         try:
             estimate = float(nolds.dfa(boot_data, nvals=nvals, overlap=True, order=1))
-        except Exception:
+        except (ValueError, RuntimeError) as e:
+            logging.debug(f"DFA bootstrap iteration failed: {e}")
             continue
         if np.isfinite(estimate):
             estimates.append(estimate)
