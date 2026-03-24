@@ -328,9 +328,10 @@ def load_oura_data() -> pd.DataFrame:
         "sleep_efficiency",
     ]:
         n_valid = daily[col].notna().sum()
+        pct = 100 * n_valid / n_total if n_total > 0 else 0
         log(
             "DATA",
-            f"  {col}: {n_valid}/{n_total} days ({100 * n_valid / n_total:.0f}%)",
+            f"  {col}: {n_valid}/{n_total} days ({pct:.0f}%)",
         )
 
     metrics["data_range"] = {
