@@ -2936,7 +2936,7 @@ def main() -> None:
     print("=" * 70)
     print("GVHD Flare Prediction System - Oura Ring Biometric Analysis")
     print(f"Patient: {PATIENT_LABEL}")
-    print(f"Data range: {DATA_START} to {DATA_END} (dynamic)")
+    print(f"Data range: {DATA_START} to {data_end} (dynamic)")
     print(f"Known event: {KNOWN_EVENT_DATE} (acute decompensation)")
     print("=" * 70)
 
