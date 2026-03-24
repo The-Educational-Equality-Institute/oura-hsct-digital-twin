@@ -455,9 +455,13 @@ def compute_epoch_fragmentation(
     frag_df = pd.DataFrame(frag_rows)
     frag_df = frag_df.merge(pid_date, on="period_id", how="left")
 
-    # Take primary period per day (highest frag_index for worst-case)
+    # Merge sleep duration so we can pick the longest period (matching build_daily_features)
+    pid_dur = sleep[["period_id", "total_sleep_duration"]].drop_duplicates()
+    frag_df = frag_df.merge(pid_dur, on="period_id", how="left")
+
+    # Take primary period per day (longest sleep duration, matching build_daily_features)
     frag_daily = (
-        frag_df.sort_values(["date", "frag_index"], ascending=[True, False])
+        frag_df.sort_values(["date", "total_sleep_duration"], ascending=[True, False])
         .drop_duplicates(subset="date", keep="first")
         [["date", "frag_index", "transitions", "awake_epochs_pct"]]
     )
