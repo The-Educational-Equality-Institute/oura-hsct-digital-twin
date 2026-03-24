@@ -246,10 +246,10 @@ def compute_frequency_domain(timestamps: list[datetime], rmssd: np.ndarray) -> d
     """
     if len(rmssd) < 20:
         return {
-            "vlf_power": 0,
-            "lf_power": 0,
-            "hf_power": 0,
-            "lf_hf_ratio": 0,
+            "proxy_band_low": 0,
+            "proxy_band_mid": 0,
+            "proxy_band_high": 0,
+            "proxy_ratio": 0,
             "freqs": [],
             "power": [],
             "note": "Insufficient data",
