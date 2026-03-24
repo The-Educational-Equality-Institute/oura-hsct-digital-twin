@@ -201,7 +201,6 @@ def load_oura_data() -> pd.DataFrame:
     log("DATA", "Loading Oura Ring data from database...")
 
     with sqlite3.connect(f"file:{DATABASE_PATH}?mode=ro", uri=True) as conn:
-
         # --- HRV: aggregate 5-minute samples to daily mean ---
         hrv_df = pd.read_sql_query(
             """

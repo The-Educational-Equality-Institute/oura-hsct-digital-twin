@@ -1398,7 +1398,11 @@ def compute_ensemble_scores(
     print("  Top 5 anomaly days:")
     for _, row in top5.iterrows():
         rank_str = str(int(row["rank"])) if pd.notna(row["rank"]) else "N/A"
-        q_str = f", q={row['min_fdr_qvalue']:.4f}" if pd.notna(row.get("min_fdr_qvalue")) else ""
+        q_str = (
+            f", q={row['min_fdr_qvalue']:.4f}"
+            if pd.notna(row.get("min_fdr_qvalue"))
+            else ""
+        )
         print(
             f"    {row['date']}: ensemble={row['ensemble_score']:.3f}, rank={rank_str}{q_str}"
         )
