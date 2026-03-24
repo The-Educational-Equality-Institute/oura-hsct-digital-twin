@@ -1259,7 +1259,7 @@ def generate_html_report(
     )
     fig1.add_annotation(
         x=rmssd_dates.max(), y=ESC_RMSSD_DEFICIENCY,
-        text="Parasympathetic deficiency (Kleiger 1987 / Bigger 1992)",
+        text="Parasympathetic deficiency (ESC/NASPE 1996; Shaffer & Ginsberg 2017)",
         showarrow=False, xanchor="right", yanchor="bottom",
         font=dict(size=9, color=ACCENT_RED),
         row=2, col=1,
