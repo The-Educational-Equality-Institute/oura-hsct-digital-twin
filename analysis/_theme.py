@@ -276,12 +276,16 @@ def get_plotly_enhancer_js() -> str:
 <script>
 window.__odtEnhancePlotly = function(graphDiv) {{
   if (!window.Plotly || !graphDiv || !graphDiv.layout) return;
+  let containerWidth = null;
   try {{
     const chartBox = graphDiv.closest(".chart-box");
     if (chartBox) {{
       chartBox.style.display = "block";
       chartBox.style.width = "100%";
       chartBox.style.overflowX = "hidden";
+      containerWidth = chartBox.clientWidth || null;
+    }} else {{
+      containerWidth = graphDiv.parentElement?.clientWidth || null;
     }}
 
     graphDiv.style.marginLeft = "auto";
@@ -328,15 +332,22 @@ window.__odtEnhancePlotly = function(graphDiv) {{
   updates["font.size"] = Math.max(layout.font?.size || 0, 13);
   updates["legend.font.size"] = Math.max(layout.legend?.font?.size || 0, 12);
   updates["hoverlabel.font.size"] = Math.max(layout.hoverlabel?.font?.size || 0, 12);
-  updates["margin.t"] = Math.max(layout.margin?.t || 0, 126);
+  updates["margin.t"] = Math.max(layout.margin?.t || 0, 138);
   updates["margin.b"] = Math.max(layout.margin?.b || 0, 68);
   updates["margin.l"] = Math.max(layout.margin?.l || 0, 64);
   updates["margin.r"] = Math.max(layout.margin?.r || 0, 34);
+  updates["autosize"] = true;
+  if (typeof containerWidth === "number" && containerWidth > 0) {{
+    updates["width"] = Math.floor(containerWidth);
+  }}
 
   if (layout.title) {{
-    updates["title.yanchor"] = layout.title.yanchor || "top";
-    updates["title.pad.t"] = Math.max(layout.title?.pad?.t || 0, 6);
-    updates["title.pad.b"] = Math.max(layout.title?.pad?.b || 0, 10);
+    updates["title.xanchor"] = layout.title.xanchor || "left";
+    updates["title.yanchor"] = "top";
+    updates["title.y"] =
+      typeof layout.title?.y === "number" ? Math.min(layout.title.y, 0.985) : 0.985;
+    updates["title.pad.t"] = Math.max(layout.title?.pad?.t || 0, 8);
+    updates["title.pad.b"] = Math.max(layout.title?.pad?.b || 0, 14);
   }}
 
   if (typeof layout.legend?.y === "number" && layout.legend.y < 0) {{
@@ -360,15 +371,21 @@ window.__odtEnhancePlotly = function(graphDiv) {{
           family: "{FONT_FAMILY}",
         }};
         next.yanchor = "bottom";
-        if (typeof next.y === "number" && next.y > 1.0) {{
-          next.y = 1.0;
+        if (typeof next.y === "number") {{
+          next.y = Math.min(Math.max(next.y, 1.02), 1.08);
+        }} else {{
+          next.y = 1.02;
         }}
       }}
       return next;
     }});
   }}
 
-  Plotly.relayout(graphDiv, updates).catch(() => {{}});
+  Plotly.relayout(graphDiv, updates)
+    .then(() => Plotly.Plots.resize(graphDiv))
+    .catch(() => {{
+      try {{ Plotly.Plots.resize(graphDiv); }} catch (_) {{}}
+    }});
 }};
 
 window.addEventListener("load", () => {{
@@ -376,7 +393,12 @@ window.addEventListener("load", () => {{
     document.querySelectorAll(".js-plotly-plot").forEach((graphDiv) => {{
       window.__odtEnhancePlotly?.(graphDiv);
     }});
-  }}, 80);
+  }}, 120);
+  window.setTimeout(() => {{
+    document.querySelectorAll(".js-plotly-plot").forEach((graphDiv) => {{
+      window.__odtEnhancePlotly?.(graphDiv);
+    }});
+  }}, 900);
 }});
 
 window.addEventListener("resize", () => {{
@@ -758,12 +780,12 @@ body {{
 }}
 .odt-kpi-unit {{
   font-size: 0.8125rem;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.6);
   font-weight: 400;
 }}
 .odt-kpi-detail {{
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.6);
   margin-top: 8px;
   line-height: 1.45;
   padding-top: 8px;
