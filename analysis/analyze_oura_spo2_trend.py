@@ -1973,6 +1973,7 @@ def main() -> int:
                 "status": bdi.get("bdi_status"),
                 "elevated_pct": bdi.get("elevated_pct"),
                 "trend_slope": bdi.get("trend_slope"),
+                "trend_p_value": bdi.get("trend_p_value"),
             },
             "temp_coupling": {
                 "pearson_r": temp_coupling.get("pearson_r"),
