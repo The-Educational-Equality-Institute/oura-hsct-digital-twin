@@ -912,12 +912,12 @@ def build_dashboard(
         fig.add_trace(
             go.Scatter(
                 x=days, y=fi_vals, mode="lines+markers",
-                name="Frag. Index",
+                name="Fragmentation Index",
                 marker=dict(size=4, color=C_BLUE, line=dict(width=0)),
                 line=dict(color=C_BLUE, width=2),
                 fill="tozeroy",
                 fillcolor="rgba(99, 102, 241, 0.1)",
-                hovertemplate="<b>%{x}</b><br>Fragmentation: %{y:.1f} trans/hr<extra></extra>",
+                hovertemplate="<b>%{x}</b><br>Fragmentation: %{y:.1f} transitions/hour<extra></extra>",
             ),
             row=1, col=1,
         )
@@ -1182,7 +1182,7 @@ def build_dashboard(
                     opacity=0.85,
                 ),
                 name="Fragmentation",
-                hovertemplate="<b>%{x}</b><br>Fragmentation: %{y:.2f} trans/hr<extra></extra>",
+                hovertemplate="<b>%{x}</b><br>Fragmentation: %{y:.2f} transitions/hour<extra></extra>",
             ),
             row=5, col=1,
         )
@@ -1297,7 +1297,7 @@ def build_dashboard(
         )
 
     # Axis labels with color matching
-    fig.update_yaxes(title_text="Transitions/hr", row=1, col=1)
+    fig.update_yaxes(title_text="Transitions/hour", row=1, col=1)
     fig.update_yaxes(title_text="From stage", row=1, col=2)
     fig.update_xaxes(title_text="To stage", row=1, col=2)
     fig.update_yaxes(title_text="Minutes", title_font_color=ACCENT_PURPLE, row=2, col=1)
@@ -1307,13 +1307,13 @@ def build_dashboard(
     fig.update_yaxes(title_text="Spectral power", row=4, col=1)
     fig.update_xaxes(title_text="Period (minutes)", row=4, col=1)
     fig.update_yaxes(title_text="RMSSD (ms)", row=4, col=2)
-    fig.update_yaxes(title_text="Frag. Index", row=5, col=1)
+    fig.update_yaxes(title_text="Fragmentation index", row=5, col=1)
     fig.update_yaxes(title_text="Efficiency (%)", row=5, col=2)
 
     # Date axis formatting for time series panels -- consistent format
     for row, col in [(1, 1), (2, 1), (2, 2), (3, 2)]:
         fig.update_xaxes(
-            tickformat="%b %d", tickangle=-30,
+            tickformat="%d %b", tickangle=-30,
             row=row, col=col,
         )
 
@@ -1680,7 +1680,7 @@ def assemble_html(plotly_div: str, summary: dict) -> str:
         )
         frag_label = "Elevated" if frag_status in ("warning", "critical") else ""
         kpi_cards.append(make_kpi_card(
-            "Fragmentation", f["mean"], "trans/hr",
+            "Fragmentation", f["mean"], "transitions/hour",
             status=frag_status,
             status_label=frag_label,
             detail=f"{f['pct_above_clinical']}% above clinical threshold",
