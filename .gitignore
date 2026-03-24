@@ -1,0 +1,51 @@
+# Environment
+.env
+.venv/
+venv/
+
+# Patient-specific config (contains real clinical dates — use config.example.py as template)
+config.py
+
+# Data (user-specific databases)
+data/*.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code / AI agent working files
+CLAUDE.md
+CODEX.md
+.claude/
+.playwright-mcp/
+
+# Internal QA and research
+qa_reports/
+deep-research/
+
+# Generated reports (output lives on the site, not in the repo)
+reports/*.html
+reports/*.json
+reports/*.png
+reports/screenshots/
+reports/send_bundle/
+
+# Local automation (contains hardcoded paths)
+scripts/
+
+# Build / deploy artifacts
+test-results/
+.wrangler/
+index.html
