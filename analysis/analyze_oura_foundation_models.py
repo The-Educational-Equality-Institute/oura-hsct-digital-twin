@@ -2397,6 +2397,13 @@ def main() -> int:
                 "end": str(nightly["date"].max()),
                 "n_nights": int(len(nightly)),
             }
+        # Store raw HR count and data month for dynamic report labels
+        metrics["n_raw_hr_readings"] = int(len(data["hr"])) if "hr" in data else 0
+        metrics["data_month"] = (
+            pd.to_datetime(nightly["date"]).iloc[-1].strftime("%B")
+            if not nightly.empty
+            else "Unknown"
+        )
     except Exception as e:
         print(f"[ERROR] Data loading failed: {e}")
         traceback.print_exc()
