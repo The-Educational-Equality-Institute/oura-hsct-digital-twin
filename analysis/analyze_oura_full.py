@@ -6,7 +6,7 @@ Produces a single interactive HTML dashboard covering ALL Oura endpoints:
   1. Executive Summary (key metrics at a glance)
   2. HRV Deep Dive (RMSSD trends, distribution, Poincare, circadian)
   3. Heart Rate Analysis (daily trends, circadian, tachycardia prevalence)
-  4. Sleep Analysis (scores, durations, HR during sleep, breath rate)
+  4. Sleep Analysis (scores, durations, HR during sleep, respiratory rate)
   5. Readiness & Recovery (scores, HRV balance, recovery index)
   6. Resilience & Cardiovascular Age
   7. SpO2 Monitoring
@@ -505,7 +505,7 @@ def fig_hrv_deep_dive(data: dict) -> go.Figure:
     fig.add_vline(x=hrv["rmssd"].median(), line_dash="dot", line_color=C_BLUE,
                   annotation_text=f"Median {hrv['rmssd'].median():.0f}", row=1, col=2)
     fig.add_vline(x=ESC_RMSSD_DEFICIENCY, line_dash="dash", line_color=ACCENT_RED,
-                  annotation_text="Deficiency (Kleiger 1987)", row=1, col=2)
+                  annotation_text="Deficiency (ESC/NASPE 1996)", row=1, col=2)
 
     # --- Panel 3: Poincaré plot ---
     rmssd_vals = hrv.sort_values("timestamp")["rmssd"].values
