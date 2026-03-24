@@ -137,7 +137,7 @@ def _fmt_temp(val: float) -> str:
 
 
 def subject_cards(s: dict) -> str:
-    """Three subject profile cards."""
+    """Subject profile cards - only renders control subjects when defined."""
     primary = make_kpi_card(
         "Primary Subject",
         str(s["total_days"]),
@@ -147,22 +147,30 @@ def subject_cards(s: dict) -> str:
         f"Resting HR {s.get('resting_hr_pre', '?')}-{s.get('resting_hr_post', '?')} "
         f"&middot; HRV {s.get('hrv_pre', '?')}-{s.get('hrv_post', '?')} ms",
     )
-    mamma = make_kpi_card(
-        "Family Control",
-        "1",
-        "night",
-        status="good",
-        detail="61F &middot; Healthy &middot; Resting HR 56-68 &middot; Same genetics",
-    )
-    subject_b = make_kpi_card(
-        "Disease Control",
-        "34",
-        "nights",
-        status="info",
-        status_label="Recruiting",
-        detail="36M &middot; Post-stroke &middot; Sparse data &middot; Restarting nightly wear",
-    )
-    return make_kpi_row(primary, mamma, subject_b)
+    cards = [primary]
+
+    control_subjects = s.get("control_subjects", {})
+    if "family" in control_subjects:
+        fc = control_subjects["family"]
+        cards.append(make_kpi_card(
+            fc.get("label", "Family Control"),
+            str(fc.get("nights", "?")),
+            "night" if fc.get("nights", 0) == 1 else "nights",
+            status="good",
+            detail=fc.get("detail", ""),
+        ))
+    if "disease" in control_subjects:
+        dc = control_subjects["disease"]
+        cards.append(make_kpi_card(
+            dc.get("label", "Disease Control"),
+            str(dc.get("nights", "?")),
+            "nights",
+            status="info",
+            status_label=dc.get("status_label", "Recruiting"),
+            detail=dc.get("detail", ""),
+        ))
+
+    return make_kpi_row(*cards)
 
 
 def honest_assessment(s: dict) -> str:
