@@ -3025,7 +3025,7 @@ def _run_analysis(conn: sqlite3.Connection) -> None:
   RQA LAM:        {rqa_data["laminarity"]}
   MSE pattern:    {mse_data["pattern"]}
   Hjorth:         Act={hjorth_data["activity"]}, Mob={hjorth_data["mobility"]}, Compl={hjorth_data["complexity"]}
-  Proxy ratio:    {freq_data["lf_hf_ratio"]}
+  Proxy ratio:    {freq_data["proxy_ratio"]}
   Cosinor MESOR:  {cosinor_data["mesor"]} bpm [healthy: 60-80]
   Cosinor Amp:    {cosinor_data["amplitude"]} bpm [healthy: 15-25]
   HR PermEnt:     {hr_complex.get("permutation_entropy", "?")} [healthy: >0.85]
