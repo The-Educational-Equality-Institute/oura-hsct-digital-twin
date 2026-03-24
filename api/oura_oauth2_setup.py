@@ -157,7 +157,9 @@ def authorize() -> None:
         )
     except OSError as e:
         print(f"ERROR: Could not start auth server on port {REDIRECT_PORT}: {e}")
-        print(f"  Another process may be using this port. Try: lsof -i :{REDIRECT_PORT}")
+        print(
+            f"  Another process may be using this port. Try: lsof -i :{REDIRECT_PORT}"
+        )
         sys.exit(1)
     server_thread = threading.Thread(target=server.handle_request, daemon=True)
     server_thread.start()

@@ -846,7 +846,7 @@ def compare_pre_post_ruxolitinib(
                     result["mann_whitney_U"] = float(u_stat)
                     result["p_value"] = float(p_val)
                 except (ValueError, RuntimeError) as e:
-                    logging.warning(f"Mann-Whitney U test failed for {metric}: {e}")
+                    logging.warning(f"Mann-Whitney U test failed for {name}: {e}")
                     result["mann_whitney_U"] = None
                     result["p_value"] = None
             else:
@@ -909,16 +909,12 @@ def compare_pre_post_ruxolitinib(
     # Deep sleep %
     lsp_calc = lsp.copy()
     total_dur = lsp_calc["total_sleep_duration"].replace(0, np.nan)
-    lsp_calc["deep_pct"] = (
-        lsp_calc["deep_sleep_duration"] / total_dur * 100
-    ).round(1)
+    lsp_calc["deep_pct"] = (lsp_calc["deep_sleep_duration"] / total_dur * 100).round(1)
     pre_dp, post_dp = split_pre_post(lsp_calc, "deep_pct")
     comparisons.append(run_comparison(pre_dp, post_dp, "deep_sleep_%"))
 
     # REM sleep %
-    lsp_calc["rem_pct"] = (
-        lsp_calc["rem_sleep_duration"] / total_dur * 100
-    ).round(1)
+    lsp_calc["rem_pct"] = (lsp_calc["rem_sleep_duration"] / total_dur * 100).round(1)
     pre_rp, post_rp = split_pre_post(lsp_calc, "rem_pct")
     comparisons.append(run_comparison(pre_rp, post_rp, "rem_sleep_%"))
 

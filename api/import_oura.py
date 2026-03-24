@@ -86,9 +86,7 @@ def _unpack_time_series(
         results.append((ts.isoformat(), float(value)))
 
     if skipped:
-        logging.warning(
-            "Skipped %d null/non-positive values in %s", skipped, endpoint
-        )
+        logging.warning("Skipped %d null/non-positive values in %s", skipped, endpoint)
 
     return results
 
@@ -550,7 +548,9 @@ def import_oura_data(
                 )
                 stats["sleep"] += 1
             except Exception as e:
-                logging.warning("Skipped bad sleep record %s: %s", record.get("day", "?"), e)
+                logging.warning(
+                    "Skipped bad sleep record %s: %s", record.get("day", "?"), e
+                )
     except Exception as e:
         logging.warning("Could not fetch sleep data: %s", e)
 
@@ -1099,7 +1099,11 @@ def import_oura_data(
             data = info.get("data", info) if "data" in info else info
             cursor.execute("DELETE FROM oura_personal_info")  # Single-row table
             raw_email = data.get("email")
-            email_hash = hashlib.sha256(raw_email.encode()).hexdigest()[:16] if raw_email else None
+            email_hash = (
+                hashlib.sha256(raw_email.encode()).hexdigest()[:16]
+                if raw_email
+                else None
+            )
             cursor.execute(
                 """
                 INSERT INTO oura_personal_info (age, weight, height, biological_sex, email_hash)

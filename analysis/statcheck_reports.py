@@ -558,9 +558,8 @@ def run_audit(
                     refs = extract_references(report_name, json_data)
                     all_refs.extend(refs)
                 except (json.JSONDecodeError, OSError) as e:
-                    print(
-                        f"  WARNING: Could not read {json_name}: {e}", file=sys.stderr
-                    )
+                    logging.error("JSON verification failed for %s: %s", json_name, e)
+                    result.json_errors.append(f"{json_name}: {e}")
 
     result.claims_extracted = len(all_claims)
     result.references_loaded = len(all_refs)
