@@ -3402,6 +3402,8 @@ def _build_pcmci_summary(pcmci_results: dict[str, Any]) -> str:
 
         links = period.get("significant_links", [])
         n = period.get("n_observations", 0)
+        n_fdr = period.get("n_significant_links_fdr", 0)
+        n_tests = period.get("n_tests_total", 0)
 
         if not links:
             html_parts.append(
@@ -3411,6 +3413,11 @@ def _build_pcmci_summary(pcmci_results: dict[str, Any]) -> str:
 
         rows = []
         for link in links[:10]:
+            fdr_badge = (
+                '<span class="badge badge-sig">FDR</span>'
+                if link.get("significant_fdr")
+                else '<span class="badge badge-ns">ns</span>'
+            )
             rows.append(
                 f"<tr>"
                 f"<td>{link['source']}</td>"
@@ -3418,13 +3425,21 @@ def _build_pcmci_summary(pcmci_results: dict[str, Any]) -> str:
                 f"<td>{link['lag']} days</td>"
                 f"<td>{link['correlation']:+.3f}</td>"
                 f"<td>{link['p_value']:.4f}</td>"
+                f"<td>{link.get('q_value_bh', link['p_value']):.4f} {fdr_badge}</td>"
                 f"</tr>"
             )
 
+        fdr_note = (
+            f"<p><em>{len(links)} links at raw p &lt; {PCMCI_ALPHA}, "
+            f"{n_fdr} survive BH FDR correction (q &lt; {PCMCI_ALPHA}), "
+            f"from {n_tests} total tests.</em></p>"
+        )
+
         html_parts.append(f"""
-        <h3>{label} ({n} days, {len(links)} significant links)</h3>
+        <h3>{label} ({n} days, {len(links)} raw / {n_fdr} FDR-significant links)</h3>
+        {fdr_note}
         <table>
-            <thead><tr><th>Source</th><th>Target</th><th>Lag</th><th>Correlation</th><th>p-value</th></tr></thead>
+            <thead><tr><th>Source</th><th>Target</th><th>Lag</th><th>Correlation</th><th>Raw p-value</th><th>q-value (BH)</th></tr></thead>
             <tbody>{"".join(rows)}</tbody>
         </table>""")
 
