@@ -2140,7 +2140,7 @@ def generate_simple_html_report(
             if hr_raw_n is not None and hr_fdr_n is not None:
                 parts.append(f"HR: {hr_raw_n} raw, {hr_fdr_n} FDR-corrected")
             fdr_note = (
-                f"<br><strong>Anomalies (Benjamini-Hochberg FDR):</strong> "
+                "<br><strong>Anomalies (Benjamini-Hochberg FDR):</strong> "
                 + "; ".join(parts)
                 + "."
             )
@@ -2221,9 +2221,9 @@ def generate_simple_html_report(
             {feb9_rows if feb9_rows else '<tr><td colspan="4">Chronos retrospective not available in this run.</td></tr>'}
         </table>
         <p style="margin-top: 8px;">
-            Prospective March ensemble HIGH-confidence anomalies:
+            Prospective {metrics.get('data_month', 'recent')} ensemble HIGH-confidence anomalies:
             <strong>{", ".join(high_dates) if high_dates else "None detected"}</strong><br>
-            Feb 9 in March ensemble consensus:
+            Feb 9 in {metrics.get('data_month', 'recent')} ensemble consensus:
             <strong style="color:{ACCENT_RED if feb9_ens else TEXT_SECONDARY}">
             {"YES" if feb9_ens else "No"}</strong>
         </p>
