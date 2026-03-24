@@ -88,6 +88,7 @@ from _theme import (
     BORDER_SUBTLE, TEXT_PRIMARY, TEXT_SECONDARY,
     ACCENT_BLUE, ACCENT_GREEN, ACCENT_RED, ACCENT_AMBER, ACCENT_PURPLE, ACCENT_CYAN,
 )
+from _bos_risk import load_bos_risk
 
 pio.templates.default = "clinical_dark"
 
@@ -120,31 +121,18 @@ def _resolve_data_end() -> str:
         return row[0]
     raise RuntimeError("Unable to determine latest available Oura date from the database")
 
-# BOS risk score — loaded at runtime from SpO2/BOS analysis output
-SPO2_BOS_METRICS_PATH = REPORTS_DIR / "spo2_bos_metrics.json"
-
-
-def _load_bos_risk_from_spo2() -> tuple[float | None, str | None]:
-    """Load BOS composite score and risk level from spo2_bos_metrics.json.
-
-    Returns (score, risk_level) or (None, None) if unavailable.
-    """
-    if not SPO2_BOS_METRICS_PATH.exists():
-        return None, None
-    try:
-        with open(SPO2_BOS_METRICS_PATH) as f:
-            metrics = json.load(f)
-        bos = metrics.get("bos_risk", {})
-        score = bos.get("composite_score")
-        level = bos.get("risk_level")
-        if score is not None:
-            return float(score), str(level) if level else None
-        return None, None
-    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
-        return None, None
-
-
-BOS_RISK_SCORE, BOS_RISK_LEVEL = _load_bos_risk_from_spo2()
+# BOS risk payload — loaded at runtime from canonical SpO2/BOS output
+_BOS_RISK = load_bos_risk(REPORTS_DIR)
+try:
+    BOS_RISK_SCORE = (
+        float(_BOS_RISK.get("composite_score"))
+        if _BOS_RISK.get("composite_score") is not None
+        else None
+    )
+except (TypeError, ValueError):
+    BOS_RISK_SCORE = None
+BOS_RISK_LEVEL = _BOS_RISK.get("risk_level")
+BOS_RISK_RECOMMENDATION = _BOS_RISK.get("recommendation")
 
 # GVHD composite score weights (sum = 1.0)
 WEIGHTS = {
@@ -498,8 +486,8 @@ def analyze_temperature(daily: pd.DataFrame) -> dict[str, Any]:
         "median": float(temp.median()),
         "iqr": float(temp.quantile(0.75) - temp.quantile(0.25)),
     }
-    log("TEMP", f"  Mean temp deviation: {result['stats']['mean']:.3f} C")
-    log("TEMP", f"  Temperature SD: {result['stats']['std']:.3f} C")
+    log("TEMP", f"  Mean temp deviation: {result['stats']['mean']:.3f} °C")
+    log("TEMP", f"  Temperature SD: {result['stats']['std']:.3f} °C")
 
     # Rolling variability (7-day SD)
     var_7d = daily["temp_var_7d"].dropna()
@@ -508,7 +496,7 @@ def analyze_temperature(daily: pd.DataFrame) -> dict[str, Any]:
         "max": float(var_7d.max()),
         "max_date": str(var_7d.idxmax().date()) if not var_7d.empty else None,
     }
-    log("TEMP", f"  Peak 7d variability: {result['variability_7d']['max']:.3f} C on {result['variability_7d']['max_date']}")
+    log("TEMP", f"  Peak 7d variability: {result['variability_7d']['max']:.3f} °C on {result['variability_7d']['max_date']}")
 
     # Autocorrelation structure (lag 1-7)
     acf_values = []
@@ -572,7 +560,7 @@ def analyze_temperature(daily: pd.DataFrame) -> dict[str, Any]:
                 if not np.isnan(v)
             ],
         }
-        log("TEMP", f"  Pre-event (7d) mean temp: {result['pre_event_pattern']['mean']:.3f} C")
+        log("TEMP", f"  Pre-event (7d) mean temp: {result['pre_event_pattern']['mean']:.3f} °C")
 
     # Build temperature figure
     fig = make_subplots(
@@ -1947,7 +1935,7 @@ def compute_feature_importance(
         ("steps", "Steps"),
         ("readiness_score", "Readiness Score"),
         ("stress_high", "Stress High (sec)"),
-        ("sleep_breath", "Breathing Rate (breaths/min)"),
+        ("sleep_breath", "Respiratory rate (breaths/min)"),
     ]
 
     results = []
@@ -2069,9 +2057,9 @@ def compute_feature_importance(
         height=max(450, len(results) * 32 + 120),
         xaxis_title="Combined Importance Score",
         yaxis_title="",
-        margin=dict(l=200, t=50, r=80),
+        margin=dict(l=140, t=64, r=60, b=44),
         xaxis=dict(gridcolor="rgba(255,255,255,0.05)"),
-        yaxis=dict(gridcolor="rgba(255,255,255,0.05)"),
+        yaxis=dict(gridcolor="rgba(255,255,255,0.05)", automargin=True),
     )
 
     figures.append(fig)
@@ -2126,6 +2114,7 @@ def bos_risk_integration(
     result: dict[str, Any] = {
         "bos_risk_score": BOS_RISK_SCORE if BOS_RISK_SCORE is not None else "N/A",
         "bos_risk_level": BOS_RISK_LEVEL if BOS_RISK_LEVEL is not None else "N/A",
+        "bos_recommendation": BOS_RISK_RECOMMENDATION if BOS_RISK_RECOMMENDATION else "N/A",
     }
 
     # SpO2 analysis for pulmonary component
@@ -2268,15 +2257,18 @@ def generate_html_report(
 
     combined_score = bos_result.get("combined_risk", {}).get("combined_score", "N/A")
     combined_interp = bos_result.get("combined_risk", {}).get("interpretation", "N/A")
+    # LOW composite does NOT mean "normal" — patient has confirmed multi-organ cGvHD.
+    # A low wearable-derived score means the model under-captures organ burden,
+    # not that the patient is healthy.
     combined_status = (
         "critical" if combined_interp == "HIGH"
-        else "warning" if combined_interp == "MODERATE"
+        else "warning" if combined_interp in {"MODERATE", "ELEVATED", "LOW"}
         else "normal"
     )
     combined_label = (
         "High" if combined_interp == "HIGH"
-        else "Elevated" if combined_interp == "MODERATE"
-        else "Normal"
+        else "Elevated" if combined_interp in {"MODERATE", "ELEVATED"}
+        else "Low — model limited"
     )
 
     peak_label = "Critical" if peak_score != "N/A" else ""
@@ -2470,6 +2462,7 @@ def generate_html_report(
     spo2_trend = bos_result.get("spo2_stats", {}).get("trend_slope", "N/A")
     bos_score_display = bos_result.get("bos_risk_score", "N/A")
     bos_level_display = bos_result.get("bos_risk_level", "N/A")
+    bos_recommendation = bos_result.get("bos_recommendation", "N/A")
     sec6 = (
         '<div class="methodology">'
         f"Bronchiolitis obliterans syndrome (BOS) is the pulmonary manifestation of chronic GVHD. "
@@ -2482,6 +2475,7 @@ def generate_html_report(
         f"<li>Combined Risk: {combined_score} ({combined_interp})</li>"
         f"<li>SpO2 Mean: {spo2_mean}%</li>"
         f"<li>SpO2 Trend: {spo2_trend} %/day</li>"
+        f"<li>BOS Recommendation: {bos_recommendation}</li>"
         "</ul>"
     )
     body += make_section("6. BOS Risk Integration", sec6)
