@@ -21,8 +21,8 @@ repos:
     hooks:
       - id: no-em-dash
         name: No em dashes (use hyphen instead)
-        entry: bash -c 'if grep -Prn "\x{2014}" "$@" 2>/dev/null; then echo "ERROR: Em dashes found. Replace with hyphens (-)."; exit 1; fi' --
-        language: system
+        entry: scripts/check_no_em_dash.sh
+        language: script
         types_or: [python, markdown, json]
 
   - repo: https://github.com/gitleaks/gitleaks
