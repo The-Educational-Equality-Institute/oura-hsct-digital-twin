@@ -54,6 +54,15 @@ from config import (
     REPORTS_DIR,
     TREATMENT_START,
     BASELINE_DAYS,
+    SPO2_NORMAL_MIN,
+    SPO2_NORMAL_MAX,
+    SPO2_CONCERN_THRESHOLD,
+    SPO2_CONCERN_SLOPE,
+    BDI_NORMAL,
+    BDI_MILD,
+    BDI_MODERATE,
+    BOS_WEIGHTS,
+    DLCO_MEASUREMENTS,
 )
 from _hardening import safe_divide
 from _theme import (
