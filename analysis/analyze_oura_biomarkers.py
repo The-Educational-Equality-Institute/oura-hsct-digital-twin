@@ -29,7 +29,7 @@ import logging
 import sqlite3
 import sys
 import warnings
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -52,18 +52,35 @@ logger = logging.getLogger(__name__)
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from config import (
-    DATABASE_PATH, REPORTS_DIR, TRANSPLANT_DATE, TREATMENT_START,
-    TREATMENT_START_STR, PATIENT_AGE, PATIENT_LABEL,
+    DATABASE_PATH,
+    REPORTS_DIR,
+    TRANSPLANT_DATE,
+    TREATMENT_START,
+    TREATMENT_START_STR,
+    PATIENT_AGE,
+    PATIENT_LABEL,
     ESC_RMSSD_DEFICIENCY,
-    POPULATION_RMSSD_MEAN, POPULATION_RMSSD_SD,
+    POPULATION_RMSSD_MEAN,
+    POPULATION_RMSSD_SD,
 )
 from _theme import (
-    wrap_html, make_kpi_card, make_kpi_row, make_section,
+    wrap_html,
+    make_kpi_card,
+    make_kpi_row,
+    make_section,
     METRIC_DESCRIPTIONS,
-    COLORWAY, STATUS_COLORS, BG_PRIMARY, BG_SURFACE, BORDER_SUBTLE,
-    TEXT_PRIMARY, TEXT_SECONDARY, ACCENT_BLUE, ACCENT_GREEN,
-    ACCENT_RED, ACCENT_AMBER, ACCENT_PURPLE, ACCENT_CYAN,
-    C_HR, C_SPO2, C_HRV, C_SLEEP, C_TEMP,
+    BG_SURFACE,
+    BORDER_SUBTLE,
+    TEXT_PRIMARY,
+    TEXT_SECONDARY,
+    ACCENT_BLUE,
+    ACCENT_GREEN,
+    ACCENT_RED,
+    ACCENT_AMBER,
+    ACCENT_PURPLE,
+    ACCENT_CYAN,
+    C_HR,
+    C_HRV,
 )
 
 pio.templates.default = "clinical_dark"
@@ -84,7 +101,7 @@ NORM_CV_AGE_DELTA_SD = 3.0
 # Post-HSCT expected recovery milestones (Chamorro-Vina 2012, Wood 2013)
 # Note: Recovery trajectory values are clinical estimates, not derived from specific literature.
 RECOVERY_MILESTONES = {
-    6:  {"rmssd": 20, "sleep_hr": 80},
+    6: {"rmssd": 20, "sleep_hr": 80},
     12: {"rmssd": 25, "sleep_hr": 75},
     24: {"rmssd": 30, "sleep_hr": 72},
     36: {"rmssd": 35, "sleep_hr": 70},
@@ -98,19 +115,20 @@ NORMAL_DIP_MAX = 20.0
 # Note: This composite uses clinical risk thresholds, not population-percentile
 # quartiles as in the original McEwen allostatic load methodology.
 ALLOSTATIC_THRESHOLDS = {
-    "resting_hr": 80,        # bpm, 90th percentile
+    "resting_hr": 80,  # bpm, 90th percentile
     "rmssd": ESC_RMSSD_DEFICIENCY,  # ms, autonomic deficiency threshold (ESC/NASPE Task Force 1996; Shaffer & Ginsberg 2017; below = fail)
     "sleep_efficiency": 85,  # %, below = fail
-    "temp_deviation": 0.5,   # °C, above = fail
-    "spo2": 95.0,            # %, below = fail
-    "deep_pct": 10.0,        # %, below = fail
-    "rem_pct": 15.0,         # %, below = fail
+    "temp_deviation": 0.5,  # °C, above = fail
+    "spo2": 95.0,  # %, below = fail
+    "deep_pct": 10.0,  # %, below = fail
+    "rem_pct": 15.0,  # %, below = fail
 }
 
 
 # ---------------------------------------------------------------------------
 # Database helpers
 # ---------------------------------------------------------------------------
+
 
 def get_connection() -> sqlite3.Connection:
     """Open read-only connection to biometrics database."""
@@ -125,6 +143,7 @@ def get_connection() -> sqlite3.Connection:
 # ---------------------------------------------------------------------------
 # Data loading: build daily metrics DataFrame
 # ---------------------------------------------------------------------------
+
 
 def get_daily_metrics(conn: sqlite3.Connection) -> pd.DataFrame:
     """Build a unified daily metrics DataFrame from all Oura tables.
@@ -144,7 +163,9 @@ def get_daily_metrics(conn: sqlite3.Connection) -> pd.DataFrame:
         try:
             return pd.read_sql_query(sql, con)
         except Exception:
-            logger.warning("Query failed (table may be missing), returning empty DataFrame")
+            logger.warning(
+                "Query failed (table may be missing), returning empty DataFrame"
+            )
             return pd.DataFrame()
 
     # -- 1) Nightly HRV (from 5-min epochs) --
@@ -185,13 +206,16 @@ def get_daily_metrics(conn: sqlite3.Connection) -> pd.DataFrame:
         """
     )
     from collections import defaultdict
+
     night_epochs: dict[str, list[float]] = defaultdict(list)
     for row in cursor:
         night_epochs[row["day"]].append(row["rmssd"])
 
     for day_str, values in night_epochs.items():
         alpha1 = _compute_dfa_alpha1(values)
-        dfa_records.append({"day": datetime.strptime(day_str, "%Y-%m-%d").date(), "dfa_alpha1": alpha1})
+        dfa_records.append(
+            {"day": datetime.strptime(day_str, "%Y-%m-%d").date(), "dfa_alpha1": alpha1}
+        )
 
     dfa_df = pd.DataFrame(dfa_records)
 
@@ -220,7 +244,9 @@ def get_daily_metrics(conn: sqlite3.Connection) -> pd.DataFrame:
     sleep_df["rem_pct"] = sleep_df["rem_sleep_duration"] / total * 100
     sleep_df["deep_pct"] = sleep_df["deep_sleep_duration"] / total * 100
     sleep_df["light_pct"] = sleep_df["light_sleep_duration"] / total * 100
-    sleep_df["awake_pct"] = sleep_df["awake_time"] / (sleep_df["awake_time"] + total) * 100
+    sleep_df["awake_pct"] = (
+        sleep_df["awake_time"] / (sleep_df["awake_time"] + total) * 100
+    )
 
     # -- 3) Awake HR for dipping calculation --
     awake_hr_df = _safe_read(
@@ -272,7 +298,15 @@ def get_daily_metrics(conn: sqlite3.Connection) -> pd.DataFrame:
 
     # -- Merge all on day --
     df = hrv_df.copy()
-    for other in [dfa_df, sleep_df, awake_hr_df, spo2_df, cv_df, readiness_df, stress_df]:
+    for other in [
+        dfa_df,
+        sleep_df,
+        awake_hr_df,
+        spo2_df,
+        cv_df,
+        readiness_df,
+        stress_df,
+    ]:
         if not other.empty:
             df = pd.merge(df, other, on="day", how="outer")
 
@@ -281,7 +315,9 @@ def get_daily_metrics(conn: sqlite3.Connection) -> pd.DataFrame:
 
     # -- Compute HR dipping --
     df["hr_dip_pct"] = np.where(
-        (df["awake_hr_mean"].notna()) & (df["sleep_hr_mean"].notna()) & (df["awake_hr_mean"] > 0),
+        (df["awake_hr_mean"].notna())
+        & (df["sleep_hr_mean"].notna())
+        & (df["awake_hr_mean"] > 0),
         (df["awake_hr_mean"] - df["sleep_hr_mean"]) / df["awake_hr_mean"] * 100,
         np.nan,
     )
@@ -289,7 +325,9 @@ def get_daily_metrics(conn: sqlite3.Connection) -> pd.DataFrame:
     return df
 
 
-def _compute_dfa_alpha1(rmssd_series: list[float], min_epochs: int = 16) -> float | None:
+def _compute_dfa_alpha1(
+    rmssd_series: list[float], min_epochs: int = 16
+) -> float | None:
     """Compute RMSSD-Epoch DFA (Proxy) alpha-1 from a nightly RMSSD series.
 
     Uses antropy.detrended_fluctuation for short-term fractal scaling.
@@ -302,6 +340,7 @@ def _compute_dfa_alpha1(rmssd_series: list[float], min_epochs: int = 16) -> floa
 
     try:
         import antropy
+
         arr = np.array(rmssd_series, dtype=np.float64)
         # Remove NaN/zero
         arr = arr[np.isfinite(arr) & (arr > 0)]
@@ -317,6 +356,7 @@ def _compute_dfa_alpha1(rmssd_series: list[float], min_epochs: int = 16) -> floa
 # ---------------------------------------------------------------------------
 # Biomarker 1: Autonomic Dysfunction Severity Index (ADSI)
 # ---------------------------------------------------------------------------
+
 
 def compute_adsi(df: pd.DataFrame) -> pd.Series:
     """Compute Autonomic Dysfunction Severity Index (0-100, 100 = worst).
@@ -339,15 +379,11 @@ def compute_adsi(df: pd.DataFrame) -> pd.Series:
     # (b) RMSSD-Epoch DFA (Proxy) alpha-1 deviation from optimal 1.0 (healthy short-term scaling)
     # Score = |alpha1 - 1.0| / 0.5 * 100, capped at 100
     # Note: Reference ranges from RR-interval studies; RMSSD-epoch DFA values may not be directly comparable
-    scores["dfa_score"] = np.clip(
-        np.abs(df["dfa_alpha1"] - 1.0) / 0.5 * 100, 0, 100
-    )
+    scores["dfa_score"] = np.clip(np.abs(df["dfa_alpha1"] - 1.0) / 0.5 * 100, 0, 100)
 
     # (c) Sleep HR dipping deficit: normal dip is 10-20%
     # Score = 100 if no dip (0%), 0 if dip >= 15% (midpoint of normal)
-    scores["dip_score"] = np.clip(
-        100 - (df["hr_dip_pct"] / 15.0 * 100), 0, 100
-    )
+    scores["dip_score"] = np.clip(100 - (df["hr_dip_pct"] / 15.0 * 100), 0, 100)
 
     # (d) HR recovery estimate: use the gap between awake and rest HR decay
     # Higher awake HR + lower dip = worse recovery. Proxy: awake HR percentile.
@@ -357,15 +393,11 @@ def compute_adsi(df: pd.DataFrame) -> pd.Series:
     )
 
     # (e) CV age excess: (cv_age - chronological) / 10 * 100, capped
-    scores["cv_age_score"] = np.clip(
-        df["cv_age_delta"] / 15.0 * 100, 0, 100
-    )
+    scores["cv_age_score"] = np.clip(df["cv_age_delta"] / 15.0 * 100, 0, 100)
 
     # (f) SpO2 deficit: distance below 97.5% baseline
     # Score: (97.5 - spo2) / 3.0 * 100 (3% below = 100)
-    scores["spo2_score"] = np.clip(
-        (NORM_SPO2_MEAN - df["spo2"]) / 3.0 * 100, 0, 100
-    )
+    scores["spo2_score"] = np.clip((NORM_SPO2_MEAN - df["spo2"]) / 3.0 * 100, 0, 100)
 
     # Weighted composite
     weights = {
@@ -392,6 +424,7 @@ def compute_adsi(df: pd.DataFrame) -> pd.Series:
 # ---------------------------------------------------------------------------
 # Biomarker 2: GVHD Activity Score (Wearable)
 # ---------------------------------------------------------------------------
+
 
 def compute_gvhd_score(df: pd.DataFrame) -> pd.Series:
     """Compute GVHD Activity Score (0-100, 100 = active flare).
@@ -458,7 +491,7 @@ def _rolling_slope(series: pd.Series, window: int) -> pd.Series:
     slopes = pd.Series(np.nan, index=series.index, dtype=float)
     vals = series.values
     for i in range(window - 1, len(vals)):
-        y = vals[i - window + 1: i + 1]
+        y = vals[i - window + 1 : i + 1]
         mask = np.isfinite(y)
         if mask.sum() >= 3:
             x = np.arange(window)[mask]
@@ -472,6 +505,7 @@ def _rolling_slope(series: pd.Series, window: int) -> pd.Series:
 # ---------------------------------------------------------------------------
 # Biomarker 3: Recovery Trajectory Index
 # ---------------------------------------------------------------------------
+
 
 def compute_recovery_index(df: pd.DataFrame) -> pd.Series:
     """Compute Recovery Trajectory Index (0-100, 100 = full recovery to expected norm).
@@ -495,17 +529,22 @@ def compute_recovery_index(df: pd.DataFrame) -> pd.Series:
     rmssd_score = np.clip(df["rmssd_mean"] / expected_rmssd * 100, 0, 100)
 
     # HR score: inverted (lower is better). Score = expected / actual * 100
-    hr_score = np.clip(expected_hr / df["sleep_hr_mean"] * 100, 0, 100)
+    hr_score = np.clip(
+        np.where(df["sleep_hr_mean"] > 0, expected_hr / df["sleep_hr_mean"] * 100, 0),
+        0, 100,
+    )
 
     # Sleep quality score: efficiency vs expected 85%
     sleep_score = np.clip(df["sleep_efficiency"] / 85.0 * 100, 0, 100)
 
     # Average of available components
-    components = pd.DataFrame({
-        "rmssd": rmssd_score,
-        "hr": hr_score,
-        "sleep": sleep_score,
-    })
+    components = pd.DataFrame(
+        {
+            "rmssd": rmssd_score,
+            "hr": hr_score,
+            "sleep": sleep_score,
+        }
+    )
 
     recovery = components.mean(axis=1, skipna=True)
     recovery.name = "recovery_index"
@@ -515,6 +554,7 @@ def compute_recovery_index(df: pd.DataFrame) -> pd.Series:
 # ---------------------------------------------------------------------------
 # Biomarker 4: Pharmacodynamic Response Score (ruxolitinib)
 # ---------------------------------------------------------------------------
+
 
 def compute_pharma_response(df: pd.DataFrame) -> pd.Series:
     """Compute Pharmacodynamic Response Score for ruxolitinib.
@@ -529,7 +569,13 @@ def compute_pharma_response(df: pd.DataFrame) -> pd.Series:
     post_mask = ~baseline_mask
 
     # Metrics to track
-    metrics = ["rmssd_mean", "sleep_hr_mean", "sleep_efficiency", "temp_deviation", "spo2"]
+    metrics = [
+        "rmssd_mean",
+        "sleep_hr_mean",
+        "sleep_efficiency",
+        "temp_deviation",
+        "spo2",
+    ]
     available_metrics = [m for m in metrics if m in df.columns]
 
     response = pd.Series(np.nan, index=df.index, name="pharma_response")
@@ -565,6 +611,7 @@ def compute_pharma_response(df: pd.DataFrame) -> pd.Series:
 # ---------------------------------------------------------------------------
 # Biomarker 5: Cardiovascular Risk Composite
 # ---------------------------------------------------------------------------
+
 
 def compute_cv_risk(df: pd.DataFrame) -> pd.Series:
     """Compute Cardiovascular Risk Composite (0-100, 100 = highest risk).
@@ -620,6 +667,7 @@ def compute_cv_risk(df: pd.DataFrame) -> pd.Series:
 # Biomarker 6: Wearable Allostatic Load Score
 # ---------------------------------------------------------------------------
 
+
 def compute_allostatic_load(df: pd.DataFrame) -> pd.Series:
     """Compute Wearable Allostatic Load Score (0-7).
 
@@ -660,8 +708,10 @@ def compute_allostatic_load(df: pd.DataFrame) -> pd.Series:
 # Trend analysis
 # ---------------------------------------------------------------------------
 
-def compute_trend(series: pd.Series, min_points: int = 10,
-                   window_days: int | None = None) -> dict[str, Any]:
+
+def compute_trend(
+    series: pd.Series, min_points: int = 10, window_days: int | None = None
+) -> dict[str, Any]:
     """Compute trend statistics for a time series.
 
     Args:
@@ -688,25 +738,42 @@ def compute_trend(series: pd.Series, min_points: int = 10,
             actual_window = window_days
         # else: fall back to full series
 
-    window_label = f"{actual_window}-day trend" if actual_window else "full-window trend"
+    window_label = (
+        f"{actual_window}-day trend" if actual_window else "full-window trend"
+    )
 
     if len(clean) < min_points:
-        return {"direction": "insufficient data", "window_label": window_label,
-                "slope": None, "p_value": None, "r_squared": None}
+        return {
+            "direction": "insufficient data",
+            "window_label": window_label,
+            "slope": None,
+            "p_value": None,
+            "r_squared": None,
+        }
 
     # Convert index to numeric (days from start)
     x = np.array([(d - clean.index[0]).days for d in clean.index], dtype=float)
     y = clean.values.astype(float)
 
     slope, intercept, r_value, p_value, std_err = scipy_stats.linregress(x, y)
-    r_squared = r_value ** 2
+    r_squared = r_value**2
 
     if p_value > 0.05:
         direction = "stable"
     elif slope > 0:
-        direction = "worsening" if series.name in ["adsi", "gvhd_score", "cv_risk", "allostatic_load", "pharma_response"] else "improving"
+        direction = (
+            "worsening"
+            if series.name
+            in ["adsi", "gvhd_score", "cv_risk", "allostatic_load", "pharma_response"]
+            else "improving"
+        )
     else:
-        direction = "improving" if series.name in ["adsi", "gvhd_score", "cv_risk", "allostatic_load", "pharma_response"] else "worsening"
+        direction = (
+            "improving"
+            if series.name
+            in ["adsi", "gvhd_score", "cv_risk", "allostatic_load", "pharma_response"]
+            else "worsening"
+        )
 
     return {
         "direction": direction,
@@ -720,6 +787,7 @@ def compute_trend(series: pd.Series, min_points: int = 10,
 # ---------------------------------------------------------------------------
 # Clinical interpretation
 # ---------------------------------------------------------------------------
+
 
 def interpret_adsi(value: float) -> str:
     """Clinical interpretation for ADSI."""
@@ -740,7 +808,9 @@ def interpret_gvhd(value: float) -> str:
     if value >= 60:
         return "High GVHD activity indicator. Consider clinical evaluation for possible flare (temperature, SpO2, HRV deterioration)."
     elif value >= 40:
-        return "Moderate GVHD activity. Monitor trends over the next days for escalation."
+        return (
+            "Moderate GVHD activity. Monitor trends over the next days for escalation."
+        )
     elif value >= 20:
         return "Low GVHD activity. Stable biometric trends."
     else:
@@ -752,7 +822,9 @@ def interpret_recovery(value: float) -> str:
     if value >= 80:
         return "Good recovery. Near expected level for time since transplant."
     elif value >= 60:
-        return "Moderate recovery. Behind expected timeline, but positive trend possible."
+        return (
+            "Moderate recovery. Behind expected timeline, but positive trend possible."
+        )
     elif value >= 40:
         months_post = (date.today() - TRANSPLANT_DATE).days // 30
         return f"Delayed recovery. Substantially below expected recovery level at {months_post} months post-HSCT."
@@ -788,12 +860,18 @@ def interpret_allostatic(value: float) -> str:
 # Plotly dashboard
 # ---------------------------------------------------------------------------
 
-def build_dashboard(df: pd.DataFrame, biomarkers: dict[str, pd.Series],
-                    trends: dict[str, dict], summary: dict) -> go.Figure:
+
+def build_dashboard(
+    df: pd.DataFrame,
+    biomarkers: dict[str, pd.Series],
+    trends: dict[str, dict],
+    summary: dict,
+) -> go.Figure:
     """Build interactive Plotly HTML dashboard with one subplot per biomarker."""
 
     fig = make_subplots(
-        rows=4, cols=2,
+        rows=4,
+        cols=2,
         subplot_titles=[
             "1. Autonomic Dysfunction Severity Index (ADSI)",
             "2. GVHD Activity Score (Wearable)",
@@ -826,12 +904,14 @@ def build_dashboard(df: pd.DataFrame, biomarkers: dict[str, pd.Series],
         "cv_risk": ACCENT_BLUE,
         "allostatic_load": ACCENT_CYAN,
     }
+
     # Convert hex colors to rgba with 0.08 opacity for subtle fills
     def _hex_to_rgba_fill(hex_color: str, alpha: float = 0.08) -> str:
         """Convert #RRGGBB to rgba(r,g,b,alpha)."""
         h = hex_color.lstrip("#")
         r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
         return f"rgba({r},{g},{b},{alpha})"
+
     fill_colors = {k: _hex_to_rgba_fill(c) for k, c in colors.items()}
 
     biomarker_configs = [
@@ -859,12 +939,15 @@ def build_dashboard(df: pd.DataFrame, biomarkers: dict[str, pd.Series],
                 showlegend=False,
                 hovertemplate=f"<b>%{{x|%b %d}}</b><br>{label}: %{{y:.1f}}<extra></extra>",
             ),
-            row=row, col=col,
+            row=row,
+            col=col,
         )
 
         # 7-day rolling average (prominent trend line with subtle fill)
         rolling = series.rolling(7, min_periods=3).mean().dropna()
-        rolling_dates = [datetime.combine(d, datetime.min.time()) for d in rolling.index]
+        rolling_dates = [
+            datetime.combine(d, datetime.min.time()) for d in rolling.index
+        ]
 
         # Fill under rolling average
         fig.add_trace(
@@ -877,7 +960,8 @@ def build_dashboard(df: pd.DataFrame, biomarkers: dict[str, pd.Series],
                 showlegend=False,
                 hoverinfo="skip",
             ),
-            row=row, col=col,
+            row=row,
+            col=col,
         )
 
         fig.add_trace(
@@ -890,24 +974,31 @@ def build_dashboard(df: pd.DataFrame, biomarkers: dict[str, pd.Series],
                 showlegend=True,
                 hovertemplate=f"<b>%{{x|%b %d}}</b><br>{label} 7d avg: %{{y:.1f}}<extra></extra>",
             ),
-            row=row, col=col,
+            row=row,
+            col=col,
         )
 
         # Ruxolitinib start line - consistent, prominent
         axis_idx = (row - 1) * 2 + col
         yref_str = f"y{'%d' % axis_idx if axis_idx > 1 else ''} domain"
         fig.add_shape(
-            type="line", x0=rux_line_date, x1=rux_line_date,
-            y0=0, y1=1, yref=yref_str,
+            type="line",
+            x0=rux_line_date,
+            x1=rux_line_date,
+            y0=0,
+            y1=1,
+            yref=yref_str,
             line=dict(color=ACCENT_BLUE, width=2, dash="dash"),
-            row=row, col=col,
+            row=row,
+            col=col,
         )
         # Ruxolitinib label on first panel only
         if row == 1 and col == 1:
             fig.add_annotation(
-                x=rux_line_date, y=0.98,
-                xref=f"x domain",
-                yref=f"y domain",
+                x=rux_line_date,
+                y=0.98,
+                xref="x domain",
+                yref="y domain",
                 text="Rux start",
                 showarrow=False,
                 font=dict(size=9, color=ACCENT_BLUE),
@@ -922,7 +1013,8 @@ def build_dashboard(df: pd.DataFrame, biomarkers: dict[str, pd.Series],
             trend_text += f" (p={trend['p_value']:.3f})"
 
         fig.add_annotation(
-            x=0.02, y=0.95,
+            x=0.02,
+            y=0.95,
             xref=f"x{axis_idx} domain" if axis_idx > 1 else "x domain",
             yref=f"y{axis_idx} domain" if axis_idx > 1 else "y domain",
             text=f"Trend: {trend_text}",
@@ -933,7 +1025,10 @@ def build_dashboard(df: pd.DataFrame, biomarkers: dict[str, pd.Series],
         )
 
     # -- Row 4, Col 1: Raw RMSSD + Sleep HR --
-    rmssd_dates = [datetime.combine(d, datetime.min.time()) for d in df.index[df["rmssd_mean"].notna()]]
+    rmssd_dates = [
+        datetime.combine(d, datetime.min.time())
+        for d in df.index[df["rmssd_mean"].notna()]
+    ]
     rmssd_vals = df.loc[df["rmssd_mean"].notna(), "rmssd_mean"]
     # RMSSD fill
     fig.add_trace(
@@ -946,7 +1041,8 @@ def build_dashboard(df: pd.DataFrame, biomarkers: dict[str, pd.Series],
             showlegend=False,
             hoverinfo="skip",
         ),
-        row=4, col=1,
+        row=4,
+        col=1,
     )
     fig.add_trace(
         go.Scatter(
@@ -959,7 +1055,8 @@ def build_dashboard(df: pd.DataFrame, biomarkers: dict[str, pd.Series],
             yaxis="y7",
             hovertemplate="<b>%{x|%b %d}</b><br>RMSSD: %{y:.1f} ms<extra></extra>",
         ),
-        row=4, col=1,
+        row=4,
+        col=1,
     )
 
     sleep_hr_valid = df["sleep_hr_mean"].dropna()
@@ -975,27 +1072,42 @@ def build_dashboard(df: pd.DataFrame, biomarkers: dict[str, pd.Series],
             yaxis="y7",
             hovertemplate="<b>%{x|%b %d}</b><br>Sleep HR: %{y:.0f} bpm<extra></extra>",
         ),
-        row=4, col=1,
+        row=4,
+        col=1,
     )
 
     # Reference lines for RMSSD
     fig.add_shape(
-        type="line", x0=dates[0], x1=dates[-1],
-        y0=NORM_RMSSD_MEAN, y1=NORM_RMSSD_MEAN,
+        type="line",
+        x0=dates[0],
+        x1=dates[-1],
+        y0=NORM_RMSSD_MEAN,
+        y1=NORM_RMSSD_MEAN,
         line=dict(color=C_HRV, width=1, dash="dot"),
-        row=4, col=1,
+        row=4,
+        col=1,
     )
     fig.add_annotation(
-        x=dates[-1], y=NORM_RMSSD_MEAN,
+        x=dates[-1],
+        y=NORM_RMSSD_MEAN,
         text=f"Age norm ({NORM_RMSSD_MEAN:.0f} ms)",
-        showarrow=False, xanchor="right", yanchor="bottom",
+        showarrow=False,
+        xanchor="right",
+        yanchor="bottom",
         font=dict(size=9, color=C_HRV),
-        row=4, col=1,
+        row=4,
+        col=1,
     )
 
     # -- Row 4, Col 2: Component breakdown radar (latest day with full data) --
     # Find the most recent day with all key metrics
-    latest = df.dropna(subset=["rmssd_mean", "sleep_hr_mean", "spo2"], how="any").iloc[-1] if not df.dropna(subset=["rmssd_mean", "sleep_hr_mean", "spo2"], how="any").empty else None
+    latest = (
+        df.dropna(subset=["rmssd_mean", "sleep_hr_mean", "spo2"], how="any").iloc[-1]
+        if not df.dropna(
+            subset=["rmssd_mean", "sleep_hr_mean", "spo2"], how="any"
+        ).empty
+        else None
+    )
 
     if latest is not None:
         categories = [
@@ -1010,9 +1122,13 @@ def build_dashboard(df: pd.DataFrame, biomarkers: dict[str, pd.Series],
         # Normalize each to 0-100 where 100 = healthy
         vals = [
             min(100, latest.get("rmssd_mean", 0) / NORM_RMSSD_MEAN * 100),
-            min(100, max(0, (100 - latest.get("sleep_hr_mean", 100)) / (100 - 60) * 100)),
+            min(
+                100, max(0, (100 - latest.get("sleep_hr_mean", 100)) / (100 - 60) * 100)
+            ),
             min(100, max(0, latest.get("hr_dip_pct", 0) / 15 * 100)),
-            min(100, max(0, (latest.get("spo2", 90) - 90) / (NORM_SPO2_MEAN - 90) * 100)),
+            min(
+                100, max(0, (latest.get("spo2", 90) - 90) / (NORM_SPO2_MEAN - 90) * 100)
+            ),
             min(100, max(0, 100 - latest.get("cv_age_delta", 0) / 15 * 100)),
             min(100, max(0, latest.get("sleep_efficiency", 0))),
             min(100, max(0, 100 - abs(latest.get("temp_deviation", 0)) / 1.0 * 100)),
@@ -1032,7 +1148,8 @@ def build_dashboard(df: pd.DataFrame, biomarkers: dict[str, pd.Series],
                 name="Health Profile (latest day)",
                 hovertemplate="<b>%{theta}</b><br>Score: %{r:.0f}/100<extra></extra>",
             ),
-            row=4, col=2,
+            row=4,
+            col=2,
         )
         # Update polar layout for dark theme
         fig.update_layout(
@@ -1079,30 +1196,43 @@ def build_dashboard(df: pd.DataFrame, biomarkers: dict[str, pd.Series],
         # Crosshair spikes and subtle gridlines on all subplot axes
         fig.update_xaxes(
             gridcolor="rgba(255,255,255,0.05)",
-            showspikes=True, spikemode="across", spikethickness=1,
-            spikecolor="rgba(255,255,255,0.15)", spikedash="dot",
-            row=row, col=col,
+            showspikes=True,
+            spikemode="across",
+            spikethickness=1,
+            spikecolor="rgba(255,255,255,0.15)",
+            spikedash="dot",
+            row=row,
+            col=col,
         )
         fig.update_yaxes(
             zeroline=False,
             gridcolor="rgba(255,255,255,0.05)",
-            showspikes=True, spikemode="across", spikethickness=1,
-            spikecolor="rgba(255,255,255,0.15)", spikedash="dot",
-            row=row, col=col,
+            showspikes=True,
+            spikemode="across",
+            spikethickness=1,
+            spikecolor="rgba(255,255,255,0.15)",
+            spikedash="dot",
+            row=row,
+            col=col,
         )
 
     # Also update row 4 col 1 (RMSSD/HR panel)
     fig.update_xaxes(
         tickformat="%d %b",
         gridcolor="rgba(255,255,255,0.05)",
-        showspikes=True, spikemode="across", spikethickness=1,
-        spikecolor="rgba(255,255,255,0.15)", spikedash="dot",
-        row=4, col=1,
+        showspikes=True,
+        spikemode="across",
+        spikethickness=1,
+        spikecolor="rgba(255,255,255,0.15)",
+        spikedash="dot",
+        row=4,
+        col=1,
     )
     fig.update_yaxes(
         zeroline=False,
         gridcolor="rgba(255,255,255,0.05)",
-        row=4, col=1,
+        row=4,
+        col=1,
     )
 
     return fig
@@ -1112,8 +1242,10 @@ def build_dashboard(df: pd.DataFrame, biomarkers: dict[str, pd.Series],
 # Build summary JSON
 # ---------------------------------------------------------------------------
 
-def build_summary(df: pd.DataFrame, biomarkers: dict[str, pd.Series],
-                  trends: dict[str, dict]) -> dict[str, Any]:
+
+def build_summary(
+    df: pd.DataFrame, biomarkers: dict[str, pd.Series], trends: dict[str, dict]
+) -> dict[str, Any]:
     """Build JSON-serializable summary of all biomarkers."""
     generated_at = datetime.now(timezone.utc).isoformat()
     summary: dict[str, Any] = {
@@ -1150,7 +1282,9 @@ def build_summary(df: pd.DataFrame, biomarkers: dict[str, pd.Series],
 
         entry: dict[str, Any] = {
             "latest_value": round(latest_val, 2) if latest_val is not None else None,
-            "latest_7d_avg": round(latest_rolling, 2) if latest_rolling is not None else None,
+            "latest_7d_avg": round(latest_rolling, 2)
+            if latest_rolling is not None
+            else None,
             "mean": round(float(clean.mean()), 2),
             "median": round(float(clean.median()), 2),
             "std": round(float(clean.std()), 2),
@@ -1191,6 +1325,7 @@ def build_summary(df: pd.DataFrame, biomarkers: dict[str, pd.Series],
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main() -> int:
     """Main entry point: load data, compute biomarkers, generate outputs."""
@@ -1239,7 +1374,9 @@ def main() -> int:
     if len(post_rux) > 0:
         print(f"     Post-rux days: {len(post_rux)}, Mean Z: {post_rux.mean():.2f}")
     else:
-        print(f"     Baseline established ({len(pharma_valid)} days), awaiting post-rux data")
+        print(
+            f"     Baseline established ({len(pharma_valid)} days), awaiting post-rux data"
+        )
 
     print("  -> Cardiovascular Risk Composite...")
     biomarkers["cv_risk"] = compute_cv_risk(df)
@@ -1259,7 +1396,11 @@ def main() -> int:
     for name, series in biomarkers.items():
         trends[name] = compute_trend(series, window_days=30)
         t = trends[name]
-        slope_info = f" (slope={t['slope']}/day, p={t['p_value']})" if t['slope'] is not None else ''
+        slope_info = (
+            f" (slope={t['slope']}/day, p={t['p_value']})"
+            if t["slope"] is not None
+            else ""
+        )
         print(f"  -> {name}: {t['direction']}{slope_info}")
 
     # 4. Build summary
@@ -1307,15 +1448,17 @@ def main() -> int:
             status = "info"
             slabel = ""
 
-        kpi_cards.append(make_kpi_card(
-            label=label,
-            value=bval,
-            unit=unit,
-            status=status,
-            detail=f"{detail_text} | {btrend} ({window_lbl})",
-            explainer=METRIC_DESCRIPTIONS.get(bname.upper(), ""),
-            status_label=slabel,
-        ))
+        kpi_cards.append(
+            make_kpi_card(
+                label=label,
+                value=bval,
+                unit=unit,
+                status=status,
+                detail=f"{detail_text} | {btrend} ({window_lbl})",
+                explainer=METRIC_DESCRIPTIONS.get(bname.upper(), ""),
+                status_label=slabel,
+            )
+        )
 
     body = make_kpi_row(*kpi_cards)
 
@@ -1337,10 +1480,10 @@ def main() -> int:
         )
     exec_table = "\n".join(exec_rows)
     summary_html = (
-        f'<p><b>{PATIENT_LABEL}</b> | {months_post} months post-HSCT '
-        f'| Ruxolitinib from {TREATMENT_START_STR}</p>'
-        f'<table><tr><th>Biomarker</th><th>Value</th><th>Trend</th></tr>'
-        f'{exec_table}</table>'
+        f"<p><b>{PATIENT_LABEL}</b> | {months_post} months post-HSCT "
+        f"| Ruxolitinib from {TREATMENT_START_STR}</p>"
+        f"<table><tr><th>Biomarker</th><th>Value</th><th>Trend</th></tr>"
+        f"{exec_table}</table>"
     )
     body += make_section("Summary", summary_html)
 
@@ -1394,10 +1537,16 @@ def main() -> int:
     pharma = biomarkers["pharma_response"]
     post_rux_ph = pharma[[d >= TREATMENT_START for d in pharma.index]].dropna()
     if len(post_rux_ph) > 0:
-        print(f"\n  PHARMA_RESPONSE: {post_rux_ph.mean():.2f} Z-score (mean over {len(post_rux_ph)} days)")
-        print(f"    Higher Z-score indicates stronger pharmacodynamic response to ruxolitinib.")
+        print(
+            f"\n  PHARMA_RESPONSE: {post_rux_ph.mean():.2f} Z-score (mean over {len(post_rux_ph)} days)"
+        )
+        print(
+            "    Higher Z-score indicates stronger pharmacodynamic response to ruxolitinib."
+        )
     else:
-        print(f"\n  PHARMA_RESPONSE: Baseline established. Awaiting more post-ruxolitinib data.")
+        print(
+            "\n  PHARMA_RESPONSE: Baseline established. Awaiting more post-ruxolitinib data."
+        )
 
     print()
     return 0
