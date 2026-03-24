@@ -1294,7 +1294,7 @@ def analyze_sensor_fusion(
             n_avail = int((~np.isnan(np.array(obs_masked[:, j]))).sum())
         availability[col] = {
             "n_available": n_avail,
-            "fraction": round(n_avail / n_days, 3),
+            "fraction": round(n_avail / n_days, 3) if n_days > 0 else 0.0,
         }
 
     # --- Sensor information content (via R^-1 and H) ---
