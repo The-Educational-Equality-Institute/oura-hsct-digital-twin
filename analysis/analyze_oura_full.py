@@ -1619,8 +1619,7 @@ def clinical_narrative(stats: dict) -> str:
         <summary>References (7)</summary>
         <div class="cs-refs-inner">
           <ol>
-            <li>Kleiger RE et al. Decreased heart rate variability and its association with increased mortality after acute myocardial infarction. Am J Cardiol 1987;59:256-62</li>
-            <li>Bigger JT et al. Frequency domain measures of heart period variability and mortality after myocardial infarction. Circulation 1992;85:164-71</li>
+            <li>Task Force of ESC/NASPE. Heart rate variability: standards of measurement, physiological interpretation and clinical use. Circulation 1996;93:1043-65</li>
             <li>Shaffer F, Ginsberg JP. An Overview of HRV Metrics and Norms. Front Public Health 2017;5:258</li>
             <li>Nunan D et al. Normal values for short-term HRV. Pacing Clin Electrophysiol 2010;33:1407-17</li>
             <li>Chamorro-Vina C et al. Cardiorespiratory fitness in HSCT survivors. Med Sci Sports Exerc 2012</li>
