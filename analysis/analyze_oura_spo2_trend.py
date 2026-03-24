@@ -318,9 +318,13 @@ def analyze_desaturation_events(spo2: pd.DataFrame) -> dict[str, Any]:
         "baseline_sd": round(baseline_sd, 3),
         "relative_threshold": round(relative_threshold, 3),
         "absolute_desaturation_count": abs_desat_count,
-        "absolute_desaturation_pct": round(safe_divide(100 * abs_desat_count, len(vals)), 1),
+        "absolute_desaturation_pct": round(
+            safe_divide(100 * abs_desat_count, len(vals)), 1
+        ),
         "relative_desaturation_count": rel_desat_count,
-        "relative_desaturation_pct": round(safe_divide(100 * rel_desat_count, len(vals)), 1),
+        "relative_desaturation_pct": round(
+            safe_divide(100 * rel_desat_count, len(vals)), 1
+        ),
         "first_half_desat_rate": round(first_half_rate, 3),
         "second_half_desat_rate": round(second_half_rate, 3),
         "frequency_increasing": second_half_rate > first_half_rate * 1.5,

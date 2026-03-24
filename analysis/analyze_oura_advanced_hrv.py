@@ -290,11 +290,15 @@ def compute_frequency_domain(timestamps: list[datetime], rmssd: np.ndarray) -> d
         float(_integrate(pgram[mid_mask], freqs_hz[mid_mask])) if mid_mask.any() else 0
     )
     proxy_band_high = (
-        float(_integrate(pgram[high_mask], freqs_hz[high_mask])) if high_mask.any() else 0
+        float(_integrate(pgram[high_mask], freqs_hz[high_mask]))
+        if high_mask.any()
+        else 0
     )
 
     total = proxy_band_low + proxy_band_mid + proxy_band_high
-    proxy_ratio = proxy_band_mid / proxy_band_high if proxy_band_high > 0 else float("inf")
+    proxy_ratio = (
+        proxy_band_mid / proxy_band_high if proxy_band_high > 0 else float("inf")
+    )
 
     # Also compute full power spectral density for plotting
     freqs_full = np.linspace(0.0005, 0.006, 1000)
