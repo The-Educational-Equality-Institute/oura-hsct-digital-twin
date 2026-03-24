@@ -1,0 +1,14 @@
+__pycache__/
+.mypy_cache/
+.ruff_cache/
+*.pyc
+data/*.db
+data/*.sqlite
+reports/*.html
+reports/*.json
+.git/
+node_modules/
+.venv/
+*.pkl
+*.h5
+logs/
