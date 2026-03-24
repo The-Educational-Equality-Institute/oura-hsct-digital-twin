@@ -72,8 +72,8 @@ HTML_OUTPUT = REPORTS_DIR / "composite_biomarkers.html"
 JSON_OUTPUT = REPORTS_DIR / "composite_biomarkers.json"
 
 # Population norms for 36yo male (Nunan 2010, Shaffer & Ginsberg 2017)
-NORM_RMSSD_MEAN = 42.0  # ms
-NORM_RMSSD_SD = 15.0
+NORM_RMSSD_MEAN = POPULATION_RMSSD_MEAN  # ms — from config
+NORM_RMSSD_SD = POPULATION_RMSSD_SD
 NORM_SLEEP_HR_MEAN = 65.0  # bpm
 NORM_SLEEP_HR_SD = 10.0
 NORM_SPO2_MEAN = 97.5
