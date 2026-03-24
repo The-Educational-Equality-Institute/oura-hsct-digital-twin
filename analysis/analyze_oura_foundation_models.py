@@ -2115,11 +2115,11 @@ def generate_simple_html_report(
             decimals=0,
         ),
         make_kpi_card(
-            "March Ensemble",
+            f"{metrics.get('data_month', 'Recent')} Ensemble",
             "Chronos + ARIMA" if chronos_available else "ARIMA only",
             status="neutral",
             decimals=0,
-            detail=f"{len(high_dates)} HIGH confidence anomalies in March window",
+            detail=f"{len(high_dates)} HIGH confidence anomalies in {metrics.get('data_month', 'recent')} window",
         ),
     ]
     body = make_kpi_row(*kpi_cards)
