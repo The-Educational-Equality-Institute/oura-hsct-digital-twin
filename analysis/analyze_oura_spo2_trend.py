@@ -1977,7 +1977,7 @@ def main() -> int:
             },
             "temp_coupling": {
                 "pearson_r": temp_coupling.get("pearson_r"),
-                "pearson_p": temp_coupling.get("pearson_p"),
+                "pearson_p_value": temp_coupling.get("pearson_p"),
                 "interpretation": temp_coupling.get("interpretation"),
             },
             "bos_risk": {
