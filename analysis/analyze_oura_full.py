@@ -1176,7 +1176,7 @@ def fig_spo2_stress(data: dict) -> go.Figure:
             hovertemplate="<b>%{x|%b %d}</b><br>Recovery: %{y:.0f} min<extra></extra>",
         ), row=1, col=2)
 
-    fig.update_yaxes(title_text="SpO2 %", range=[93, 98], zeroline=False, row=1, col=1,
+    fig.update_yaxes(title_text="SpO2 (%)", range=[93, 98], zeroline=False, row=1, col=1,
                      gridcolor="rgba(255,255,255,0.05)")
     fig.update_yaxes(title_text="Minutes", zeroline=False, row=1, col=2,
                      gridcolor="rgba(255,255,255,0.05)")
