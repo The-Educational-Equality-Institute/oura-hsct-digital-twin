@@ -2867,7 +2867,7 @@ def _run_analysis(conn: sqlite3.Connection) -> None:
     }
     figures["frequency_domain"] = create_frequency_domain_fig(freq_data)
     print(
-        f"  -> VLF={freq_data['vlf_pct']}%, LF={freq_data['lf_pct']}%, HF={freq_data['hf_pct']}%, LF/HF={freq_data['lf_hf_ratio']}"
+        f"  -> Low={freq_data['proxy_low_pct']}%, Mid={freq_data['proxy_mid_pct']}%, High={freq_data['proxy_high_pct']}%, Mid/High={freq_data['proxy_ratio']}"
     )
 
     print("\n[5/12] Multiscale entropy (MSE)...")
