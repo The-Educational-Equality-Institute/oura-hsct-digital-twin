@@ -62,9 +62,11 @@ pio.templates.default = "clinical_dark"
 OUTPUT_FILE = REPORTS_DIR / "oura_3d_dashboard.html"
 
 # ---------------------------------------------------------------------------
-# Clinical events
+# Clinical events (string format for Plotly x-axis and dict key comparisons)
 # ---------------------------------------------------------------------------
 RUXOLITINIB_START = TREATMENT_START_STR
+KNOWN_EVENT_DATE = str(KNOWN_EVENT_DATE)
+HEV_DIAGNOSIS_DATE = str(HEV_DIAGNOSIS_DATE)
 ACUTE_EVENT = KNOWN_EVENT_DATE
 
 # ---------------------------------------------------------------------------
