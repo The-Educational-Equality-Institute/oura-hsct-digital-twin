@@ -82,7 +82,9 @@ class OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
                 b"</body></html>"
             )
         elif "error" in params:
-            OAuthCallbackHandler.error = params.get("error_description", params["error"])[0]
+            OAuthCallbackHandler.error = params.get(
+                "error_description", params["error"]
+            )[0]
             self.send_response(400)
             self.send_header("Content-Type", "text/html")
             self.end_headers()
@@ -149,7 +151,14 @@ def authorize() -> None:
     auth_url = f"{AUTH_URL}?{urllib.parse.urlencode(params)}"
 
     # Start local server to receive callback
-    server = http.server.HTTPServer((REDIRECT_HOST, REDIRECT_PORT), OAuthCallbackHandler)
+    try:
+        server = http.server.HTTPServer(
+            (REDIRECT_HOST, REDIRECT_PORT), OAuthCallbackHandler
+        )
+    except OSError as e:
+        print(f"ERROR: Could not start auth server on port {REDIRECT_PORT}: {e}")
+        print(f"  Another process may be using this port. Try: lsof -i :{REDIRECT_PORT}")
+        sys.exit(1)
     server_thread = threading.Thread(target=server.handle_request, daemon=True)
     server_thread.start()
 
@@ -179,13 +188,17 @@ def authorize() -> None:
     print("Received authorization code, exchanging for tokens...")
 
     # Exchange code for tokens
-    resp = requests.post(TOKEN_URL, data={
-        "grant_type": "authorization_code",
-        "code": OAuthCallbackHandler.auth_code,
-        "redirect_uri": REDIRECT_URI,
-        "client_id": client_id,
-        "client_secret": client_secret,
-    }, timeout=30)
+    resp = requests.post(
+        TOKEN_URL,
+        data={
+            "grant_type": "authorization_code",
+            "code": OAuthCallbackHandler.auth_code,
+            "redirect_uri": REDIRECT_URI,
+            "client_id": client_id,
+            "client_secret": client_secret,
+        },
+        timeout=30,
+    )
 
     if resp.status_code != 200:
         print(f"Token exchange failed ({resp.status_code}): {resp.text}")
@@ -205,7 +218,9 @@ def authorize() -> None:
     if refresh_token:
         print(f"  Refresh token saved to {ENV_PATH} ({len(refresh_token)} chars)")
     print(f"  Scopes: {SCOPES}")
-    print("\nimport_oura.py will now use OAuth2 automatically (falls back to PAT if needed)")
+    print(
+        "\nimport_oura.py will now use OAuth2 automatically (falls back to PAT if needed)"
+    )
 
 
 def refresh() -> None:
@@ -215,16 +230,22 @@ def refresh() -> None:
     refresh_token = os.getenv("OURA_REFRESH_TOKEN")
 
     if not all([client_id, client_secret, refresh_token]):
-        print("Error: OURA_CLIENT_ID, OURA_CLIENT_SECRET, and OURA_REFRESH_TOKEN required")
+        print(
+            "Error: OURA_CLIENT_ID, OURA_CLIENT_SECRET, and OURA_REFRESH_TOKEN required"
+        )
         print("Run without --refresh first to complete initial setup")
         sys.exit(1)
 
-    resp = requests.post(TOKEN_URL, data={
-        "grant_type": "refresh_token",
-        "refresh_token": refresh_token,
-        "client_id": client_id,
-        "client_secret": client_secret,
-    }, timeout=30)
+    resp = requests.post(
+        TOKEN_URL,
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+            "client_id": client_id,
+            "client_secret": client_secret,
+        },
+        timeout=30,
+    )
 
     if resp.status_code != 200:
         print(f"Token refresh failed ({resp.status_code}): {resp.text}")
@@ -265,9 +286,11 @@ def check_status() -> None:
             timeout=10,
         )
         if resp.status_code == 200:
-            print(f"\n  API access: WORKING (using {'OAuth2' if access_token else 'PAT'})")
+            print(
+                f"\n  API access: WORKING (using {'OAuth2' if access_token else 'PAT'})"
+            )
         elif resp.status_code == 401:
-            print(f"\n  API access: EXPIRED/INVALID (HTTP 401)")
+            print("\n  API access: EXPIRED/INVALID (HTTP 401)")
             if access_token and refresh_token:
                 print("  Try: python api/oura_oauth2_setup.py --refresh")
         else:
@@ -278,7 +301,9 @@ def check_status() -> None:
 
 def main():
     parser = argparse.ArgumentParser(description="Oura Ring OAuth2 Setup")
-    parser.add_argument("--refresh", action="store_true", help="Refresh expired access token")
+    parser.add_argument(
+        "--refresh", action="store_true", help="Refresh expired access token"
+    )
     parser.add_argument("--status", action="store_true", help="Check token status")
     args = parser.parse_args()
 
