@@ -99,7 +99,7 @@ NORMAL_DIP_MAX = 20.0
 # quartiles as in the original McEwen allostatic load methodology.
 ALLOSTATIC_THRESHOLDS = {
     "resting_hr": 80,        # bpm, 90th percentile
-    "rmssd": ESC_RMSSD_DEFICIENCY,  # ms, autonomic deficiency threshold (Kleiger 1987 / Bigger 1992; below = fail)
+    "rmssd": ESC_RMSSD_DEFICIENCY,  # ms, autonomic deficiency threshold (ESC/NASPE Task Force 1996; Shaffer & Ginsberg 2017; below = fail)
     "sleep_efficiency": 85,  # %, below = fail
     "temp_deviation": 0.5,   # °C, above = fail
     "spo2": 95.0,            # %, below = fail
