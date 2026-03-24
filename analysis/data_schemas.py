@@ -10,14 +10,13 @@ Usage:
     df = load_data()
     df = validate_daily_metrics(df)  # raises SchemaError on bad data
 """
+
 import sys
 from pathlib import Path
 
-import pandera as pa
 from pandera import Column, Check, DataFrameSchema
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from config import ESC_RMSSD_DEFICIENCY  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # HRV data (oura_hrv table)
