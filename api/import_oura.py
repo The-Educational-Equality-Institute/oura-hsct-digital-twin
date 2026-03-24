@@ -517,39 +517,42 @@ def import_oura_data(
             sleep_data if isinstance(sleep_data, list) else sleep_data.get("data", [])
         )
         for record in records:
-            cursor.execute(
-                """
-                INSERT OR REPLACE INTO oura_sleep (
-                    date, score, total_sleep_duration, rem_sleep_duration,
-                    deep_sleep_duration, light_sleep_duration, awake_time,
-                    efficiency, latency, restless_periods, bedtime_start,
-                    bedtime_end, hr_lowest, hr_average, hrv_average,
-                    breath_average, temperature_delta
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-                (
-                    record.get("day"),
-                    record.get("score"),
-                    record.get("total_sleep_duration"),
-                    record.get("rem_sleep_duration"),
-                    record.get("deep_sleep_duration"),
-                    record.get("light_sleep_duration"),
-                    record.get("awake_time"),
-                    record.get("efficiency"),
-                    record.get("latency"),
-                    record.get("restless_periods"),
-                    record.get("bedtime_start"),
-                    record.get("bedtime_end"),
-                    record.get("lowest_heart_rate"),
-                    record.get("average_heart_rate"),
-                    record.get("average_hrv"),
-                    record.get("average_breath"),
-                    record.get("readiness", {}).get("temperature_deviation"),
-                ),
-            )
-            stats["sleep"] += 1
+            try:
+                cursor.execute(
+                    """
+                    INSERT OR REPLACE INTO oura_sleep (
+                        date, score, total_sleep_duration, rem_sleep_duration,
+                        deep_sleep_duration, light_sleep_duration, awake_time,
+                        efficiency, latency, restless_periods, bedtime_start,
+                        bedtime_end, hr_lowest, hr_average, hrv_average,
+                        breath_average, temperature_delta
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                    (
+                        record.get("day"),
+                        record.get("score"),
+                        record.get("total_sleep_duration"),
+                        record.get("rem_sleep_duration"),
+                        record.get("deep_sleep_duration"),
+                        record.get("light_sleep_duration"),
+                        record.get("awake_time"),
+                        record.get("efficiency"),
+                        record.get("latency"),
+                        record.get("restless_periods"),
+                        record.get("bedtime_start"),
+                        record.get("bedtime_end"),
+                        record.get("lowest_heart_rate"),
+                        record.get("average_heart_rate"),
+                        record.get("average_hrv"),
+                        record.get("average_breath"),
+                        record.get("readiness", {}).get("temperature_deviation"),
+                    ),
+                )
+                stats["sleep"] += 1
+            except Exception as e:
+                logging.warning("Skipped bad sleep record %s: %s", record.get("day", "?"), e)
     except Exception as e:
-        logging.warning("Could not import sleep data: %s", e)
+        logging.warning("Could not fetch sleep data: %s", e)
 
     # ---- 2. Readiness (existing) ----
     try:
