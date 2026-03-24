@@ -450,7 +450,7 @@ def build_kpi_cards(outputs: dict, summary: dict) -> str:
         hrv_mean = _as_float(summary.get("mean_hrv"))
     hrv_str = f"{hrv_mean:.1f}" if hrv_mean else "N/A"
     cards.append(_card("HRV (RMSSD)", hrv_str, "ms",
-                       f"vs healthy 42-49 ms | Kleiger 1987 / Bigger 1992",
+                       f"vs healthy 42-49 ms | ESC/NASPE 1996; Shaffer & Ginsberg 2017",
                        "critical",
                        _svg_sparkline([], color=ACCENT_PURPLE)))
 
