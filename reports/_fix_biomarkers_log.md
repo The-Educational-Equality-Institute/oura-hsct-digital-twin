@@ -14,6 +14,6 @@
 
 ## Changes Made
 
-- [ ] Add POPULATION_RMSSD_MEAN, POPULATION_RMSSD_SD to config import
-- [ ] Replace local hardcoded NORM_RMSSD_MEAN/SD with aliases from config
-- [ ] Update Kleiger/Bigger citation to ESC/NASPE + Shaffer & Ginsberg
+- [x] Add POPULATION_RMSSD_MEAN, POPULATION_RMSSD_SD to config import (line 58)
+- [x] Replace local hardcoded NORM_RMSSD_MEAN/SD with aliases from config (lines 75-76)
+- [x] Update Kleiger/Bigger citation to ESC/NASPE + Shaffer & Ginsberg (line 102)
