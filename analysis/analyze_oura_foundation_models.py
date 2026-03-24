@@ -1269,9 +1269,11 @@ def run_ruxolitinib_analysis(
 
         # Forecast into post-period (or up to 14 days if post data is limited)
         n_post = len(post_data)
+        MAX_FORECAST_HORIZON = 64  # Chronos model maximum prediction horizon
         forecast_len = max(
             n_post, 7
         )  # At least 7 days forecast even if no post data yet
+        forecast_len = min(forecast_len, MAX_FORECAST_HORIZON)
 
         print(f"  Pre-period: {len(pre_data)} nights (context: {len(context)})")
         print(f"  Post-period actual: {n_post} nights")
