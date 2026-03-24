@@ -2586,7 +2586,7 @@ def plot_mediation(mediation_results: dict[str, Any]) -> list[go.Figure]:
         ci_lower.append(p["indirect_ci_lower"])
         ci_upper.append(p["indirect_ci_upper"])
         colors.append(COLOR_EFFECT if p.get("favorable") else ACCENT_RED)
-        sig_markers.append(p.get("p_indirect", 1) < 0.05)
+        sig_markers.append(p.get("significant_fdr", p.get("p_indirect", 1) < 0.05))
 
     fig1 = go.Figure()
 
