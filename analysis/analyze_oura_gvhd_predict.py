@@ -83,9 +83,6 @@ from config import (
     KNOWN_EVENT_DATE, HEV_DIAGNOSIS_DATE, PATIENT_LABEL,
     DATA_START as _DATA_START_DATE,
 )
-# Config dates are datetime.date objects; convert for string comparisons
-KNOWN_EVENT_DATE = str(KNOWN_EVENT_DATE)
-HEV_DIAGNOSIS_DATE = str(HEV_DIAGNOSIS_DATE)
 from _theme import (
     wrap_html, make_kpi_card, make_kpi_row, make_section,
     BG_PRIMARY, BG_ELEVATED,
