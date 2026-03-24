@@ -996,13 +996,14 @@ def compute_cosinor(hr_timestamps: list[datetime], hr_bpm: np.ndarray) -> dict:
         ss_res = np.sum((hr_bpm - y_pred) ** 2)
         ss_tot = np.sum((hr_bpm - np.mean(hr_bpm)) ** 2)
         r_squared = 1 - ss_res / ss_tot if ss_tot > 0 else 0
-    except Exception:
+    except (ValueError, np.linalg.LinAlgError) as e:
+        logging.warning(f"Cosinor fitting failed: {e}")
         return {
             "mesor": float(np.mean(hr_bpm)),
             "amplitude": 0,
             "acrophase_hours": 0,
             "r_squared": 0,
-            "note": "Cosinor fitting failed",
+            "note": f"Cosinor fitting failed: {e}",
         }
 
     # Generate fitted curve for plotting (one full 24h cycle)
