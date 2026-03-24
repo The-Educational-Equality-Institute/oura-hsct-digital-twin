@@ -1878,7 +1878,9 @@ def _discretize(series: np.ndarray, n_bins: int = TE_N_BINS) -> np.ndarray:
             return np.zeros(len(series), dtype=int)
         digitized = np.digitize(series, bins[1:-1])
         return digitized
-    except Exception:
+    except (ValueError, IndexError) as e:
+        import warnings
+        warnings.warn(f"Discretization failed, returning zeros: {e}")
         return np.zeros(len(series), dtype=int)
 
 
