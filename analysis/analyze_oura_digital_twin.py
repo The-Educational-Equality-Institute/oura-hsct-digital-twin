@@ -1257,12 +1257,18 @@ def analyze_sensor_fusion(
                 "acf_lag1": round(float(acf_vals[0]), 4) if acf_vals else None,
             }
 
+    n_lb_pass = sum(1 for r in residuals.values() if r.get("white_noise"))
+    n_lb_total = len(residuals)
+
     metrics["sensor_fusion"] = {
         "availability": availability,
         "information_content": sensor_info,
         "sensor_weight_pct": sensor_weight,
         "kalman_gain_contribution_pct": gain_contribution,
         "residual_diagnostics": residuals,
+        "significance_threshold_p_value": 0.05,
+        "ljung_box_pass_count": n_lb_pass,
+        "ljung_box_total": n_lb_total,
     }
 
     return {
