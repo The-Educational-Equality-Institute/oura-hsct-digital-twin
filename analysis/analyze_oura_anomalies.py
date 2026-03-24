@@ -2177,8 +2177,18 @@ def generate_html_report(
     fig2.update_yaxes(title_text="RMSSD (ms)", row=1, col=1)
     fig2.update_yaxes(title_text="CUSUM", row=2, col=1)
     fig2.update_yaxes(title_text="EWMA (ms)", row=3, col=1)
+    spc_fdr = spc_result.get("fdr_correction", {})
+    spc_fdr_n = spc_fdr.get("n_tests", 0)
+    spc_fdr_sig = spc_fdr.get("n_rejected_fdr_005", 0)
+    spc_fdr_raw = spc_fdr.get("n_rejected_raw_005", 0)
+    fdr_note = (
+        f" Shewhart p-values BH-corrected across {spc_fdr_n} tests: "
+        f"{spc_fdr_sig} significant (FDR q<0.05), {spc_fdr_raw} raw (p<0.05)."
+        if spc_fdr_n > 0
+        else ""
+    )
     fig2.add_annotation(
-        text="Note: SPC baseline = patient's early January 2026 values, not population reference.",
+        text=f"Note: SPC baseline = patient's early January 2026 values, not population reference.{fdr_note}",
         xref="paper",
         yref="paper",
         x=0,
