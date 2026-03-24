@@ -2909,7 +2909,7 @@ def _build_pcmci_summary(pcmci_results: dict[str, Any]) -> str:
                 f'<td>{link["source"]}</td>'
                 f'<td>{link["target"]}</td>'
                 f'<td>{link["lag"]} days</td>'
-                f'<td>{link["val"]:+.3f}</td>'
+                f'<td>{link["correlation"]:+.3f}</td>'
                 f'<td>{link["p_value"]:.4f}</td>'
                 f'</tr>'
             )
