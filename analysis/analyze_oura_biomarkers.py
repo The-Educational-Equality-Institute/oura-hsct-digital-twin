@@ -55,6 +55,7 @@ from config import (
     DATABASE_PATH, REPORTS_DIR, TRANSPLANT_DATE, TREATMENT_START,
     TREATMENT_START_STR, PATIENT_AGE, PATIENT_LABEL,
     ESC_RMSSD_DEFICIENCY,
+    POPULATION_RMSSD_MEAN, POPULATION_RMSSD_SD,
 )
 from _theme import (
     wrap_html, make_kpi_card, make_kpi_row, make_section,
@@ -100,7 +101,7 @@ ALLOSTATIC_THRESHOLDS = {
     "resting_hr": 80,        # bpm, 90th percentile
     "rmssd": ESC_RMSSD_DEFICIENCY,  # ms, autonomic deficiency threshold (Kleiger 1987 / Bigger 1992; below = fail)
     "sleep_efficiency": 85,  # %, below = fail
-    "temp_deviation": 0.5,   # degC, above = fail
+    "temp_deviation": 0.5,   # °C, above = fail
     "spo2": 95.0,            # %, below = fail
     "deep_pct": 10.0,        # %, below = fail
     "rem_pct": 15.0,         # %, below = fail
@@ -626,7 +627,7 @@ def compute_allostatic_load(df: pd.DataFrame) -> pd.Series:
     [x] Resting HR > 80 bpm
     [x] RMSSD < 15 ms
     [x] Sleep efficiency < 85%
-    [x] Temperature deviation > 0.5 degC
+    [x] Temperature deviation > 0.5 °C
     [x] SpO2 < 95%
     [x] Deep sleep < 10%
     [x] REM sleep < 15%
