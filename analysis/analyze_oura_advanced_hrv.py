@@ -835,7 +835,7 @@ def compute_baevsky_si(rmssd: np.ndarray) -> dict:
 
     mode_idx = np.argmax(hist)
     mo = (edges[mode_idx] + edges[mode_idx + 1]) / 2.0  # Mode value
-    amo = hist[mode_idx] / len(rmssd) * 100  # Mode amplitude (%)
+    amo = safe_divide(hist[mode_idx], len(rmssd)) * 100  # Mode amplitude (%)
     mxdmn = np.max(rmssd) - np.min(rmssd)  # Range
 
     if mo > 0 and mxdmn > 0:
