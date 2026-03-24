@@ -700,7 +700,9 @@ def run_chronos_hourly_hr(
 
     # Use 80% as context, forecast remaining 20%
     context_len = int(n * 0.8)
+    MAX_FORECAST_HORIZON = 64  # Chronos model maximum prediction horizon
     forecast_len = min(48, n - context_len)  # Cap at 48 hours
+    forecast_len = min(forecast_len, MAX_FORECAST_HORIZON)
 
     # Limit context to model's max context window
     max_ctx = pipeline.model_context_length or 512
