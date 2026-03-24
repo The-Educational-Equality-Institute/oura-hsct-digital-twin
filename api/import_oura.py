@@ -21,7 +21,7 @@ import sys
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -71,7 +71,9 @@ def _unpack_time_series(
     except (ValueError, TypeError):
         logging.warning(
             "Unparseable base timestamp '%s' in %s, skipping entire series (%d items)",
-            base_timestamp_str, endpoint, len(items) if items else 0,
+            base_timestamp_str,
+            endpoint,
+            len(items) if items else 0,
         )
         return results
 
@@ -83,7 +85,9 @@ def _unpack_time_series(
         results.append((ts.isoformat(), float(value)))
 
     if skipped:
-        logging.warning("Skipped %d unparseable/null timestamps in %s", skipped, endpoint)
+        logging.warning(
+            "Skipped %d unparseable/null timestamps in %s", skipped, endpoint
+        )
 
     return results
 
@@ -115,13 +119,20 @@ def _fetch_paginated(
             resp = session.get(url, params=params, timeout=60)
             if resp.status_code == 429:
                 retry_after = int(resp.headers.get("Retry-After", 60))
-                logging.warning("Rate limited on %s, waiting %ds (attempt %d/%d)",
-                                endpoint, retry_after, attempt + 1, max_retries)
+                logging.warning(
+                    "Rate limited on %s, waiting %ds (attempt %d/%d)",
+                    endpoint,
+                    retry_after,
+                    attempt + 1,
+                    max_retries,
+                )
                 time.sleep(retry_after)
                 continue
             if resp.status_code == 401:
-                logging.error("Oura API returned 401 Unauthorized. Token may be expired. "
-                              "Run: python api/oura_oauth2_setup.py")
+                logging.error(
+                    "Oura API returned 401 Unauthorized. Token may be expired. "
+                    "Run: python api/oura_oauth2_setup.py"
+                )
                 sys.exit(1)
             break  # Got a non-429, non-401 response
         else:
@@ -340,7 +351,9 @@ def init_database(db_path: str) -> sqlite3.Connection:
     try:
         cursor.execute("SELECT breathing_disturbance_index FROM oura_spo2 LIMIT 1")
     except sqlite3.OperationalError:
-        cursor.execute("ALTER TABLE oura_spo2 ADD COLUMN breathing_disturbance_index REAL")
+        cursor.execute(
+            "ALTER TABLE oura_spo2 ADD COLUMN breathing_disturbance_index REAL"
+        )
 
     # Sleep HR time-series (5-second resolution from sleep periods)
     cursor.execute("""
@@ -462,10 +475,7 @@ def init_database(db_path: str) -> sqlite3.Connection:
 
 
 def import_oura_data(
-    conn: sqlite3.Connection,
-    client: OuraClient,
-    start_date: str,
-    end_date: str
+    conn: sqlite3.Connection, client: OuraClient, start_date: str, end_date: str
 ) -> dict:
     """
     Import Oura data for the specified date range.
@@ -502,9 +512,12 @@ def import_oura_data(
     # ---- 1. Daily sleep (existing) ----
     try:
         sleep_data = client.get_daily_sleep(start_date, end_date)
-        records = sleep_data if isinstance(sleep_data, list) else sleep_data.get("data", [])
+        records = (
+            sleep_data if isinstance(sleep_data, list) else sleep_data.get("data", [])
+        )
         for record in records:
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT OR REPLACE INTO oura_sleep (
                     date, score, total_sleep_duration, rem_sleep_duration,
                     deep_sleep_duration, light_sleep_duration, awake_time,
@@ -512,25 +525,27 @@ def import_oura_data(
                     bedtime_end, hr_lowest, hr_average, hrv_average,
                     breath_average, temperature_delta
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                record.get("day"),
-                record.get("score"),
-                record.get("total_sleep_duration"),
-                record.get("rem_sleep_duration"),
-                record.get("deep_sleep_duration"),
-                record.get("light_sleep_duration"),
-                record.get("awake_time"),
-                record.get("efficiency"),
-                record.get("latency"),
-                record.get("restless_periods"),
-                record.get("bedtime_start"),
-                record.get("bedtime_end"),
-                record.get("lowest_heart_rate"),
-                record.get("average_heart_rate"),
-                record.get("average_hrv"),
-                record.get("average_breath"),
-                record.get("readiness", {}).get("temperature_deviation")
-            ))
+            """,
+                (
+                    record.get("day"),
+                    record.get("score"),
+                    record.get("total_sleep_duration"),
+                    record.get("rem_sleep_duration"),
+                    record.get("deep_sleep_duration"),
+                    record.get("light_sleep_duration"),
+                    record.get("awake_time"),
+                    record.get("efficiency"),
+                    record.get("latency"),
+                    record.get("restless_periods"),
+                    record.get("bedtime_start"),
+                    record.get("bedtime_end"),
+                    record.get("lowest_heart_rate"),
+                    record.get("average_heart_rate"),
+                    record.get("average_hrv"),
+                    record.get("average_breath"),
+                    record.get("readiness", {}).get("temperature_deviation"),
+                ),
+            )
             stats["sleep"] += 1
     except Exception as e:
         logging.warning("Could not import sleep data: %s", e)
@@ -538,29 +553,36 @@ def import_oura_data(
     # ---- 2. Readiness (existing) ----
     try:
         readiness_data = client.get_daily_readiness(start_date, end_date)
-        records = readiness_data if isinstance(readiness_data, list) else readiness_data.get("data", [])
+        records = (
+            readiness_data
+            if isinstance(readiness_data, list)
+            else readiness_data.get("data", [])
+        )
         for record in records:
             contributors = record.get("contributors", {})
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT OR REPLACE INTO oura_readiness (
                     date, score, temperature_deviation, activity_balance,
                     body_temperature, hrv_balance, previous_day_activity,
                     previous_night, recovery_index, resting_heart_rate,
                     sleep_balance
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                record.get("day"),
-                record.get("score"),
-                record.get("temperature_deviation"),
-                contributors.get("activity_balance"),
-                contributors.get("body_temperature"),
-                contributors.get("hrv_balance"),
-                contributors.get("previous_day_activity"),
-                contributors.get("previous_night"),
-                contributors.get("recovery_index"),
-                contributors.get("resting_heart_rate"),
-                contributors.get("sleep_balance")
-            ))
+            """,
+                (
+                    record.get("day"),
+                    record.get("score"),
+                    record.get("temperature_deviation"),
+                    contributors.get("activity_balance"),
+                    contributors.get("body_temperature"),
+                    contributors.get("hrv_balance"),
+                    contributors.get("previous_day_activity"),
+                    contributors.get("previous_night"),
+                    contributors.get("recovery_index"),
+                    contributors.get("resting_heart_rate"),
+                    contributors.get("sleep_balance"),
+                ),
+            )
             stats["readiness"] += 1
     except Exception as e:
         logging.warning("Could not import readiness data: %s", e)
@@ -568,27 +590,34 @@ def import_oura_data(
     # ---- 3. Activity (existing) ----
     try:
         activity_data = client.get_daily_activity(start_date, end_date)
-        records = activity_data if isinstance(activity_data, list) else activity_data.get("data", [])
+        records = (
+            activity_data
+            if isinstance(activity_data, list)
+            else activity_data.get("data", [])
+        )
         for record in records:
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT OR REPLACE INTO oura_activity (
                     date, score, active_calories, total_calories, steps,
                     daily_movement, inactive_time, rest_time,
                     low_activity_time, medium_activity_time, high_activity_time
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                record.get("day"),
-                record.get("score"),
-                record.get("active_calories"),
-                record.get("total_calories"),
-                record.get("steps"),
-                record.get("daily_movement"),
-                record.get("sedentary_time"),
-                record.get("resting_time"),
-                record.get("low_activity_time"),
-                record.get("medium_activity_time"),
-                record.get("high_activity_time")
-            ))
+            """,
+                (
+                    record.get("day"),
+                    record.get("score"),
+                    record.get("active_calories"),
+                    record.get("total_calories"),
+                    record.get("steps"),
+                    record.get("daily_movement"),
+                    record.get("sedentary_time"),
+                    record.get("resting_time"),
+                    record.get("low_activity_time"),
+                    record.get("medium_activity_time"),
+                    record.get("high_activity_time"),
+                ),
+            )
             stats["activity"] += 1
     except Exception as e:
         logging.warning("Could not import activity data: %s", e)
@@ -598,14 +627,13 @@ def import_oura_data(
         hr_data = client.get_heart_rate(start_date, end_date)
         records = hr_data if isinstance(hr_data, list) else hr_data.get("data", [])
         for record in records:
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT OR IGNORE INTO oura_heart_rate (timestamp, bpm, source)
                 VALUES (?, ?, ?)
-            """, (
-                record.get("timestamp"),
-                record.get("bpm"),
-                record.get("source")
-            ))
+            """,
+                (record.get("timestamp"), record.get("bpm"), record.get("source")),
+            )
             stats["heart_rate"] += 1
     except Exception as e:
         logging.warning("Could not import heart rate data: %s", e)
@@ -631,7 +659,8 @@ def import_oura_data(
                 continue
 
             # Insert detailed sleep period record
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT OR REPLACE INTO oura_sleep_periods (
                     period_id, day, type, average_hrv, average_heart_rate,
                     average_breath, total_sleep_duration, rem_sleep_duration,
@@ -639,26 +668,28 @@ def import_oura_data(
                     efficiency, latency, restless_periods, lowest_heart_rate,
                     bedtime_start, bedtime_end, time_in_bed
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                period_id,
-                day,
-                sleep_type,
-                avg_hrv,
-                record.get("average_heart_rate"),
-                record.get("average_breath"),
-                record.get("total_sleep_duration"),
-                record.get("rem_sleep_duration"),
-                record.get("deep_sleep_duration"),
-                record.get("light_sleep_duration"),
-                record.get("awake_time"),
-                record.get("efficiency"),
-                record.get("latency"),
-                record.get("restless_periods"),
-                record.get("lowest_heart_rate"),
-                record.get("bedtime_start"),
-                record.get("bedtime_end"),
-                record.get("time_in_bed"),
-            ))
+            """,
+                (
+                    period_id,
+                    day,
+                    sleep_type,
+                    avg_hrv,
+                    record.get("average_heart_rate"),
+                    record.get("average_breath"),
+                    record.get("total_sleep_duration"),
+                    record.get("rem_sleep_duration"),
+                    record.get("deep_sleep_duration"),
+                    record.get("light_sleep_duration"),
+                    record.get("awake_time"),
+                    record.get("efficiency"),
+                    record.get("latency"),
+                    record.get("restless_periods"),
+                    record.get("lowest_heart_rate"),
+                    record.get("bedtime_start"),
+                    record.get("bedtime_end"),
+                    record.get("time_in_bed"),
+                ),
+            )
             stats["sleep_periods"] += 1
 
             # Unpack HRV time-series items into individual RMSSD rows
@@ -671,10 +702,13 @@ def import_oura_data(
                     endpoint="sleep_periods/hrv",
                 )
                 for ts, rmssd in pairs:
-                    cursor.execute("""
+                    cursor.execute(
+                        """
                         INSERT OR IGNORE INTO oura_hrv (timestamp, rmssd, source)
                         VALUES (?, ?, ?)
-                    """, (ts, rmssd, f"sleep_period:{sleep_type}"))
+                    """,
+                        (ts, rmssd, f"sleep_period:{sleep_type}"),
+                    )
                     stats["hrv"] += 1
 
             # Unpack HR time-series from sleep period (5-second resolution)
@@ -687,10 +721,13 @@ def import_oura_data(
                     endpoint="sleep_periods/heart_rate",
                 )
                 for ts, bpm in hr_pairs:
-                    cursor.execute("""
+                    cursor.execute(
+                        """
                         INSERT OR IGNORE INTO oura_sleep_hr_timeseries (period_id, timestamp, bpm)
                         VALUES (?, ?, ?)
-                    """, (period_id, ts, int(bpm)))
+                    """,
+                        (period_id, ts, int(bpm)),
+                    )
                     stats["sleep_hr_timeseries"] += 1
 
             # Extract sleep phase epochs (5-minute staging)
@@ -698,10 +735,13 @@ def import_oura_data(
             if sleep_phases:
                 for idx, phase_char in enumerate(sleep_phases):
                     if phase_char.isdigit():
-                        cursor.execute("""
+                        cursor.execute(
+                            """
                             INSERT OR IGNORE INTO oura_sleep_epochs (period_id, epoch_index, phase)
                             VALUES (?, ?, ?)
-                        """, (period_id, idx, int(phase_char)))
+                        """,
+                            (period_id, idx, int(phase_char)),
+                        )
                         stats["sleep_epochs"] += 1
 
             # Extract movement data (30-second classification)
@@ -709,10 +749,13 @@ def import_oura_data(
             if movement:
                 for idx, move_char in enumerate(movement):
                     if move_char.isdigit():
-                        cursor.execute("""
+                        cursor.execute(
+                            """
                             INSERT OR IGNORE INTO oura_sleep_movement (period_id, movement_index, classification)
                             VALUES (?, ?, ?)
-                        """, (period_id, idx, int(move_char)))
+                        """,
+                            (period_id, idx, int(move_char)),
+                        )
                         stats["sleep_movement"] += 1
 
             # Track best HRV per day for oura_sleep update
@@ -729,9 +772,12 @@ def import_oura_data(
 
         # Update oura_sleep.hrv_average with best per-day HRV from sleep periods
         for day, (hrv_val, _) in best_hrv_per_day.items():
-            cursor.execute("""
+            cursor.execute(
+                """
                 UPDATE oura_sleep SET hrv_average = ? WHERE date = ? AND (hrv_average IS NULL OR hrv_average = 0)
-            """, (hrv_val, day))
+            """,
+                (hrv_val, day),
+            )
             if cursor.rowcount > 0:
                 stats["sleep_hrv_updated"] += 1
 
@@ -741,15 +787,20 @@ def import_oura_data(
     # ---- 6. SpO2 (NEW) ----
     try:
         spo2_data = client.get_daily_spo2(start_date, end_date)
-        records = spo2_data if isinstance(spo2_data, list) else spo2_data.get("data", [])
+        records = (
+            spo2_data if isinstance(spo2_data, list) else spo2_data.get("data", [])
+        )
         for record in records:
             spo2_pct = record.get("spo2_percentage", {})
             avg = spo2_pct.get("average") if isinstance(spo2_pct, dict) else None
             bdi = record.get("breathing_disturbance_index")
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT OR REPLACE INTO oura_spo2 (date, spo2_average, breathing_disturbance_index)
                 VALUES (?, ?, ?)
-            """, (record.get("day"), avg, bdi))
+            """,
+                (record.get("day"), avg, bdi),
+            )
             stats["spo2"] += 1
     except Exception as e:
         logging.warning("Could not import SpO2 data: %s", e)
@@ -757,17 +808,24 @@ def import_oura_data(
     # ---- 7. Stress (NEW) ----
     try:
         stress_data = client.get_daily_stress(start_date, end_date)
-        records = stress_data if isinstance(stress_data, list) else stress_data.get("data", [])
+        records = (
+            stress_data
+            if isinstance(stress_data, list)
+            else stress_data.get("data", [])
+        )
         for record in records:
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT OR REPLACE INTO oura_stress (date, stress_high, recovery_high, day_summary)
                 VALUES (?, ?, ?, ?)
-            """, (
-                record.get("day"),
-                record.get("stress_high"),
-                record.get("recovery_high"),
-                record.get("day_summary"),
-            ))
+            """,
+                (
+                    record.get("day"),
+                    record.get("stress_high"),
+                    record.get("recovery_high"),
+                    record.get("day_summary"),
+                ),
+            )
             stats["stress"] += 1
     except Exception as e:
         logging.warning("Could not import stress data: %s", e)
@@ -775,21 +833,28 @@ def import_oura_data(
     # ---- 8. Sleep time (NEW) ----
     try:
         sleep_time_data = client.get_sleep_time(start_date, end_date)
-        records = sleep_time_data if isinstance(sleep_time_data, list) else sleep_time_data.get("data", [])
+        records = (
+            sleep_time_data
+            if isinstance(sleep_time_data, list)
+            else sleep_time_data.get("data", [])
+        )
         for record in records:
             bedtime = record.get("optimal_bedtime", {})
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT OR REPLACE INTO oura_sleep_time (
                     date, optimal_bedtime_start_offset, optimal_bedtime_end_offset,
                     recommendation, status
                 ) VALUES (?, ?, ?, ?, ?)
-            """, (
-                record.get("day"),
-                bedtime.get("start_offset") if isinstance(bedtime, dict) else None,
-                bedtime.get("end_offset") if isinstance(bedtime, dict) else None,
-                record.get("recommendation"),
-                record.get("status"),
-            ))
+            """,
+                (
+                    record.get("day"),
+                    bedtime.get("start_offset") if isinstance(bedtime, dict) else None,
+                    bedtime.get("end_offset") if isinstance(bedtime, dict) else None,
+                    record.get("recommendation"),
+                    record.get("status"),
+                ),
+            )
             stats["sleep_time"] += 1
     except Exception as e:
         logging.warning("Could not import sleep time data: %s", e)
@@ -797,27 +862,34 @@ def import_oura_data(
     # ---- 9. Workouts (NEW) ----
     try:
         workout_data = client.get_workouts(start_date, end_date)
-        records = workout_data if isinstance(workout_data, list) else workout_data.get("data", [])
+        records = (
+            workout_data
+            if isinstance(workout_data, list)
+            else workout_data.get("data", [])
+        )
         for record in records:
             workout_id = record.get("id")
             if not workout_id:
                 continue
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT OR REPLACE INTO oura_workouts (
                     workout_id, day, activity, calories, distance,
                     intensity, start_datetime, end_datetime, source
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                workout_id,
-                record.get("day"),
-                record.get("activity"),
-                record.get("calories"),
-                record.get("distance"),
-                record.get("intensity"),
-                record.get("start_datetime"),
-                record.get("end_datetime"),
-                record.get("source"),
-            ))
+            """,
+                (
+                    workout_id,
+                    record.get("day"),
+                    record.get("activity"),
+                    record.get("calories"),
+                    record.get("distance"),
+                    record.get("intensity"),
+                    record.get("start_datetime"),
+                    record.get("end_datetime"),
+                    record.get("source"),
+                ),
+            )
             stats["workouts"] += 1
     except Exception as e:
         logging.warning("Could not import workout data: %s", e)
@@ -829,18 +901,27 @@ def import_oura_data(
         )
         for record in resilience_data:
             contributors = record.get("contributors", {})
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT OR REPLACE INTO oura_resilience (
                     date, level, contributors_sleep_recovery,
                     contributors_daytime_recovery, contributors_stress
                 ) VALUES (?, ?, ?, ?, ?)
-            """, (
-                record.get("day"),
-                record.get("level"),
-                contributors.get("sleep_recovery") if isinstance(contributors, dict) else None,
-                contributors.get("daytime_recovery") if isinstance(contributors, dict) else None,
-                contributors.get("stress") if isinstance(contributors, dict) else None,
-            ))
+            """,
+                (
+                    record.get("day"),
+                    record.get("level"),
+                    contributors.get("sleep_recovery")
+                    if isinstance(contributors, dict)
+                    else None,
+                    contributors.get("daytime_recovery")
+                    if isinstance(contributors, dict)
+                    else None,
+                    contributors.get("stress")
+                    if isinstance(contributors, dict)
+                    else None,
+                ),
+            )
             stats["resilience"] += 1
     except Exception as e:
         logging.warning("Could not import resilience data: %s", e)
@@ -851,30 +932,34 @@ def import_oura_data(
             client.session, "daily_cardiovascular_age", start_date, end_date
         )
         for record in cv_data:
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT OR REPLACE INTO oura_cardiovascular_age (date, vascular_age)
                 VALUES (?, ?)
-            """, (
-                record.get("day"),
-                record.get("vascular_age"),
-            ))
+            """,
+                (
+                    record.get("day"),
+                    record.get("vascular_age"),
+                ),
+            )
             stats["cardiovascular_age"] += 1
     except Exception as e:
         logging.warning("Could not import cardiovascular age data: %s", e)
 
     # ---- 12. VO2 Max (NEW  - direct API) ----
     try:
-        vo2_data = _fetch_paginated(
-            client.session, "vo2_max", start_date, end_date
-        )
+        vo2_data = _fetch_paginated(client.session, "vo2_max", start_date, end_date)
         for record in vo2_data:
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT OR REPLACE INTO oura_vo2_max (date, vo2_max)
                 VALUES (?, ?)
-            """, (
-                record.get("day"),
-                record.get("vo2_max"),
-            ))
+            """,
+                (
+                    record.get("day"),
+                    record.get("vo2_max"),
+                ),
+            )
             stats["vo2_max"] += 1
     except Exception as e:
         logging.warning("Could not import VO2 Max data: %s", e)
@@ -882,22 +967,27 @@ def import_oura_data(
     # ---- 13. Rest mode periods (library method) ----
     try:
         rest_data = client.get_rest_mode_period(start_date, end_date)
-        records = rest_data if isinstance(rest_data, list) else rest_data.get("data", [])
+        records = (
+            rest_data if isinstance(rest_data, list) else rest_data.get("data", [])
+        )
         for record in records:
             period_id = record.get("id")
             if not period_id:
                 continue
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT OR REPLACE INTO oura_rest_mode (
                     period_id, start_day, end_day, start_date, end_date
                 ) VALUES (?, ?, ?, ?, ?)
-            """, (
-                period_id,
-                record.get("start_day"),
-                record.get("end_day"),
-                record.get("start_date"),
-                record.get("end_date"),
-            ))
+            """,
+                (
+                    period_id,
+                    record.get("start_day"),
+                    record.get("end_day"),
+                    record.get("start_date"),
+                    record.get("end_date"),
+                ),
+            )
             stats["rest_mode"] += 1
     except Exception as e:
         logging.warning("Could not import rest mode data: %s", e)
@@ -905,28 +995,35 @@ def import_oura_data(
     # ---- 14. Sessions  - guided breathing/meditation (library method) ----
     try:
         session_data = client.get_sessions(start_date, end_date)
-        records = session_data if isinstance(session_data, list) else session_data.get("data", [])
+        records = (
+            session_data
+            if isinstance(session_data, list)
+            else session_data.get("data", [])
+        )
         for record in records:
             session_id = record.get("id")
             if not session_id:
                 continue
             hr_data = record.get("heart_rate", {})
             hrv_data = record.get("hrv", {})
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT OR REPLACE INTO oura_sessions (
                     session_id, day, type, start_datetime, end_datetime,
                     heart_rate_average, hrv_average, mood
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                session_id,
-                record.get("day"),
-                record.get("type"),
-                record.get("start_datetime"),
-                record.get("end_datetime"),
-                hr_data.get("average") if isinstance(hr_data, dict) else None,
-                hrv_data.get("average") if isinstance(hrv_data, dict) else None,
-                record.get("mood"),
-            ))
+            """,
+                (
+                    session_id,
+                    record.get("day"),
+                    record.get("type"),
+                    record.get("start_datetime"),
+                    record.get("end_datetime"),
+                    hr_data.get("average") if isinstance(hr_data, dict) else None,
+                    hrv_data.get("average") if isinstance(hrv_data, dict) else None,
+                    record.get("mood"),
+                ),
+            )
             stats["sessions"] += 1
     except Exception as e:
         logging.warning("Could not import session data: %s", e)
@@ -939,17 +1036,20 @@ def import_oura_data(
             tag_id = record.get("id")
             if not tag_id:
                 continue
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT OR REPLACE INTO oura_tags (
                     tag_id, day, timestamp, tag_type_code, comment
                 ) VALUES (?, ?, ?, ?, ?)
-            """, (
-                tag_id,
-                record.get("day"),
-                record.get("timestamp"),
-                record.get("tag_type_code"),
-                record.get("comment"),
-            ))
+            """,
+                (
+                    tag_id,
+                    record.get("day"),
+                    record.get("timestamp"),
+                    record.get("tag_type_code"),
+                    record.get("comment"),
+                ),
+            )
             stats["tags"] += 1
     except Exception as e:
         logging.warning("Could not import enhanced tag data: %s", e)
@@ -957,25 +1057,32 @@ def import_oura_data(
     # ---- 16. Ring configuration (library method, no date range) ----
     try:
         config_data = client.get_ring_configuration()
-        records = config_data if isinstance(config_data, list) else config_data.get("data", [])
+        records = (
+            config_data
+            if isinstance(config_data, list)
+            else config_data.get("data", [])
+        )
         for record in records:
             config_id = record.get("id")
             if not config_id:
                 continue
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT OR REPLACE INTO oura_ring_config (
                     config_id, color, design, firmware_version,
                     hardware_type, set_up_at, size
                 ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                config_id,
-                record.get("color"),
-                record.get("design"),
-                record.get("firmware_version"),
-                record.get("hardware_type"),
-                record.get("set_up_at"),
-                record.get("size"),
-            ))
+            """,
+                (
+                    config_id,
+                    record.get("color"),
+                    record.get("design"),
+                    record.get("firmware_version"),
+                    record.get("hardware_type"),
+                    record.get("set_up_at"),
+                    record.get("size"),
+                ),
+            )
             stats["ring_config"] += 1
     except Exception as e:
         logging.warning("Could not import ring configuration: %s", e)
@@ -987,16 +1094,19 @@ def import_oura_data(
         if isinstance(info, dict):
             data = info.get("data", info) if "data" in info else info
             cursor.execute("DELETE FROM oura_personal_info")  # Single-row table
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO oura_personal_info (age, weight, height, biological_sex, email)
                 VALUES (?, ?, ?, ?, ?)
-            """, (
-                data.get("age"),
-                data.get("weight"),
-                data.get("height"),
-                data.get("biological_sex"),
-                data.get("email"),
-            ))
+            """,
+                (
+                    data.get("age"),
+                    data.get("weight"),
+                    data.get("height"),
+                    data.get("biological_sex"),
+                    data.get("email"),
+                ),
+            )
             stats["personal_info"] += 1
     except Exception as e:
         logging.warning("Could not import personal info: %s", e)
@@ -1009,23 +1119,10 @@ def main():
     parser = argparse.ArgumentParser(
         description="Import Oura Ring data to SQLite database"
     )
-    parser.add_argument(
-        "--days", "-d",
-        type=int,
-        help="Import last N days of data"
-    )
-    parser.add_argument(
-        "--start", "-s",
-        help="Start date (YYYY-MM-DD)"
-    )
-    parser.add_argument(
-        "--end", "-e",
-        help="End date (YYYY-MM-DD)"
-    )
-    parser.add_argument(
-        "--db",
-        help="Database path (default: from DATABASE_PATH env)"
-    )
+    parser.add_argument("--days", "-d", type=int, help="Import last N days of data")
+    parser.add_argument("--start", "-s", help="Start date (YYYY-MM-DD)")
+    parser.add_argument("--end", "-e", help="End date (YYYY-MM-DD)")
+    parser.add_argument("--db", help="Database path (default: from DATABASE_PATH env)")
 
     args = parser.parse_args()
 
@@ -1035,7 +1132,9 @@ def main():
     if not oura_token or oura_token == "your_oura_personal_access_token":
         print("Error: No Oura API token configured in the parent .env file")
         print("Option 1 (recommended): python api/oura_oauth2_setup.py")
-        print("Option 2 (legacy): Set OURA_PAT at https://cloud.ouraring.com/personal-access-tokens")
+        print(
+            "Option 2 (legacy): Set OURA_PAT at https://cloud.ouraring.com/personal-access-tokens"
+        )
         return 1
     print(f"Using {token_type} authentication")
 
@@ -1055,7 +1154,9 @@ def main():
 
     # Initialize database
     db_path = args.db or get_database_path()
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    db_dir = os.path.dirname(os.path.abspath(db_path))
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
     conn = init_database(db_path)
 
     try:
@@ -1088,7 +1189,10 @@ def main():
                 conn.close()
                 return 1
             elif preflight.status_code != 200:
-                logging.warning("Pre-flight check returned HTTP %d — proceeding anyway", preflight.status_code)
+                logging.warning(
+                    "Pre-flight check returned HTTP %d — proceeding anyway",
+                    preflight.status_code,
+                )
             else:
                 logging.info("API access verified (HTTP 200)")
         except requests.RequestException as e:
