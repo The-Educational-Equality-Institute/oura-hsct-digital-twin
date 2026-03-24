@@ -48,5 +48,4 @@ scripts/
 # Build / deploy artifacts
 test-results/
 .wrangler/
-index.html
 .codegraph/
