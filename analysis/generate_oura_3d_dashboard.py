@@ -79,7 +79,7 @@ C_COUNTERFACTUAL = "#999999"  # Grey — predicted counterfactual
 C_STATES = ["#10B981", "#F59E0B", "#EF4444", "#3B82F6"]  # Remission, Pre-flare, Flare, Recovery
 C_STATE_NAMES = ["Remission", "Pre-flare", "Active Flare", "Recovery"]
 
-# Existing colors (for 3D panels) — from config
+# Existing colors (for 3D panels) — from _theme dark palette
 COLOR_PRE_RUX = C_PRE_TX
 COLOR_POST_RUX = C_POST_TX
 COLOR_EVENT = C_ACCENT
