@@ -100,6 +100,8 @@ JSON_OUTPUT = REPORTS_DIR / "gvhd_prediction_metrics.json"
 # Clinical context
 # ---------------------------------------------------------------------------
 RUXOLITINIB_START = str(TREATMENT_START)  # JAK inhibitor for cGVHD
+KNOWN_EVENT_DATE = str(KNOWN_EVENT_DATE)  # Convert date->str for comparisons
+HEV_DIAGNOSIS_DATE = str(HEV_DIAGNOSIS_DATE)  # Convert date->str
 HEV_DIAGNOSIS = HEV_DIAGNOSIS_DATE  # Hepatitis E diagnosed
 DATA_START = str(_DATA_START_DATE)  # String form for SQL queries
 # DATA_END is resolved dynamically from the database at load time.
