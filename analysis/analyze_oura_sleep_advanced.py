@@ -712,7 +712,8 @@ def compute_hrv_coupling(
 
         try:
             bt_start = pd.to_datetime(bedtime_start_str, utc=True)
-        except Exception:
+        except (ValueError, TypeError) as e:
+            logging.debug(f"Skipping period with unparseable bedtime_start: {e}")
             continue
 
         # HRV readings within this period's timeframe
