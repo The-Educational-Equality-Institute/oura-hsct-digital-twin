@@ -1455,7 +1455,7 @@ def run_rslds_analysis(
         state_map = {severity_order[i]: assignment[i] for i in range(N_STATES)}
 
     remapped_probs = np.zeros_like(full_probs)
-    remapped_viterbi = np.zeros_like(full_viterbi)
+    remapped_viterbi = np.full(len(full_viterbi), -1, dtype=int)
     for old, new in state_map.items():
         remapped_probs[:, new] = full_probs[:, old]
         remapped_viterbi[full_viterbi == old] = new
