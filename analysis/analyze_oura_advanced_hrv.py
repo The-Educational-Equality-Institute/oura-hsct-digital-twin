@@ -272,27 +272,29 @@ def compute_frequency_domain(timestamps: list[datetime], rmssd: np.ndarray) -> d
     # Compute Lomb-Scargle periodogram
     pgram = lombscargle(t_seconds, rmssd_centered, angular_freqs, normalize=True)
 
+    # NOTE: These frequency bands are proxy approximations from 5-min PPG intervals.
+    # They do NOT correspond to clinical VLF (0.003-0.04), LF (0.04-0.15), HF (0.15-0.4) Hz bands.
     # Define bands relative to accessible range
-    # Map proportionally: lowest third -> VLF proxy, middle -> LF proxy, upper -> HF proxy
+    # Map proportionally: lowest third -> low proxy, middle -> mid proxy, upper -> high proxy
     n = len(freqs_hz)
-    vlf_mask = freqs_hz < 0.002
-    lf_mask = (freqs_hz >= 0.002) & (freqs_hz < 0.0035)
-    hf_mask = freqs_hz >= 0.0035
+    low_mask = freqs_hz < 0.002
+    mid_mask = (freqs_hz >= 0.002) & (freqs_hz < 0.0035)
+    high_mask = freqs_hz >= 0.0035
 
     # NumPy >=2 exposes trapezoid; older versions use trapz.
     _integrate = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
-    vlf_power = (
-        float(_integrate(pgram[vlf_mask], freqs_hz[vlf_mask])) if vlf_mask.any() else 0
+    proxy_band_low = (
+        float(_integrate(pgram[low_mask], freqs_hz[low_mask])) if low_mask.any() else 0
     )
-    lf_power = (
-        float(_integrate(pgram[lf_mask], freqs_hz[lf_mask])) if lf_mask.any() else 0
+    proxy_band_mid = (
+        float(_integrate(pgram[mid_mask], freqs_hz[mid_mask])) if mid_mask.any() else 0
     )
-    hf_power = (
-        float(_integrate(pgram[hf_mask], freqs_hz[hf_mask])) if hf_mask.any() else 0
+    proxy_band_high = (
+        float(_integrate(pgram[high_mask], freqs_hz[high_mask])) if high_mask.any() else 0
     )
 
-    total = vlf_power + lf_power + hf_power
-    lf_hf_ratio = lf_power / hf_power if hf_power > 0 else float("inf")
+    total = proxy_band_low + proxy_band_mid + proxy_band_high
+    proxy_ratio = proxy_band_mid / proxy_band_high if proxy_band_high > 0 else float("inf")
 
     # Also compute full power spectral density for plotting
     freqs_full = np.linspace(0.0005, 0.006, 1000)
