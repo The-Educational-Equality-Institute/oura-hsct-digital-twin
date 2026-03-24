@@ -224,8 +224,7 @@ def load_data() -> dict[str, pd.DataFrame]:
     db_path = Path(DATABASE_PATH).resolve()
     if not db_path.exists():
         raise FileNotFoundError(f"Database not found: {db_path}")
-    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-    try:
+    with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as conn:
         # HRV epochs (5-min intervals)
         hrv = pd.read_sql_query(
             "SELECT timestamp, rmssd FROM oura_hrv ORDER BY timestamp", conn
@@ -271,8 +270,6 @@ def load_data() -> dict[str, pd.DataFrame]:
         readiness["temperature_deviation"] = pd.to_numeric(
             readiness["temperature_deviation"], errors="coerce"
         )
-    finally:
-        conn.close()
 
     data = {
         "hrv": hrv,
