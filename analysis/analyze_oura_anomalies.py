@@ -1157,10 +1157,11 @@ def compute_ensemble_scores(daily: pd.DataFrame, all_results: dict[str, dict]) -
     print(f"  Ensemble threshold (90th pct): {threshold:.3f}")
     print(f"  Anomalous days: {n_anomalies}")
 
-    top5 = ensemble.nlargest(5, "ensemble_score")
+    top5 = ensemble.nlargest(5, "ensemble_score").dropna(subset=["ensemble_score"])
     print("  Top 5 anomaly days:")
     for _, row in top5.iterrows():
-        print(f"    {row['date']}: ensemble={row['ensemble_score']:.3f}, rank={int(row['rank'])}")
+        rank_str = str(int(row['rank'])) if pd.notna(row['rank']) else "N/A"
+        print(f"    {row['date']}: ensemble={row['ensemble_score']:.3f}, rank={rank_str}")
 
     return ensemble
 
