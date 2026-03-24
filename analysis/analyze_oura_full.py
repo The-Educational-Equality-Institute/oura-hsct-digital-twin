@@ -735,8 +735,9 @@ def fig_hrv_deep_dive(data: dict) -> go.Figure:
             else 0
         )
 
+        sd_ratio = sd1 / sd2 if sd2 > 0 else float("inf")
         fig.add_annotation(
-            text=f"SD1={sd1:.1f} | SD2={sd2:.1f} | SD1/SD2={sd1 / sd2:.2f}"
+            text=f"SD1={sd1:.1f} | SD2={sd2:.1f} | SD1/SD2={sd_ratio:.2f}"
             if sd2 > 0
             else f"SD1={sd1:.1f}",
             xref="x3 domain",
