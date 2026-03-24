@@ -87,32 +87,9 @@ pio.templates.default = "clinical_dark"
 HTML_OUTPUT = REPORTS_DIR / "spo2_bos_screening.html"
 JSON_OUTPUT = REPORTS_DIR / "spo2_bos_metrics.json"
 
-# SpO2 thresholds
-SPO2_ABSOLUTE_THRESHOLD = 94.0  # Desaturation cutoff (%)
-SPO2_CONCERN_SLOPE = -0.02  # %/day -> 1% decline per 50 days
-SPO2_NORMAL_RANGE = (95.0, 100.0)  # Normal adult range
-
-# BDI thresholds (events/hour)
-BDI_NORMAL = 5.0
-BDI_MILD = 15.0
-BDI_MODERATE = 30.0
-
-# BOS risk score weights
-BOS_WEIGHTS = {
-    "spo2_slope": 0.30,
-    "spo2_variability": 0.20,
-    "desaturation_freq": 0.20,
-    "bdi": 0.15,
-    "hr_decoupling": 0.15,
-}
-
-# DLCO measurements (from medical records)
-DLCO_MEASUREMENTS = [
-    # (date, DLCO%, context)
-    (date(2024, 3, 21), 71.0, "Baseline post-HSCT"),
-    (date(2025, 3, 20), 89.0, "Improvement"),
-    (date(2025, 12, 17), 67.0, "Concerning decline"),
-]
+# Derived local aliases from config constants
+SPO2_ABSOLUTE_THRESHOLD = SPO2_CONCERN_THRESHOLD  # Desaturation cutoff (%)
+SPO2_NORMAL_RANGE = (SPO2_NORMAL_MIN, SPO2_NORMAL_MAX)  # Normal adult range
 
 # Color aliases for local semantics (mapped from theme palette)
 C_CAUTION = ACCENT_AMBER
