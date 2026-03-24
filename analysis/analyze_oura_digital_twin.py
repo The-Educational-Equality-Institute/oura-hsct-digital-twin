@@ -1870,7 +1870,7 @@ def create_sensor_fusion_figure(
         if col in residuals:
             r = residuals[col]
             res_labels.append(col.replace("mean_", "").replace("_", " ").title())
-            p = r.get("ljung_box_p", 0)
+            p = r.get("ljung_box_p_value", 0)
             res_lb_p.append(p)
             res_colors.append(COLORS["hrv"] if r.get("white_noise", False) else COLORS["post"])
 
