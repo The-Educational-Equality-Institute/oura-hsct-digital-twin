@@ -1450,42 +1450,81 @@ def run_pcmci(daily: pd.DataFrame) -> dict[str, Any]:
         val_matrix = pcmci_results["val_matrix"]
         p_matrix = pcmci_results["p_matrix"]
 
-        # Extract significant links
-        sig_links = []
+        # Collect ALL testable p-values for FDR correction
+        all_tests = []
         n_vars = len(var_labels)
         for i in range(n_vars):
             for j in range(n_vars):
                 for tau in range(tau_max + 1):
                     if i == j and tau == 0:
                         continue  # skip contemporaneous self-links
-                    if p_matrix[i, j, tau] < PCMCI_ALPHA:
-                        sig_links.append(
-                            {
-                                "source": var_labels[i],
-                                "target": var_labels[j],
-                                "lag": int(tau),
-                                "correlation": round(float(val_matrix[i, j, tau]), 4),
-                                "p_value": round(float(p_matrix[i, j, tau]), 6),
-                            }
-                        )
+                    pval = float(p_matrix[i, j, tau])
+                    if np.isfinite(pval):
+                        all_tests.append({
+                            "i": i, "j": j, "tau": tau,
+                            "p_value": pval,
+                            "correlation": float(val_matrix[i, j, tau]),
+                        })
+
+        # Apply Benjamini-Hochberg FDR correction across all tested pairs
+        n_fdr_corrected = 0
+        if all_tests and MULTIPLETESTS_AVAILABLE:
+            raw_pvals = np.array([t["p_value"] for t in all_tests])
+            try:
+                reject, qvals, _, _ = multipletests(raw_pvals, method="fdr_bh", alpha=PCMCI_ALPHA)
+                for idx_t, t in enumerate(all_tests):
+                    t["q_value_bh"] = float(qvals[idx_t])
+                    t["significant_fdr"] = bool(reject[idx_t])
+                n_fdr_corrected = int(np.sum(reject))
+            except Exception as fdr_err:
+                print(f"    WARNING: FDR correction failed: {fdr_err}")
+                for t in all_tests:
+                    t["q_value_bh"] = t["p_value"]
+                    t["significant_fdr"] = t["p_value"] < PCMCI_ALPHA
+        else:
+            for t in all_tests:
+                t["q_value_bh"] = t["p_value"]
+                t["significant_fdr"] = t["p_value"] < PCMCI_ALPHA
+
+        # Extract significant links (raw p < alpha, with FDR annotation)
+        sig_links = []
+        sig_links_fdr = []
+        for t in all_tests:
+            if t["p_value"] < PCMCI_ALPHA:
+                link = {
+                    "source": var_labels[t["i"]],
+                    "target": var_labels[t["j"]],
+                    "lag": int(t["tau"]),
+                    "correlation": round(t["correlation"], 4),
+                    "p_value": round(t["p_value"], 6),
+                    "q_value_bh": round(t["q_value_bh"], 6),
+                    "significant_fdr": t["significant_fdr"],
+                }
+                sig_links.append(link)
+                if t["significant_fdr"]:
+                    sig_links_fdr.append(link)
 
         # Sort by absolute correlation strength
         sig_links.sort(key=lambda x: abs(x["correlation"]), reverse=True)
 
         print(
-            f"    Found {len(sig_links)} significant causal links (alpha={PCMCI_ALPHA})"
+            f"    Found {len(sig_links)} links at raw alpha={PCMCI_ALPHA}, "
+            f"{len(sig_links_fdr)} survive FDR correction (q < {PCMCI_ALPHA})"
         )
         for link in sig_links[:5]:
             direction = "+" if link["correlation"] > 0 else "-"
+            fdr_tag = "FDR-sig" if link["significant_fdr"] else "FDR-ns"
             print(
                 f"      {link['source']} -> {link['target']} (lag={link['lag']}, "
-                f"r={link['correlation']:{direction}.3f}, p={link['p_value']:.4f})"
+                f"r={link['correlation']:{direction}.3f}, p={link['p_value']:.4f}, q={link['q_value_bh']:.4f} [{fdr_tag}])"
             )
 
         return {
             "n_observations": int(n_obs),
             "tau_max": int(tau_max),
             "n_significant_links": len(sig_links),
+            "n_significant_links_fdr": len(sig_links_fdr),
+            "n_tests_total": len(all_tests),
             "significant_links": sig_links,
             "val_matrix": val_matrix.tolist(),
             "p_matrix": p_matrix.tolist(),
