@@ -288,11 +288,15 @@ def check_status() -> None:
     # Test whichever token is available
     token = access_token or pat
     if token:
-        resp = requests.get(
-            "https://api.ouraring.com/v2/usercollection/personal_info",
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=10,
-        )
+        try:
+            resp = requests.get(
+                "https://api.ouraring.com/v2/usercollection/personal_info",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=10,
+            )
+        except requests.RequestException as e:
+            print(f"ERROR: Network request failed: {e}")
+            sys.exit(1)
         if resp.status_code == 200:
             print(
                 f"\n  API access: WORKING (using {'OAuth2' if access_token else 'PAT'})"
