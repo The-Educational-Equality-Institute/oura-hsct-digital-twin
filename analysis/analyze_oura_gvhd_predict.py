@@ -79,13 +79,13 @@ except (ImportError, Exception) as _hmm_err:
 # ---------------------------------------------------------------------------
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import (
-    DATABASE_PATH, REPORTS_DIR, TRANSPLANT_DATE, TREATMENT_START,
-    KNOWN_EVENT_DATE, HEV_DIAGNOSIS_DATE, PATIENT_AGE, PATIENT_LABEL,
-    DATA_START as _DATA_START_DATE, ESC_RMSSD_DEFICIENCY, NOCTURNAL_HR_ELEVATED,
+    DATABASE_PATH, REPORTS_DIR, TREATMENT_START,
+    KNOWN_EVENT_DATE, HEV_DIAGNOSIS_DATE, PATIENT_LABEL,
+    DATA_START as _DATA_START_DATE,
 )
 from _theme import (
     wrap_html, make_kpi_card, make_kpi_row, make_section,
-    COLORWAY, STATUS_COLORS as THEME_STATUS_COLORS, BG_PRIMARY, BG_SURFACE, BG_ELEVATED,
+    BG_PRIMARY, BG_ELEVATED,
     BORDER_SUBTLE, TEXT_PRIMARY, TEXT_SECONDARY,
     ACCENT_BLUE, ACCENT_GREEN, ACCENT_RED, ACCENT_AMBER, ACCENT_PURPLE, ACCENT_CYAN,
 )
