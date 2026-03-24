@@ -779,8 +779,8 @@ def compute_hrv_coupling(
             kw_stat, kw_p = stats.kruskal(*groups)
             kw_stat = round(float(kw_stat), 2)
             kw_p = float(kw_p)
-        except Exception:
-            pass
+        except (ValueError, RuntimeError) as e:
+            logging.warning(f"Kruskal-Wallis test failed: {e}")
 
     return {
         "stage_stats": stage_stats,
