@@ -2897,11 +2897,12 @@ tr.alert-yellow td {{ background: rgba(245, 158, 11, 0.1); }}
 """
 
     # --- Subtitle ---
-    n_days = (pd.Timestamp(DATA_END) - pd.Timestamp(DATA_START)).days + 1
-    post_days = max(0, (pd.Timestamp(DATA_END).date() - TREATMENT_START).days + 1)
+    _data_end = _get_data_end()
+    n_days = (pd.Timestamp(_data_end) - pd.Timestamp(DATA_START)).days + 1
+    post_days = max(0, (pd.Timestamp(_data_end).date() - TREATMENT_START).days + 1)
     display_model_type = "HMM" if "HMM" in str(model_type) else "rSLDS"
     subtitle = (
-        f"Oura Ring, {DATA_START} to {DATA_END} ({n_days} days) "
+        f"Oura Ring, {DATA_START} to {_data_end} ({n_days} days) "
         f"| State model: {display_model_type} | Ruxolitinib started {RUXOLITINIB_START} | HEV diagnosed {HEV_DIAGNOSIS}"
     )
 
@@ -2912,7 +2913,7 @@ tr.alert-yellow td {{ background: rgba(245, 158, 11, 0.1); }}
         report_id="gvhd",
         subtitle=subtitle,
         extra_css=extra_css,
-        data_end=DATA_END,
+        data_end=_data_end,
         post_days=post_days,
     )
 
