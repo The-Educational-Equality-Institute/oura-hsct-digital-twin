@@ -2882,13 +2882,22 @@ def main() -> int:
         "ensemble": {
             "top_10_anomalies": ensemble.nlargest(10, "ensemble_score")[
                 ["date", "ensemble_score"]
+                + ([c for c in ["min_fdr_qvalue"] if c in ensemble.columns])
             ].to_dict("records"),
             "threshold_90pct": float(ensemble["ensemble_score"].quantile(0.9)),
             "n_anomaly_days": int(ensemble["is_anomaly"].sum()),
-            "daily_scores": ensemble[["date", "ensemble_score"]]
+            "n_anomaly_days_fdr": int(ensemble["is_anomaly_fdr"].sum())
+            if "is_anomaly_fdr" in ensemble.columns
+            else None,
+            "fdr_method": "Benjamini-Hochberg",
+            "daily_scores": ensemble[
+                ["date", "ensemble_score"]
+                + ([c for c in ["min_fdr_qvalue"] if c in ensemble.columns])
+            ]
             .dropna(subset=["ensemble_score"])
             .to_dict("records"),
         },
+        "spc_fdr_correction": all_results.get("spc", {}).get("fdr_correction"),
         "total_runtime_s": round(time.time() - t_total, 2),
     }
 
