@@ -1951,8 +1951,8 @@ def build_html(
     charts_js = json.dumps(chart_json, ensure_ascii=False)
 
     # Data completeness
-    n_json = sum(1 for k, v in outputs.items() if v)
-    total_json = len(outputs)
+    n_json = sum(1 for k, v in outputs.items() if v and k != "causal_ts")
+    total_json = sum(1 for k in outputs if k != "causal_ts")
 
     # Format helpers
     def fmt(val, suffix="", decimals=1):
