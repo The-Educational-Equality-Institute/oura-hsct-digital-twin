@@ -27,7 +27,7 @@ def _resolve_symlink(p: Path) -> Path | None:
         if target.exists() and os.access(str(target), os.R_OK):
             return target
         # Dangling symlink
-        print(f"WARNING: Symlink exists but target is missing: {p} -> {target}")
+        logging.warning("Symlink exists but target is missing: %s -> %s", p, target)
         return None
     if p.exists():
         return p.resolve()
