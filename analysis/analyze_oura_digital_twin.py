@@ -1061,7 +1061,7 @@ def analyze_drug_response(
             "pre_mean": round(pre_mean, 4),
             "post_mean": round(post_mean, 4),
             "shift_sd": round(shift_sd, 3),
-            "mann_whitney_p": round(float(pval), 4),
+            "mann_whitney_p_value": round(float(pval), 4),
             "direction": "improved" if (
                 (name in ["Autonomic Tone", "Cardiac Reserve", "Sleep Quality"] and shift_sd > 0.1)
                 or (name == "Inflammation Level" and shift_sd < -0.1)
@@ -1252,10 +1252,13 @@ def analyze_sensor_fusion(
             residuals[col] = {
                 "mean": round(float(np.mean(resid)), 4),
                 "std": round(float(np.std(resid)), 4),
-                "ljung_box_p": round(lb_pval, 4),
+                "ljung_box_p_value": round(lb_pval, 4),
                 "white_noise": lb_pval > 0.05,
                 "acf_lag1": round(float(acf_vals[0]), 4) if acf_vals else None,
             }
+
+    n_lb_pass = sum(1 for r in residuals.values() if r.get("white_noise"))
+    n_lb_total = len(residuals)
 
     metrics["sensor_fusion"] = {
         "availability": availability,
@@ -1263,6 +1266,9 @@ def analyze_sensor_fusion(
         "sensor_weight_pct": sensor_weight,
         "kalman_gain_contribution_pct": gain_contribution,
         "residual_diagnostics": residuals,
+        "significance_threshold_p_value": 0.05,
+        "ljung_box_pass_count": n_lb_pass,
+        "ljung_box_total": n_lb_total,
     }
 
     return {
@@ -1864,7 +1870,7 @@ def create_sensor_fusion_figure(
         if col in residuals:
             r = residuals[col]
             res_labels.append(col.replace("mean_", "").replace("_", " ").title())
-            p = r.get("ljung_box_p", 0)
+            p = r.get("ljung_box_p_value", 0)
             res_lb_p.append(p)
             res_colors.append(COLORS["hrv"] if r.get("white_noise", False) else COLORS["post"])
 
@@ -2227,7 +2233,7 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
         )
     dominant_shift = float(dominant_state_stats.get("shift_sd", 0) or 0)
     dominant_direction = str(dominant_state_stats.get("direction", "stable"))
-    dominant_p = dominant_state_stats.get("mann_whitney_p")
+    dominant_p = dominant_state_stats.get("mann_whitney_p_value")
 
     valid_tau = [
         (name, tau)
@@ -2455,7 +2461,7 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
         f'<td>{state_interpretation.get(name, "Interpret relative to model definition")}</td>'
         f'<td><span class="tag tag-{resp_stats.get(name, {}).get("direction", "stable")}">'
         f'{str(resp_stats.get(name, {}).get("direction", "stable")).title()} (pre/post drug)</span></td>'
-        f'<td>{_fmt_p(resp_stats.get(name, {}).get("mann_whitney_p"))}</td>'
+        f'<td>{_fmt_p(resp_stats.get(name, {}).get("mann_whitney_p_value"))}</td>'
         f'<td>{f"{_fmt_num(tau_list.get(name), 1)} days" if tau_list.get(name) else "N/A"}</td>'
         f'</tr>'
         for name in STATE_NAMES
