@@ -1043,7 +1043,7 @@ def plot_causal_impact(ci_results: dict[str, Any]) -> list[go.Figure]:
                     line=dict(color=COLOR_COUNTERFACTUAL, width=1.5, dash="dash"),
                     legendgroup="counterfactual",
                     hovertemplate=(
-                        f"<b>%{{x|%b %d}}</b><br>"
+                        f"<b>%{{x|%d %b}}</b><br>"
                         f"{label}<br>"
                         f"Counterfactual: %{{y:.1f}} {unit}<extra></extra>"
                     ),
@@ -1063,7 +1063,7 @@ def plot_causal_impact(ci_results: dict[str, Any]) -> list[go.Figure]:
                     line=dict(color=C_PRE_TX, width=1.5),
                     legendgroup="actual_pre",
                     hovertemplate=(
-                        f"<b>%{{x|%b %d}}</b><br>"
+                        f"<b>%{{x|%d %b}}</b><br>"
                         f"{label}<br>"
                         f"Actual: %{{y:.1f}} {unit}<extra></extra>"
                     ),
@@ -1085,7 +1085,7 @@ def plot_causal_impact(ci_results: dict[str, Any]) -> list[go.Figure]:
                                 line=dict(width=1.5, color="#FFFFFF")),
                     legendgroup="actual_post",
                     hovertemplate=(
-                        f"<b>%{{x|%b %d}}</b><br>"
+                        f"<b>%{{x|%d %b}}</b><br>"
                         f"{label}<br>"
                         f"Actual: %{{y:.1f}} {unit}<extra></extra>"
                     ),
@@ -1114,7 +1114,7 @@ def plot_causal_impact(ci_results: dict[str, Any]) -> list[go.Figure]:
                     name="Point effect",
                     legendgroup="effect",
                     hovertemplate=(
-                        f"<b>%{{x|%b %d}}</b><br>"
+                        f"<b>%{{x|%d %b}}</b><br>"
                         f"{label}<br>"
                         f"Effect: %{{y:+.1f}} {unit}<extra></extra>"
                     ),
@@ -1156,13 +1156,13 @@ def plot_causal_impact(ci_results: dict[str, Any]) -> list[go.Figure]:
         fig.update_yaxes(title_text=unit, row=1, col=1)
         fig.update_yaxes(title_text=f"Delta ({unit})", row=1, col=2)
         fig.update_xaxes(
-            tickformat="%b %d",
+            tickformat="%d %b",
             spikemode="across", spikethickness=1,
             spikecolor=BORDER_DEFAULT, spikedash="dot",
             row=1, col=1,
         )
         fig.update_xaxes(
-            tickformat="%b %d",
+            tickformat="%d %b",
             spikemode="across", spikethickness=1,
             spikecolor=BORDER_DEFAULT, spikedash="dot",
             row=1, col=2,
