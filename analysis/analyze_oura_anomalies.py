@@ -1761,7 +1761,7 @@ def generate_html_report(
         )
 
     # --- Build HTML ---
-    validation_html = _build_validation_html(validation, all_results)
+    validation_html = _build_validation_html(validation, all_results, daily)
     clinical_html = _build_clinical_interpretation(daily, ensemble, all_results)
 
     # Executive summary stats
@@ -1875,7 +1875,7 @@ def generate_html_report(
     return html_content
 
 
-def _build_validation_html(validation: dict, all_results: dict) -> str:
+def _build_validation_html(validation: dict, all_results: dict, daily: pd.DataFrame) -> str:
     """Build validation section HTML."""
     n_detected = validation["methods_detected"]
     n_total = validation["methods_tested"]
@@ -1901,13 +1901,25 @@ def _build_validation_html(validation: dict, all_results: dict) -> str:
                       status=agreement_status, status_label=agreement_label),
     )
 
+    event_row = daily[daily["date"] == KNOWN_EVENT_DATE]
+    if not event_row.empty:
+        event_rmssd = event_row["mean_rmssd"].iloc[0]
+        event_hr = event_row["mean_hr"].iloc[0]
+        event_readiness = event_row["readiness_score"].iloc[0]
+        rmssd_txt = f"{event_rmssd:.1f} ms" if pd.notna(event_rmssd) else "N/A"
+        hr_txt = f"{event_hr:.0f} bpm" if pd.notna(event_hr) else "N/A"
+        ready_txt = f"{event_readiness:.0f}" if pd.notna(event_readiness) else "N/A"
+    else:
+        rmssd_txt, hr_txt, ready_txt = "N/A", "N/A", "N/A"
+
     return f"""
     {kpi_row}
     <div style="margin-top: 12px;">
         <p><strong>Detection results per method:</strong></p>
         <p>{''.join(badges)}</p>
-        <p style="color: {TEXT_SECONDARY}; font-size: 0.875rem;"><em>The Feb 8-9, 2026 event is a clinically confirmed acute episode (HR spike to 113 bpm
-        mean, RMSSD drop to 5.0 ms, readiness score 29). All anomaly detectors are validated against this event.</em></p>
+        <p style="color: {TEXT_SECONDARY}; font-size: 0.875rem;"><em>The Feb 8-9, 2026 event is a clinically confirmed acute episode
+        (nightly mean HR {hr_txt}, nightly mean RMSSD {rmssd_txt}, readiness score {ready_txt}).
+        All anomaly detectors are validated against this event.</em></p>
     </div>"""
 
 
@@ -2001,7 +2013,7 @@ def _build_clinical_interpretation(
     ensemble: pd.DataFrame,
     all_results: dict,
 ) -> str:
-    """Build clinical interpretation text."""
+    """Build clinical interpretation with proper design-system styling."""
     top5 = ensemble.nlargest(5, "ensemble_score")
     top_dates = top5["date"].tolist()
 
@@ -2011,43 +2023,150 @@ def _build_clinical_interpretation(
         if not feb9_row.empty:
             feb9_rank = int(feb9_row["rank"].iloc[0])
 
+    n_methods = len(all_results)
     n_methods_detecting = sum(
         1 for r in all_results.values() if r.get("feb9_detected", False)
     )
 
-    return f"""
-    <h3>Summary</h3>
-    <p>Five independent anomaly detection algorithms were run retrospectively on
-    {len(daily)} days of biometric data from the Oura Ring (Jan-Mar 2026).
-    </p>
+    event_row = daily[daily["date"] == KNOWN_EVENT_DATE]
+    if not event_row.empty:
+        event_rmssd = event_row["mean_rmssd"].iloc[0]
+        event_hr = event_row["mean_hr"].iloc[0]
+        event_readiness = event_row["readiness_score"].iloc[0]
+        event_recovery = event_row["recovery_index"].iloc[0] if "recovery_index" in event_row.columns else np.nan
+    else:
+        event_rmssd, event_hr, event_readiness, event_recovery = np.nan, np.nan, np.nan, np.nan
 
-    <h3>Validation Against Known Event</h3>
-    <p><strong>{n_methods_detecting} of {len(all_results)} methods</strong> detected the acute
-    event on Feb 8-9, 2026. The event ranks as
-    <strong>#{feb9_rank if feb9_rank else 'N/A'}</strong> in ensemble anomaly scoring.</p>
-    <p>This event showed dramatic HRV collapse (RMSSD 5.0 ms), mean heart rate
-    113.9 bpm during sleep, and readiness score 29/100 with recovery index 4/100 - consistent
-    with acute autonomic destabilization.</p>
+    rmssd_txt = f"{event_rmssd:.1f}" if pd.notna(event_rmssd) else "N/A"
+    hr_txt = f"{event_hr:.0f}" if pd.notna(event_hr) else "N/A"
+    ready_txt = f"{event_readiness:.0f}" if pd.notna(event_readiness) else "N/A"
+    recovery_txt = f"{event_recovery:.0f}" if pd.notna(event_recovery) else "N/A"
 
-    <h3>Top 5 Anomalies</h3>
-    <ol>
-    {''.join(f"<li><strong>{d}</strong></li>" for d in top_dates)}
-    </ol>
+    # Baseline RMSSD from the full window
+    baseline_rmssd = daily["mean_rmssd"].median() if "mean_rmssd" in daily.columns else np.nan
+    baseline_rmssd_txt = f"{baseline_rmssd:.1f}" if pd.notna(baseline_rmssd) else "~10"
+    pct_below_median = (1 - baseline_rmssd / POPULATION_RMSSD_MEDIAN) * 100 if pd.notna(baseline_rmssd) else 80
 
-    <h3>Clinical Relevance</h3>
-    <p>Baseline RMSSD ~10 ms is critically low (parasympathetic deficiency threshold (Kleiger 1987 / Bigger 1992): {ESC_RMSSD_DEFICIENCY} ms,
-    population median: {POPULATION_RMSSD_MEDIAN} ms, typical post-HSCT: {HSCT_TYPICAL_RMSSD[0]}-{HSCT_TYPICAL_RMSSD[1]} ms). Any further
-    decline represents severe autonomic stress. Mean nightly heart rate >89 bpm
-    meets IST criteria (>90 bpm at rest).</p>
+    # Verdict banner
+    verdict_html = f"""
+    <div class="cs-verdict">
+      <div class="cs-verdict-dot"></div>
+      <div class="cs-verdict-text">
+        <strong>{n_methods_detecting}/{n_methods} algorithms detected the acute event</strong> —
+        ranked #{feb9_rank if feb9_rank else 'N/A'} in ensemble scoring across {len(daily)} days.
+      </div>
+    </div>"""
 
-    <h3>Limitations</h3>
-    <ul>
-        <li>Only 1 known positive event for validation (no specificity/PPV calculation possible)</li>
-        <li>LSTM autoencoder has limited training data ({len(daily)} days) - results should be interpreted cautiously</li>
-        <li>Oura Ring measurements are not medical devices and have inherent noise</li>
-        <li>tsfresh analysis depends on the number of HR data points per night (varies significantly)</li>
-    </ul>
-    """
+    # Event biometrics as stat cards
+    stats_html = f"""
+    <div class="cs-stats-row">
+      <div class="cs-stat">
+        <div class="cs-stat-number critical">{rmssd_txt}</div>
+        <div class="cs-stat-label">RMSSD (ms) — event night</div>
+      </div>
+      <div class="cs-stat">
+        <div class="cs-stat-number critical">{hr_txt}</div>
+        <div class="cs-stat-label">Mean HR (bpm) — event night</div>
+      </div>
+      <div class="cs-stat">
+        <div class="cs-stat-number warning">{ready_txt}</div>
+        <div class="cs-stat-label">Readiness — event day</div>
+      </div>
+      <div class="cs-stat">
+        <div class="cs-stat-number warning">{recovery_txt}</div>
+        <div class="cs-stat-label">Recovery index — event day</div>
+      </div>
+    </div>"""
+
+    # Top anomalies as findings cards
+    top_cards = []
+    for i, row in top5.iterrows():
+        d = row["date"]
+        score = row["ensemble_score"]
+        is_event = d == KNOWN_EVENT_DATE
+        sev = "critical" if score >= 0.7 else "severe" if score >= 0.5 else "moderate"
+        sev_label = "Critical" if score >= 0.7 else "Severe" if score >= 0.5 else "Moderate"
+        drow = daily[daily["date"] == d]
+        r_val = f'{drow["mean_rmssd"].iloc[0]:.1f} ms' if not drow.empty and pd.notna(drow["mean_rmssd"].iloc[0]) else "-"
+        h_val = f'{drow["mean_hr"].iloc[0]:.0f} bpm' if not drow.empty and pd.notna(drow["mean_hr"].iloc[0]) else "-"
+        event_tag = ' <span style="color:#FCA5A5;font-size:0.6875rem">(known event)</span>' if is_event else ""
+        top_cards.append(f"""
+        <div class="cs-finding">
+          <div class="cs-finding-header">
+            <span class="cs-finding-title">{d}{event_tag}</span>
+            <span class="cs-sev {sev}">{sev_label}</span>
+          </div>
+          <div class="cs-metric">
+            <span class="cs-metric-name">Ensemble score</span>
+            <span class="cs-metric-val{'  critical' if score >= 0.7 else ''}">{score:.3f}</span>
+          </div>
+          <div class="cs-metric">
+            <span class="cs-metric-name">RMSSD</span>
+            <span class="cs-metric-val">{r_val}</span>
+          </div>
+          <div class="cs-metric">
+            <span class="cs-metric-name">Heart rate</span>
+            <span class="cs-metric-val">{h_val}</span>
+          </div>
+        </div>""")
+
+    findings_html = f"""
+    <div class="cs-findings-grid">
+      {''.join(top_cards)}
+    </div>"""
+
+    # Clinical relevance as a finding card
+    relevance_html = f"""
+    <div class="cs-findings-grid">
+      <div class="cs-finding">
+        <div class="cs-finding-header">
+          <span class="cs-finding-title">Baseline RMSSD</span>
+          <span class="cs-sev critical">Deficient</span>
+        </div>
+        <div class="cs-metric">
+          <span class="cs-metric-name">Median RMSSD</span>
+          <span class="cs-metric-val critical">{baseline_rmssd_txt} ms</span>
+        </div>
+        <div class="cs-metric">
+          <span class="cs-metric-name">vs. deficiency threshold</span>
+          <span class="cs-metric-val">{'Below' if pd.notna(baseline_rmssd) and baseline_rmssd < ESC_RMSSD_DEFICIENCY else 'At'} {ESC_RMSSD_DEFICIENCY} ms (Kleiger 1987)</span>
+        </div>
+        <div class="cs-metric">
+          <span class="cs-metric-name">vs. population median</span>
+          <span class="cs-metric-val critical">{pct_below_median:.0f}% below ({POPULATION_RMSSD_MEDIAN} ms)</span>
+        </div>
+        <div class="cs-metric">
+          <span class="cs-metric-name">Post-HSCT expected</span>
+          <span class="cs-metric-val">{HSCT_TYPICAL_RMSSD[0]}-{HSCT_TYPICAL_RMSSD[1]} ms</span>
+        </div>
+      </div>
+      <div class="cs-finding">
+        <div class="cs-finding-header">
+          <span class="cs-finding-title">Nocturnal Heart Rate</span>
+          <span class="cs-sev critical">Elevated</span>
+        </div>
+        <div class="cs-metric">
+          <span class="cs-metric-name">Concern threshold</span>
+          <span class="cs-metric-val">{NOCTURNAL_HR_ELEVATED} bpm (nocturnal)</span>
+        </div>
+        <div class="cs-metric">
+          <span class="cs-metric-name">Note</span>
+          <span class="cs-metric-val" style="font-size:0.75rem">IST criterion (90 bpm) applies to 24-hour or resting awake HR, not sleep-only data</span>
+        </div>
+      </div>
+    </div>"""
+
+    # Limitations as conclusion block
+    limitations_html = f"""
+    <div class="cs-conclusion">
+      <strong>Limitations</strong> —
+      Single known positive event (no specificity/PPV calculation).
+      LSTM autoencoder trained on {len(daily)} days (limited).
+      Oura Ring PPG is not a medical device.
+      tsfresh features depend on HR data points per night (variable coverage).
+    </div>"""
+
+    return verdict_html + stats_html + findings_html + relevance_html + limitations_html
 
 
 # ===========================================================================
