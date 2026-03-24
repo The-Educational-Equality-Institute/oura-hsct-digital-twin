@@ -1479,6 +1479,12 @@ def run_rslds_analysis(
             "days": int(days_in_state),
             "pct": float(days_in_state / len(remapped_viterbi) * 100),
         }
+    no_data_days = int(np.sum(remapped_viterbi == -1))
+    if no_data_days > 0:
+        result["state_distribution"]["No Data"] = {
+            "days": no_data_days,
+            "pct": float(no_data_days / len(remapped_viterbi) * 100),
+        }
     log(tag, f"  Convergence: {result['convergence']['iterations']} iterations")
     for name, info in result["state_distribution"].items():
         log(tag, f"  {name}: {info['days']} days ({info['pct']:.1f}%)")
