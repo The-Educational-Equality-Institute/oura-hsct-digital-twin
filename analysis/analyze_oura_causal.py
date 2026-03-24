@@ -1281,9 +1281,9 @@ def run_pcmci(daily: pd.DataFrame) -> dict[str, Any]:
 
         print(f"    Found {len(sig_links)} significant causal links (alpha={PCMCI_ALPHA})")
         for link in sig_links[:5]:
-            direction = "+" if link["val"] > 0 else "-"
+            direction = "+" if link["correlation"] > 0 else "-"
             print(f"      {link['source']} -> {link['target']} (lag={link['lag']}, "
-                  f"r={link['val']:{direction}.3f}, p={link['p_value']:.4f})")
+                  f"r={link['correlation']:{direction}.3f}, p={link['p_value']:.4f})")
 
         return {
             "n_observations": int(n_obs),
