@@ -2511,11 +2511,16 @@ def _build_top_anomalies_table(ensemble: pd.DataFrame, daily: pd.DataFrame) -> s
             if pd.notna(r.get(c)) and r[c] > METHOD_SCORE_THRESHOLD
         )
 
+        # FDR q-value column
+        qval = r.get("min_fdr_qvalue")
+        qval_str = f"{qval:.4f}" if pd.notna(qval) else "-"
+
         rows.append(
             f"<tr{cls}>"
             f"<td>{int(r['rank'])}</td>"
             f"<td><strong>{r['date']}{event_mark}</strong></td>"
             f"<td>{r['ensemble_score']:.3f}</td>"
+            f"<td>{qval_str}</td>"
             f"<td>{rmssd}</td>"
             f"<td>{hr}</td>"
             f"<td>{eff}%</td>"
@@ -2528,13 +2533,13 @@ def _build_top_anomalies_table(ensemble: pd.DataFrame, daily: pd.DataFrame) -> s
         <table>
             <thead>
                 <tr>
-                    <th>#</th><th>Date</th><th>Ensemble Score</th><th>RMSSD (ms)</th>
+                    <th>#</th><th>Date</th><th>Ensemble Score</th><th>FDR q-value</th><th>RMSSD (ms)</th>
                     <th>HR (bpm)</th><th>Efficiency</th><th>Readiness</th><th>Methods (score &gt; 0.5)</th>
                 </tr>
             </thead>
             <tbody>{"".join(rows)}</tbody>
         </table>
-        <p style="font-size: 0.8125rem; color: {TEXT_SECONDARY};"><em>** = known acute event. Methods (score &gt; 0.5) is a soft support count and is not the same as strict Feb 9 detection validation above.</em></p>"""
+        <p style="font-size: 0.8125rem; color: {TEXT_SECONDARY};"><em>** = known acute event. FDR q-value = Benjamini-Hochberg corrected across all method x date tests. Methods (score &gt; 0.5) is a soft support count.</em></p>"""
 
 
 def _build_method_summary(all_results: dict) -> str:
