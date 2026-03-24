@@ -1505,8 +1505,16 @@ def build_html_report(
     concern_colors = {"HIGH": ACCENT_RED, "MODERATE": ACCENT_AMBER, "LOW": ACCENT_GREEN}
 
     # --- KPI Cards ---
-    bos_status = "critical" if bos_risk["composite_score"] > 50 else "warning" if bos_risk["composite_score"] > 30 else "normal"
-    bos_lbl = "Elevated" if bos_status in ("critical", "warning") else ""
+    bos_level = str(bos_risk.get("risk_level", "N/A")).upper()
+    if bos_level == "HIGH":
+        bos_status = "critical"
+    elif bos_level in {"ELEVATED", "MODERATE"}:
+        bos_status = "warning"
+    elif bos_level == "LOW":
+        bos_status = "normal"
+    else:
+        bos_status = "neutral"
+    bos_lbl = bos_level.title() if bos_level in {"HIGH", "ELEVATED", "MODERATE", "LOW"} else ""
     trend_status = "critical" if trend["slope_pct_per_day"] < SPO2_CONCERN_SLOPE else "normal"
     trend_lbl = "Declining" if trend_status in ("critical", "warning") else ""
     spo2_status = "normal" if variability["overall_mean"] >= 95 else "warning"
