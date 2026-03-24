@@ -1745,7 +1745,9 @@ def plot_pcmci(pcmci_results: dict[str, Any]) -> list[go.Figure]:
                         f"<b>{link['source']} -> {link['target']}</b><br>"
                         f"Lag: {link['lag']} day{'s' if link['lag'] != 1 else ''}<br>"
                         f"r = {link['correlation']:+.3f}<br>"
-                        f"p = {link['p_value']:.4f}"
+                        f"p = {link['p_value']:.4f}<br>"
+                        f"q(BH) = {link.get('q_value_bh', link['p_value']):.4f}"
+                        f"{' (FDR-sig)' if link.get('significant_fdr') else ''}"
                     ),
                     showlegend=False,
                 )
