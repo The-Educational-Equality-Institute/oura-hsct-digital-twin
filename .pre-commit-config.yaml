@@ -17,6 +17,17 @@ repos:
         args: ['--fix']
       - id: ruff-format
 
+  - repo: local
+    hooks:
+      - id: no-em-dash
+        name: No em dashes
+        entry: grep -Pn '\x{2014}' --include='*.py' --include='*.md' --include='*.json' -r .
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+        verbose: true
+
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.22.1
     hooks:
