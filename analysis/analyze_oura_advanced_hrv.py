@@ -1503,10 +1503,10 @@ def generate_html_report(metrics: dict, figures: dict) -> str:
     {fig_htmls.get("frequency_domain", "")}
     <table>
         <tr><th>Band</th><th>Power</th><th>Proportion</th><th>Interpretation</th></tr>
-        <tr><td>Lower proxy band</td><td>{freq.get("vlf_power", "N/A")}</td><td>{freq.get("vlf_pct", "?")}%</td><td>Lowest third of accessible RMSSD-epoch spectrum</td></tr>
-        <tr><td>Mid proxy band</td><td>{freq.get("lf_power", "N/A")}</td><td>{freq.get("lf_pct", "?")}%</td><td>Middle third of accessible RMSSD-epoch spectrum</td></tr>
-        <tr><td>Upper proxy band</td><td>{freq.get("hf_power", "N/A")}</td><td>{freq.get("hf_pct", "?")}%</td><td>Upper third of accessible RMSSD-epoch spectrum</td></tr>
-        <tr><td><strong>Upper/lower proxy ratio</strong></td><td colspan="2"><strong>{freq.get("lf_hf_ratio", "N/A")}</strong></td><td>Heuristic spectral balance only; not a standard sympathovagal index</td></tr>
+        <tr><td>Lower proxy band</td><td>{freq.get("proxy_band_low", "N/A")}</td><td>{freq.get("proxy_low_pct", "?")}%</td><td>Lowest third of accessible RMSSD-epoch spectrum</td></tr>
+        <tr><td>Mid proxy band</td><td>{freq.get("proxy_band_mid", "N/A")}</td><td>{freq.get("proxy_mid_pct", "?")}%</td><td>Middle third of accessible RMSSD-epoch spectrum</td></tr>
+        <tr><td>Upper proxy band</td><td>{freq.get("proxy_band_high", "N/A")}</td><td>{freq.get("proxy_high_pct", "?")}%</td><td>Upper third of accessible RMSSD-epoch spectrum</td></tr>
+        <tr><td><strong>Mid/high proxy ratio</strong></td><td colspan="2"><strong>{freq.get("proxy_ratio", "N/A")}</strong></td><td>Heuristic spectral balance only; not a standard sympathovagal index</td></tr>
     </table>"""
     body += make_section("1. Proxy Frequency Spectrum (Lomb-Scargle)", sec1_content)
 
