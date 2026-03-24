@@ -548,7 +548,7 @@ def run_isolation_forest(daily: pd.DataFrame) -> dict[str, Any]:
 
     n_anomalies = len(anomaly_dates)
     print(
-        f"  Detected {n_anomalies} anomalous days ({n_anomalies / len(df) * 100:.1f}%)"
+        f"  Detected {n_anomalies} anomalous days ({safe_divide(n_anomalies, len(df)) * 100:.1f}%)"
     )
     print(f"  Top 5 anomalies: {[str(d) for d in anomaly_dates[:5]]}")
     if results["feb9_detected"]:
