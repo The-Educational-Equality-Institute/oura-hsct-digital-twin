@@ -2192,7 +2192,10 @@ def compute_feature_importance(
       4. Cohen's d effect size between non-flare and flare days
     """
     log("FEATURES", "Computing predictive feature importance...")
-    log("FEATURES", "  Target: Viterbi state path (non-circular; independent of composite weights)")
+    log(
+        "FEATURES",
+        "  Target: Viterbi state path (non-circular; independent of composite weights)",
+    )
 
     features = [
         ("temp_dev", "Temperature Deviation (\u00b0C)"),
@@ -2221,8 +2224,10 @@ def compute_feature_importance(
     # viterbi_path uses -1 for no-data days.
     # Binary target: state >= 2 (Active Flare or Recovery) = high-risk
     n_daily = len(daily)
-    vp = viterbi_path[:n_daily] if len(viterbi_path) >= n_daily else np.pad(
-        viterbi_path, (0, n_daily - len(viterbi_path)), constant_values=-1
+    vp = (
+        viterbi_path[:n_daily]
+        if len(viterbi_path) >= n_daily
+        else np.pad(viterbi_path, (0, n_daily - len(viterbi_path)), constant_values=-1)
     )
 
     binary_target = pd.Series(
@@ -2237,7 +2242,10 @@ def compute_feature_importance(
 
     # Fallback: if too few flare days, broaden to state >= 1 (pre-flare+)
     if n_flare < 3 or n_nonflare < 3:
-        log("FEATURES", "  WARNING: Insufficient state variability, broadening to state >= 1")
+        log(
+            "FEATURES",
+            "  WARNING: Insufficient state variability, broadening to state >= 1",
+        )
         binary_target = pd.Series(
             np.where(vp >= 1, 1, np.where(vp >= 0, 0, np.nan)),
             index=daily.index,
