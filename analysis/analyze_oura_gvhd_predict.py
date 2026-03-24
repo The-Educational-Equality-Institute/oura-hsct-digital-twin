@@ -42,9 +42,9 @@ import time
 import traceback
 import warnings
 from contextlib import redirect_stderr
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -52,7 +52,6 @@ import plotly.graph_objects as go
 import plotly.io as pio
 from plotly.subplots import make_subplots
 from scipy import stats as scipy_stats
-from scipy.signal import find_peaks
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -60,16 +59,19 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 # Suppress ssm/tqdm progress bars
 import os as _os
+
 _os.environ["TQDM_DISABLE"] = "1"
 
 try:
     import ssm as _ssm_module
+
     SSM_AVAILABLE = True
 except (ImportError, Exception) as _ssm_err:
     SSM_AVAILABLE = False
 
 try:
     from hmmlearn.hmm import GaussianHMM as _HMMLearnGaussianHMM
+
     HMMLEARN_AVAILABLE = True
 except (ImportError, Exception) as _hmm_err:
     HMMLEARN_AVAILABLE = False
@@ -79,15 +81,31 @@ except (ImportError, Exception) as _hmm_err:
 # ---------------------------------------------------------------------------
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import (
-    DATABASE_PATH, REPORTS_DIR, TREATMENT_START,
-    KNOWN_EVENT_DATE, HEV_DIAGNOSIS_DATE, PATIENT_LABEL,
+    DATABASE_PATH,
+    REPORTS_DIR,
+    TREATMENT_START,
+    KNOWN_EVENT_DATE,
+    HEV_DIAGNOSIS_DATE,
+    PATIENT_LABEL,
     DATA_START as _DATA_START_DATE,
 )
+from _hardening import safe_divide
 from _theme import (
-    wrap_html, make_kpi_card, make_kpi_row, make_section,
-    BG_PRIMARY, BG_ELEVATED,
-    BORDER_SUBTLE, TEXT_PRIMARY, TEXT_SECONDARY,
-    ACCENT_BLUE, ACCENT_GREEN, ACCENT_RED, ACCENT_AMBER, ACCENT_PURPLE, ACCENT_CYAN,
+    wrap_html,
+    make_kpi_card,
+    make_kpi_row,
+    make_section,
+    BG_PRIMARY,
+    BG_ELEVATED,
+    BORDER_SUBTLE,
+    TEXT_PRIMARY,
+    TEXT_SECONDARY,
+    ACCENT_BLUE,
+    ACCENT_GREEN,
+    ACCENT_RED,
+    ACCENT_AMBER,
+    ACCENT_PURPLE,
+    ACCENT_CYAN,
 )
 from _bos_risk import load_bos_risk
 
@@ -112,6 +130,7 @@ DATA_END: str = ""  # set by _resolve_data_end() before first use
 def _resolve_data_end() -> str:
     """Query database for the latest available date across key tables."""
     import sqlite3 as _sql
+
     with _sql.connect(str(DATABASE_PATH)) as conn:
         row = conn.execute(
             "SELECT MAX(d) FROM ("
@@ -122,7 +141,10 @@ def _resolve_data_end() -> str:
         ).fetchone()
     if row and row[0]:
         return row[0]
-    raise RuntimeError("Unable to determine latest available Oura date from the database")
+    raise RuntimeError(
+        "Unable to determine latest available Oura date from the database"
+    )
+
 
 # BOS risk payload — loaded at runtime from canonical SpO2/BOS output
 _BOS_RISK = load_bos_risk(REPORTS_DIR)
@@ -333,9 +355,13 @@ def build_daily_features(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     hrv_daily = (
         data["hrv"]
         .groupby("date")
-        .agg(hrv_median=("rmssd", "median"), hrv_mean=("rmssd", "mean"),
-             hrv_std=("rmssd", "std"), hrv_min=("rmssd", "min"),
-             hrv_count=("rmssd", "count"))
+        .agg(
+            hrv_median=("rmssd", "median"),
+            hrv_mean=("rmssd", "mean"),
+            hrv_std=("rmssd", "std"),
+            hrv_min=("rmssd", "min"),
+            hrv_count=("rmssd", "count"),
+        )
         .reset_index()
     )
     hrv_daily["date"] = pd.to_datetime(hrv_daily["date"])
@@ -348,24 +374,37 @@ def build_daily_features(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     )
     sleep_primary = sleep_sorted.drop_duplicates(subset="date", keep="first")
     sleep_cols = sleep_primary[
-        ["date", "average_hrv", "average_heart_rate", "average_breath",
-         "total_sleep_duration", "rem_sleep_duration", "deep_sleep_duration",
-         "light_sleep_duration", "awake_time", "efficiency",
-         "lowest_heart_rate", "restless_periods", "period_id"]
+        [
+            "date",
+            "average_hrv",
+            "average_heart_rate",
+            "average_breath",
+            "total_sleep_duration",
+            "rem_sleep_duration",
+            "deep_sleep_duration",
+            "light_sleep_duration",
+            "awake_time",
+            "efficiency",
+            "lowest_heart_rate",
+            "restless_periods",
+            "period_id",
+        ]
     ].copy()
-    sleep_cols = sleep_cols.rename(columns={
-        "average_hrv": "sleep_hrv",
-        "average_heart_rate": "sleep_hr",
-        "average_breath": "sleep_breath",
-        "total_sleep_duration": "sleep_total_sec",
-        "rem_sleep_duration": "rem_sec",
-        "deep_sleep_duration": "deep_sec",
-        "light_sleep_duration": "light_sec",
-        "awake_time": "awake_sec",
-        "efficiency": "sleep_eff",
-        "lowest_heart_rate": "lowest_hr",
-        "restless_periods": "restless",
-    })
+    sleep_cols = sleep_cols.rename(
+        columns={
+            "average_hrv": "sleep_hrv",
+            "average_heart_rate": "sleep_hr",
+            "average_breath": "sleep_breath",
+            "total_sleep_duration": "sleep_total_sec",
+            "rem_sleep_duration": "rem_sec",
+            "deep_sleep_duration": "deep_sec",
+            "light_sleep_duration": "light_sec",
+            "awake_time": "awake_sec",
+            "efficiency": "sleep_eff",
+            "lowest_heart_rate": "lowest_hr",
+            "restless_periods": "restless",
+        }
+    )
     daily = daily.merge(sleep_cols, on="date", how="left")
 
     # --- Sleep architecture ratios ---
@@ -421,7 +460,10 @@ def build_daily_features(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     daily["hr_7d"] = daily["sleep_hr"].rolling(7, min_periods=3).mean()
 
     daily = daily.set_index("date")
-    log("FEATURES", f"Daily feature matrix: {daily.shape[0]} days x {daily.shape[1]} features")
+    log(
+        "FEATURES",
+        f"Daily feature matrix: {daily.shape[0]} days x {daily.shape[1]} features",
+    )
     log("FEATURES", f"  Missing data: {daily.isnull().sum().sum()} total NaN cells")
     return daily
 
@@ -447,12 +489,14 @@ def compute_epoch_fragmentation(
         # Count awake intrusions (phase 4)
         awake_epochs = np.sum(phases == 4)
         awake_pct_epoch = awake_epochs / len(phases) * 100 if len(phases) > 0 else 0
-        frag_rows.append({
-            "period_id": pid,
-            "frag_index": frag_idx,
-            "transitions": transitions,
-            "awake_epochs_pct": awake_pct_epoch,
-        })
+        frag_rows.append(
+            {
+                "period_id": pid,
+                "frag_index": frag_idx,
+                "transitions": transitions,
+                "awake_epochs_pct": awake_pct_epoch,
+            }
+        )
 
     frag_df = pd.DataFrame(frag_rows)
     frag_df = frag_df.merge(pid_date, on="period_id", how="left")
@@ -462,11 +506,11 @@ def compute_epoch_fragmentation(
     frag_df = frag_df.merge(pid_dur, on="period_id", how="left")
 
     # Take primary period per day (longest sleep duration, matching build_daily_features)
-    frag_daily = (
-        frag_df.sort_values(["date", "total_sleep_duration"], ascending=[True, False])
-        .drop_duplicates(subset="date", keep="first")
-        [["date", "frag_index", "transitions", "awake_epochs_pct"]]
-    )
+    frag_daily = frag_df.sort_values(
+        ["date", "total_sleep_duration"], ascending=[True, False]
+    ).drop_duplicates(subset="date", keep="first")[
+        ["date", "frag_index", "transitions", "awake_epochs_pct"]
+    ]
     return frag_daily
 
 
@@ -503,7 +547,10 @@ def analyze_temperature(daily: pd.DataFrame) -> dict[str, Any]:
         "max": float(var_7d.max()),
         "max_date": str(var_7d.idxmax().date()) if not var_7d.empty else None,
     }
-    log("TEMP", f"  Peak 7d variability: {result['variability_7d']['max']:.3f} °C on {result['variability_7d']['max_date']}")
+    log(
+        "TEMP",
+        f"  Peak 7d variability: {result['variability_7d']['max']:.3f} °C on {result['variability_7d']['max_date']}",
+    )
 
     # Autocorrelation structure (lag 1-7)
     acf_values = []
@@ -513,7 +560,7 @@ def analyze_temperature(daily: pd.DataFrame) -> dict[str, Any]:
             acf_values.append(float(acf) if not np.isnan(acf) else 0.0)
         else:
             acf_values.append(0.0)
-    result["autocorrelation"] = {f"lag_{i+1}": v for i, v in enumerate(acf_values)}
+    result["autocorrelation"] = {f"lag_{i + 1}": v for i, v in enumerate(acf_values)}
     log("TEMP", f"  Lag-1 autocorrelation: {acf_values[0]:.3f}")
 
     # Night-to-night gradient analysis
@@ -559,8 +606,7 @@ def analyze_temperature(daily: pd.DataFrame) -> dict[str, Any]:
     # Pre-event temperature pattern (7 days before Feb 9: days -6 through 0 inclusive)
     event_date = pd.Timestamp(KNOWN_EVENT_DATE)
     pre_window = daily.loc[
-        (daily.index >= event_date - timedelta(days=6))
-        & (daily.index <= event_date),
+        (daily.index >= event_date - timedelta(days=6)) & (daily.index <= event_date),
         "temp_dev",
     ]
     if not pre_window.empty:
@@ -572,11 +618,15 @@ def analyze_temperature(daily: pd.DataFrame) -> dict[str, Any]:
                 if not np.isnan(v)
             ],
         }
-        log("TEMP", f"  Pre-event (7d) mean temp: {result['pre_event_pattern']['mean']:.3f} °C")
+        log(
+            "TEMP",
+            f"  Pre-event (7d) mean temp: {result['pre_event_pattern']['mean']:.3f} °C",
+        )
 
     # Build temperature figure
     fig = make_subplots(
-        rows=3, cols=1,
+        rows=3,
+        cols=1,
         subplot_titles=(
             "Temperature Deviation (Daily)",
             "7-Day Temperature Variability (Rolling SD)",
@@ -594,21 +644,29 @@ def analyze_temperature(daily: pd.DataFrame) -> dict[str, Any]:
 
     fig.add_trace(
         go.Scatter(
-            x=daily.index, y=temp_pos,
-            mode="none", fill="tozeroy",
+            x=daily.index,
+            y=temp_pos,
+            mode="none",
+            fill="tozeroy",
             fillcolor="rgba(239, 68, 68, 0.08)",
-            showlegend=False, hoverinfo="skip",
+            showlegend=False,
+            hoverinfo="skip",
         ),
-        row=1, col=1,
+        row=1,
+        col=1,
     )
     fig.add_trace(
         go.Scatter(
-            x=daily.index, y=temp_neg,
-            mode="none", fill="tozeroy",
+            x=daily.index,
+            y=temp_neg,
+            mode="none",
+            fill="tozeroy",
             fillcolor="rgba(59, 130, 246, 0.08)",
-            showlegend=False, hoverinfo="skip",
+            showlegend=False,
+            hoverinfo="skip",
         ),
-        row=1, col=1,
+        row=1,
+        col=1,
     )
 
     # Highlight fever episodes (temp_dev > 0.5 °C) with background shading
@@ -627,10 +685,12 @@ def analyze_temperature(daily: pd.DataFrame) -> dict[str, Any]:
             fever_starts.append(daily.index[-1])
         for j in range(0, len(fever_starts) - 1, 2):
             fig.add_vrect(
-                x0=fever_starts[j], x1=fever_starts[j + 1],
+                x0=fever_starts[j],
+                x1=fever_starts[j + 1],
                 fillcolor="rgba(239, 68, 68, 0.06)",
                 line=dict(width=0),
-                row=1, col=1,
+                row=1,
+                col=1,
             )
 
     # Main temperature line
@@ -643,26 +703,39 @@ def analyze_temperature(daily: pd.DataFrame) -> dict[str, Any]:
             line=dict(width=1.8, color=ACCENT_BLUE),
             name="Temp Deviation",
             hovertemplate=(
-                "<b>%{x|%b %d, %Y}</b><br>"
-                "Deviation: %{y:+.2f} °C<br>"
-                "<extra></extra>"
+                "<b>%{x|%b %d, %Y}</b><br>Deviation: %{y:+.2f} °C<br><extra></extra>"
             ),
         ),
-        row=1, col=1,
+        row=1,
+        col=1,
     )
     # Zero baseline
-    fig.add_hline(y=0, line_dash="dot", line_color=TEXT_SECONDARY, opacity=0.4, row=1, col=1)
+    fig.add_hline(
+        y=0, line_dash="dot", line_color=TEXT_SECONDARY, opacity=0.4, row=1, col=1
+    )
     # Clinical thresholds with refined dash patterns
-    fig.add_hline(y=0.5, line_dash="dashdot", line_color="rgba(239, 68, 68, 0.35)",
-                  line_width=1, row=1, col=1,
-                  annotation_text="Fever threshold (+0.5 °C)",
-                  annotation_position="bottom right",
-                  annotation_font=dict(size=9, color=ACCENT_RED))
-    fig.add_hline(y=-0.5, line_dash="dashdot", line_color="rgba(59, 130, 246, 0.35)",
-                  line_width=1, row=1, col=1,
-                  annotation_text="Hypothermia (-0.5 °C)",
-                  annotation_position="top right",
-                  annotation_font=dict(size=9, color=ACCENT_BLUE))
+    fig.add_hline(
+        y=0.5,
+        line_dash="dashdot",
+        line_color="rgba(239, 68, 68, 0.35)",
+        line_width=1,
+        row=1,
+        col=1,
+        annotation_text="Fever threshold (+0.5 °C)",
+        annotation_position="bottom right",
+        annotation_font=dict(size=9, color=ACCENT_RED),
+    )
+    fig.add_hline(
+        y=-0.5,
+        line_dash="dashdot",
+        line_color="rgba(59, 130, 246, 0.35)",
+        line_width=1,
+        row=1,
+        col=1,
+        annotation_text="Hypothermia (-0.5 °C)",
+        annotation_position="top right",
+        annotation_font=dict(size=9, color=ACCENT_BLUE),
+    )
     _add_event_markers(fig, row=1, show_labels=True)
 
     # Panel 2: Rolling variability with refined gradient fill
@@ -676,12 +749,11 @@ def analyze_temperature(daily: pd.DataFrame) -> dict[str, Any]:
             fillcolor="rgba(245, 158, 11, 0.12)",
             name="7d Variability",
             hovertemplate=(
-                "<b>%{x|%b %d}</b><br>"
-                "7-day SD: %{y:.3f} °C<br>"
-                "<extra></extra>"
+                "<b>%{x|%b %d}</b><br>7-day SD: %{y:.3f} °C<br><extra></extra>"
             ),
         ),
-        row=2, col=1,
+        row=2,
+        col=1,
     )
     _add_event_markers(fig, row=2, show_labels=False)
 
@@ -705,12 +777,11 @@ def analyze_temperature(daily: pd.DataFrame) -> dict[str, Any]:
             marker_line=dict(width=0),
             name="Nightly Gradient",
             hovertemplate=(
-                "<b>%{x|%b %d}</b><br>"
-                "Gradient: %{y:+.3f} °C/night<br>"
-                "<extra></extra>"
+                "<b>%{x|%b %d}</b><br>Gradient: %{y:+.3f} °C/night<br><extra></extra>"
             ),
         ),
-        row=3, col=1,
+        row=3,
+        col=1,
     )
     _add_event_markers(fig, row=3, show_labels=False)
 
@@ -724,17 +795,23 @@ def analyze_temperature(daily: pd.DataFrame) -> dict[str, Any]:
     for row_i in range(1, 4):
         fig.update_xaxes(
             gridcolor="rgba(255,255,255,0.05)",
-            spikemode="across", spikethickness=1,
-            spikecolor="rgba(255,255,255,0.15)", spikesnap="cursor",
+            spikemode="across",
+            spikethickness=1,
+            spikecolor="rgba(255,255,255,0.15)",
+            spikesnap="cursor",
             spikedash="dot",
-            row=row_i, col=1,
+            row=row_i,
+            col=1,
         )
         fig.update_yaxes(
             gridcolor="rgba(255,255,255,0.05)",
-            spikemode="across", spikethickness=1,
-            spikecolor="rgba(255,255,255,0.15)", spikesnap="cursor",
+            spikemode="across",
+            spikethickness=1,
+            spikecolor="rgba(255,255,255,0.15)",
+            spikesnap="cursor",
             spikedash="dot",
-            row=row_i, col=1,
+            row=row_i,
+            col=1,
         )
     fig.update_yaxes(title_text="Temperature deviation (°C)", row=1, col=1)
     fig.update_yaxes(title_text="SD (°C)", row=2, col=1)
@@ -756,12 +833,15 @@ def _add_event_markers(fig: go.Figure, row: int, show_labels: bool = False) -> N
     for i, (date_str, label, color, dash_style) in enumerate(events):
         fig.add_shape(
             type="line",
-            x0=date_str, x1=date_str,
-            y0=0, y1=1,
+            x0=date_str,
+            x1=date_str,
+            y0=0,
+            y1=1,
             yref=f"y{row} domain" if row > 1 else "y domain",
             line=dict(color=color, dash=dash_style, width=1.5),
             opacity=0.7,
-            row=row, col=1,
+            row=row,
+            col=1,
         )
         if show_labels:
             fig.add_annotation(
@@ -776,7 +856,8 @@ def _add_event_markers(fig: go.Figure, row: int, show_labels: bool = False) -> N
                 font=dict(size=8, color=color, family="Inter, sans-serif"),
                 bgcolor="rgba(15, 17, 23, 0.75)",
                 borderpad=2,
-                row=row, col=1,
+                row=row,
+                col=1,
             )
 
 
@@ -905,15 +986,24 @@ def compute_gvhd_composite(daily: pd.DataFrame) -> tuple[pd.Series, dict[str, An
             "min": float(composite.min()),
             "min_date": str(composite.idxmin().date()),
         },
-        "pre_event_mean": float(pre_event_composite.mean()) if not pre_event_composite.empty else None,
-        "post_event_mean": float(post_event_composite.mean()) if not post_event_composite.empty else None,
+        "pre_event_mean": float(pre_event_composite.mean())
+        if not pre_event_composite.empty
+        else None,
+        "post_event_mean": float(post_event_composite.mean())
+        if not post_event_composite.empty
+        else None,
         "daily_scores": {
-            str(d.date()): round(float(v), 1) for d, v in composite.items() if not np.isnan(v)
+            str(d.date()): round(float(v), 1)
+            for d, v in composite.items()
+            if not np.isnan(v)
         },
     }
 
     log("COMPOSITE", f"  Composite mean: {result['composite_stats']['mean']:.1f}")
-    log("COMPOSITE", f"  Peak composite: {result['composite_stats']['max']:.1f} on {result['composite_stats']['max_date']}")
+    log(
+        "COMPOSITE",
+        f"  Peak composite: {result['composite_stats']['max']:.1f} on {result['composite_stats']['max_date']}",
+    )
     if result["pre_event_mean"] is not None:
         log("COMPOSITE", f"  Pre-event (7d) mean: {result['pre_event_mean']:.1f}")
     if result["post_event_mean"] is not None:
@@ -921,7 +1011,8 @@ def compute_gvhd_composite(daily: pd.DataFrame) -> tuple[pd.Series, dict[str, An
 
     # --- Figure: Composite score timeline ---
     fig = make_subplots(
-        rows=2, cols=1,
+        rows=2,
+        cols=1,
         subplot_titles=(
             "GVHD Composite Score (Daily + 7-Day Rolling)",
             "Component Breakdown (Stacked Weighted Contribution)",
@@ -933,7 +1024,8 @@ def compute_gvhd_composite(daily: pd.DataFrame) -> tuple[pd.Series, dict[str, An
     # Panel 1: Composite - daily markers with severity coloring
     fig.add_trace(
         go.Scatter(
-            x=daily.index, y=composite,
+            x=daily.index,
+            y=composite,
             mode="markers",
             marker=dict(
                 size=5,
@@ -944,10 +1036,13 @@ def compute_gvhd_composite(daily: pd.DataFrame) -> tuple[pd.Series, dict[str, An
                     [0.7, "rgba(239, 68, 68, 0.7)"],
                     [1, "rgba(239, 68, 68, 1.0)"],
                 ],
-                cmin=30, cmax=80,
+                cmin=30,
+                cmax=80,
                 colorbar=dict(
                     title=dict(text="Score", font=dict(size=10)),
-                    x=1.02, thickness=12, len=0.4,
+                    x=1.02,
+                    thickness=12,
+                    len=0.4,
                     tickfont=dict(size=9),
                     outlinewidth=0,
                 ),
@@ -955,36 +1050,41 @@ def compute_gvhd_composite(daily: pd.DataFrame) -> tuple[pd.Series, dict[str, An
             ),
             name="Daily Score",
             hovertemplate=(
-                "<b>%{x|%b %d}</b><br>"
-                "Composite: %{y:.1f}/100<br>"
-                "<extra></extra>"
+                "<b>%{x|%b %d}</b><br>Composite: %{y:.1f}/100<br><extra></extra>"
             ),
         ),
-        row=1, col=1,
+        row=1,
+        col=1,
     )
     # Bold 7-day rolling average as the hero line
     fig.add_trace(
         go.Scatter(
-            x=daily.index, y=composite_7d,
+            x=daily.index,
+            y=composite_7d,
             mode="lines",
             line=dict(color="#FFFFFF", width=3),
             name="7-Day Rolling Avg",
-            hovertemplate=(
-                "<b>%{x|%b %d}</b><br>"
-                "7d Avg: %{y:.1f}<br>"
-                "<extra></extra>"
-            ),
+            hovertemplate=("<b>%{x|%b %d}</b><br>7d Avg: %{y:.1f}<br><extra></extra>"),
         ),
-        row=1, col=1,
+        row=1,
+        col=1,
     )
     # Alert threshold with risk zone shading
-    fig.add_hline(y=65, line_dash="dash", line_color=ACCENT_RED,
-                  opacity=0.4, line_width=1, row=1, col=1,
-                  annotation_text="Alert (65)",
-                  annotation_position="bottom right",
-                  annotation_font=dict(size=9, color=ACCENT_RED))
-    fig.add_hrect(y0=65, y1=100, fillcolor="rgba(239, 68, 68, 0.04)",
-                  line_width=0, row=1, col=1)
+    fig.add_hline(
+        y=65,
+        line_dash="dash",
+        line_color=ACCENT_RED,
+        opacity=0.4,
+        line_width=1,
+        row=1,
+        col=1,
+        annotation_text="Alert (65)",
+        annotation_position="bottom right",
+        annotation_font=dict(size=9, color=ACCENT_RED),
+    )
+    fig.add_hrect(
+        y0=65, y1=100, fillcolor="rgba(239, 68, 68, 0.04)", line_width=0, row=1, col=1
+    )
     _add_event_markers(fig, row=1, show_labels=True)
 
     # Panel 2: Stacked component breakdown with clean transitions
@@ -1013,12 +1113,11 @@ def compute_gvhd_composite(daily: pd.DataFrame) -> tuple[pd.Series, dict[str, An
                     fillcolor=fill_rgba,
                     stackgroup="one",
                     hovertemplate=(
-                        f"<b>{label}</b><br>"
-                        "%{x|%b %d}: %{y:.1f}<br>"
-                        "<extra></extra>"
+                        f"<b>{label}</b><br>%{{x|%b %d}}: %{{y:.1f}}<br><extra></extra>"
                     ),
                 ),
-                row=2, col=1,
+                row=2,
+                col=1,
             )
 
     fig.update_layout(
@@ -1030,15 +1129,23 @@ def compute_gvhd_composite(daily: pd.DataFrame) -> tuple[pd.Series, dict[str, An
     for row_i in range(1, 3):
         fig.update_xaxes(
             gridcolor="rgba(255,255,255,0.05)",
-            spikemode="across", spikethickness=1,
-            spikecolor="rgba(255,255,255,0.15)", spikesnap="cursor",
-            spikedash="dot", row=row_i, col=1,
+            spikemode="across",
+            spikethickness=1,
+            spikecolor="rgba(255,255,255,0.15)",
+            spikesnap="cursor",
+            spikedash="dot",
+            row=row_i,
+            col=1,
         )
         fig.update_yaxes(
             gridcolor="rgba(255,255,255,0.05)",
-            spikemode="across", spikethickness=1,
-            spikecolor="rgba(255,255,255,0.15)", spikesnap="cursor",
-            spikedash="dot", row=row_i, col=1,
+            spikemode="across",
+            spikethickness=1,
+            spikecolor="rgba(255,255,255,0.15)",
+            spikesnap="cursor",
+            spikedash="dot",
+            row=row_i,
+            col=1,
         )
     fig.update_yaxes(title_text="Composite Score (0-100)", row=1, col=1)
     fig.update_yaxes(title_text="Weighted Contribution", row=2, col=1)
@@ -1108,7 +1215,10 @@ def _fit_rslds(
     # Enforce maximum iteration ceiling
     effective_iters = min(n_iters, _RSLDS_MAX_ITERS)
     if n_iters > _RSLDS_MAX_ITERS:
-        log("rSLDS", f"  Capping n_iters from {n_iters} to {_RSLDS_MAX_ITERS} (timeout guard)")
+        log(
+            "rSLDS",
+            f"  Capping n_iters from {n_iters} to {_RSLDS_MAX_ITERS} (timeout guard)",
+        )
 
     T, D = X.shape
     N = D  # Identity emission: latent dim = observation dim
@@ -1125,7 +1235,10 @@ def _fit_rslds(
         random.seed(seed)
         try:
             model = ssm.SLDS(
-                N=N, K=n_states, D=D, M=0,
+                N=N,
+                K=n_states,
+                D=D,
+                M=0,
                 transitions="recurrent",
                 dynamics="gaussian",
                 emissions="gaussian_id",
@@ -1149,7 +1262,10 @@ def _fit_rslds(
             # --- ELBO convergence validation ---
             # Discard restarts where ELBO diverged to NaN or -inf
             if not np.isfinite(final_elbo):
-                log("rSLDS", f"  Restart {restart + 1}/{n_restarts}: ELBO non-finite ({final_elbo}), discarding")
+                log(
+                    "rSLDS",
+                    f"  Restart {restart + 1}/{n_restarts}: ELBO non-finite ({final_elbo}), discarding",
+                )
                 failed_restarts += 1
                 continue
 
@@ -1158,7 +1274,10 @@ def _fit_rslds(
                 best_result = (model, elbos_arr, posterior)
 
         except Exception as e:
-            log("rSLDS", f"  Restart {restart + 1}/{n_restarts} (seed={seed}): failed ({e})")
+            log(
+                "rSLDS",
+                f"  Restart {restart + 1}/{n_restarts} (seed={seed}): failed ({e})",
+            )
             failed_restarts += 1
             continue
 
@@ -1178,7 +1297,10 @@ def _fit_rslds(
             for k in range(n_states):
                 diag = np.diag(sigmas[k])
                 if np.any(diag < _EMISSION_VAR_FLOOR):
-                    log("rSLDS", f"  State {k}: emission variance below floor, clamping to {_EMISSION_VAR_FLOOR}")
+                    log(
+                        "rSLDS",
+                        f"  State {k}: emission variance below floor, clamping to {_EMISSION_VAR_FLOOR}",
+                    )
                     np.fill_diagonal(sigmas[k], np.maximum(diag, _EMISSION_VAR_FLOOR))
             model.emissions.Sigmas = sigmas
     except Exception as e:
@@ -1249,12 +1371,14 @@ def _fit_hmm_fallback(
 
     # Set clinically-informed initial transition matrix
     model.startprob_ = np.array([0.6, 0.2, 0.1, 0.1])
-    model.transmat_ = np.array([
-        [0.80, 0.15, 0.02, 0.03],
-        [0.10, 0.60, 0.25, 0.05],
-        [0.02, 0.08, 0.70, 0.20],
-        [0.30, 0.10, 0.05, 0.55],
-    ])
+    model.transmat_ = np.array(
+        [
+            [0.80, 0.15, 0.02, 0.03],
+            [0.10, 0.60, 0.25, 0.05],
+            [0.02, 0.08, 0.70, 0.20],
+            [0.30, 0.10, 0.05, 0.55],
+        ]
+    )
     model.init_params = "mc"  # Only learn means and covariances from data
 
     stderr_buffer = io.StringIO()
@@ -1276,7 +1400,9 @@ def _fit_hmm_fallback(
 
     info = {
         "method": "GaussianHMM (hmmlearn)",
-        "converged": bool(model.monitor_.converged) if hasattr(model, "monitor_") else True,
+        "converged": bool(model.monitor_.converged)
+        if hasattr(model, "monitor_")
+        else True,
         "n_iter": int(model.monitor_.iter) if hasattr(model, "monitor_") else 200,
         "transition_matrix": model.transmat_.tolist(),
     }
@@ -1305,22 +1431,31 @@ def run_rslds_analysis(
     if not SSM_AVAILABLE and not HMMLEARN_AVAILABLE:
         log("MODEL", "Neither ssm nor hmmlearn is installed.")
         log("MODEL", "  Install dependencies:  bash scripts/install_full_stack.sh")
-        return np.array([]), np.array([]), {
-            "error": "No model backend available",
-            "install_instructions": {
-                "full_stack": "bash scripts/install_full_stack.sh",
+        return (
+            np.array([]),
+            np.array([]),
+            {
+                "error": "No model backend available",
+                "install_instructions": {
+                    "full_stack": "bash scripts/install_full_stack.sh",
+                },
             },
-        }
+        )
 
     tag = "rSLDS" if SSM_AVAILABLE else "HMM"
-    log(tag, f"Fitting {N_STATES}-state {'rSLDS' if SSM_AVAILABLE else 'Gaussian HMM (hmmlearn)'}...")
+    log(
+        tag,
+        f"Fitting {N_STATES}-state {'rSLDS' if SSM_AVAILABLE else 'Gaussian HMM (hmmlearn)'}...",
+    )
 
     # Build observation matrix: (T, 3)
-    obs_df = pd.DataFrame({
-        "composite": composite,
-        "temp_dev": daily["temp_dev"],
-        "hrv": daily["hrv_median"],
-    })
+    obs_df = pd.DataFrame(
+        {
+            "composite": composite,
+            "temp_dev": daily["temp_dev"],
+            "hrv": daily["hrv_median"],
+        }
+    )
 
     # --- Missing data handling ---
     total_cells = obs_df.size
@@ -1329,17 +1464,24 @@ def run_rslds_analysis(
     log(tag, f"  Missing data: {nan_cells}/{total_cells} cells ({nan_fraction:.1%})")
 
     if nan_fraction > _NAN_SKIP_THRESHOLD:
-        log(tag, f"  WARNING: NaN fraction ({nan_fraction:.1%}) exceeds {_NAN_SKIP_THRESHOLD:.0%} threshold")
-        log(tag, f"  Skipping rSLDS entirely due to excessive missing data")
+        log(
+            tag,
+            f"  WARNING: NaN fraction ({nan_fraction:.1%}) exceeds {_NAN_SKIP_THRESHOLD:.0%} threshold",
+        )
+        log(tag, "  Skipping rSLDS entirely due to excessive missing data")
         if HMMLEARN_AVAILABLE and SSM_AVAILABLE:
             log(tag, "  Attempting HMM with available data instead")
             # Let it fall through with reduced data -- HMM is more tolerant
         else:
-            return np.array([]), np.array([]), {
-                "error": f"Excessive missing data ({nan_fraction:.1%} > {_NAN_SKIP_THRESHOLD:.0%})",
-                "nan_cells": nan_cells,
-                "total_cells": total_cells,
-            }
+            return (
+                np.array([]),
+                np.array([]),
+                {
+                    "error": f"Excessive missing data ({nan_fraction:.1%} > {_NAN_SKIP_THRESHOLD:.0%})",
+                    "nan_cells": nan_cells,
+                    "total_cells": total_cells,
+                },
+            )
 
     # Forward-fill then back-fill NaN
     imputed_before = int(obs_df.isna().sum().sum())
@@ -1355,22 +1497,37 @@ def run_rslds_analysis(
 
     # --- Insufficient data guard ---
     if len(obs_clean) < _MIN_DATAPOINTS:
-        log(tag, f"  WARNING: Only {len(obs_clean)} valid observations, need >= {_MIN_DATAPOINTS}")
-        log(tag, f"  rSLDS with {N_STATES} states and continuous dynamics requires at least {_MIN_DATAPOINTS} data points (3 weeks)")
-        return np.array([]), np.array([]), {
-            "error": f"Insufficient data ({len(obs_clean)} < {_MIN_DATAPOINTS})",
-            "available_days": len(obs_clean),
-            "minimum_required": _MIN_DATAPOINTS,
-        }
+        log(
+            tag,
+            f"  WARNING: Only {len(obs_clean)} valid observations, need >= {_MIN_DATAPOINTS}",
+        )
+        log(
+            tag,
+            f"  rSLDS with {N_STATES} states and continuous dynamics requires at least {_MIN_DATAPOINTS} data points (3 weeks)",
+        )
+        return (
+            np.array([]),
+            np.array([]),
+            {
+                "error": f"Insufficient data ({len(obs_clean)} < {_MIN_DATAPOINTS})",
+                "available_days": len(obs_clean),
+                "minimum_required": _MIN_DATAPOINTS,
+            },
+        )
 
     # Standardize features
     obs_means = np.array(obs_clean.mean().to_numpy(dtype=np.float64), copy=True)
     obs_stds = np.array(obs_clean.std().to_numpy(dtype=np.float64), copy=True)
     obs_stds[obs_stds < 1e-6] = 1.0
-    X = ((obs_clean.to_numpy(dtype=np.float64) - obs_means) / obs_stds).astype(np.float64)
+    X = ((obs_clean.to_numpy(dtype=np.float64) - obs_means) / obs_stds).astype(
+        np.float64
+    )
 
     log(tag, f"  Observations: {X.shape[0]} days x {X.shape[1]} features")
-    log(tag, f"  Feature means: composite={obs_means[0]:.1f}, temp={obs_means[1]:.3f}, hrv={obs_means[2]:.1f}")
+    log(
+        tag,
+        f"  Feature means: composite={obs_means[0]:.1f}, temp={obs_means[1]:.3f}, hrv={obs_means[2]:.1f}",
+    )
 
     # --- Fit model with fallback chain ---
     used_fallback = False
@@ -1378,65 +1535,89 @@ def run_rslds_analysis(
     if SSM_AVAILABLE and nan_fraction <= _NAN_SKIP_THRESHOLD:
         try:
             state_probs, viterbi_path, elbos, model_info = _fit_rslds(
-                X, n_states=N_STATES, n_iters=50, n_restarts=3,
+                X,
+                n_states=N_STATES,
+                n_iters=50,
+                n_restarts=3,
             )
         except RuntimeError as e:
             log("rSLDS", f"  rSLDS fitting failed: {e}")
             if HMMLEARN_AVAILABLE:
                 log("rSLDS", "  Switching to HMM...")
                 state_probs, viterbi_path, elbos, model_info = _fit_hmm_fallback(
-                    X, n_states=N_STATES,
+                    X,
+                    n_states=N_STATES,
                 )
                 model_info["rslds_failure_reason"] = str(e)
                 used_fallback = True
                 tag = "HMM"
             else:
-                return np.array([]), np.array([]), {
-                    "error": f"rSLDS failed and hmmlearn not available: {e}"
-                }
+                return (
+                    np.array([]),
+                    np.array([]),
+                    {"error": f"rSLDS failed and hmmlearn not available: {e}"},
+                )
         except Exception as e:
             log("rSLDS", f"  rSLDS unexpected error: {e}")
             if HMMLEARN_AVAILABLE:
                 log("rSLDS", "  Switching to HMM...")
                 state_probs, viterbi_path, elbos, model_info = _fit_hmm_fallback(
-                    X, n_states=N_STATES,
+                    X,
+                    n_states=N_STATES,
                 )
                 model_info["rslds_failure_reason"] = str(e)
                 used_fallback = True
                 tag = "HMM"
             else:
-                return np.array([]), np.array([]), {
-                    "error": f"rSLDS failed and hmmlearn not available: {e}"
-                }
+                return (
+                    np.array([]),
+                    np.array([]),
+                    {"error": f"rSLDS failed and hmmlearn not available: {e}"},
+                )
     else:
         state_probs, viterbi_path, elbos, model_info = _fit_hmm_fallback(
-            X, n_states=N_STATES,
+            X,
+            n_states=N_STATES,
         )
         if SSM_AVAILABLE and nan_fraction > _NAN_SKIP_THRESHOLD:
-            model_info["rslds_skipped_reason"] = f"NaN fraction {nan_fraction:.1%} > {_NAN_SKIP_THRESHOLD:.0%}"
+            model_info["rslds_skipped_reason"] = (
+                f"NaN fraction {nan_fraction:.1%} > {_NAN_SKIP_THRESHOLD:.0%}"
+            )
         used_fallback = not SSM_AVAILABLE or nan_fraction > _NAN_SKIP_THRESHOLD
 
     # --- State assignment validation ---
     unique_states = np.unique(viterbi_path)
     if len(unique_states) == 1:
-        log(tag, f"  WARNING: Degenerate solution -- all {len(viterbi_path)} observations assigned to state {unique_states[0]}")
+        log(
+            tag,
+            f"  WARNING: Degenerate solution -- all {len(viterbi_path)} observations assigned to state {unique_states[0]}",
+        )
         if SSM_AVAILABLE and not used_fallback and HMMLEARN_AVAILABLE:
             log(tag, "  Re-trying with HMM to avoid degenerate solution...")
             state_probs, viterbi_path, elbos, model_info = _fit_hmm_fallback(
-                X, n_states=N_STATES,
+                X,
+                n_states=N_STATES,
             )
             model_info["rslds_degenerate"] = True
             used_fallback = True
             tag = "HMM"
             unique_states = np.unique(viterbi_path)
         if len(unique_states) == 1:
-            log(tag, "  WARNING: HMM also produced degenerate solution. Results may be unreliable.")
-            model_info["degenerate_warning"] = "All observations assigned to a single state"
+            log(
+                tag,
+                "  WARNING: HMM also produced degenerate solution. Results may be unreliable.",
+            )
+            model_info["degenerate_warning"] = (
+                "All observations assigned to a single state"
+            )
 
     # Validate state indices are in valid range
     if np.any(viterbi_path < 0) or np.any(viterbi_path >= N_STATES):
         bad_indices = np.where((viterbi_path < 0) | (viterbi_path >= N_STATES))[0]
-        log(tag, f"  WARNING: {len(bad_indices)} state indices out of range [0, {N_STATES-1}], clamping")
+        log(
+            tag,
+            f"  WARNING: {len(bad_indices)} state indices out of range [0, {N_STATES - 1}], clamping",
+        )
         viterbi_path = np.clip(viterbi_path, 0, N_STATES - 1)
 
     # Re-index to full date range (fill NaN days with uniform)
@@ -1525,9 +1706,14 @@ def run_rslds_analysis(
 
     # --- Figure: state probability heatmap ---
     model_short = "rSLDS" if not used_fallback else "HMM"
-    convergence_label = "ELBO Convergence (Laplace-EM)" if not used_fallback else "Log-Likelihood Convergence"
+    convergence_label = (
+        "ELBO Convergence (Laplace-EM)"
+        if not used_fallback
+        else "Log-Likelihood Convergence"
+    )
     fig = make_subplots(
-        rows=3, cols=1,
+        rows=3,
+        cols=1,
         subplot_titles=(
             f"{model_short} State Probabilities ({N_STATES} states x {len(daily)} days)",
             "Most Likely State (Viterbi Path)",
@@ -1562,7 +1748,8 @@ def run_rslds_analysis(
                     "<extra></extra>"
                 ),
             ),
-            row=1, col=1,
+            row=1,
+            col=1,
         )
     _add_event_markers(fig, row=1, show_labels=True)
 
@@ -1581,12 +1768,11 @@ def run_rslds_analysis(
                 showlegend=False,
                 width=86400000,  # 1 day in ms
                 hovertemplate=(
-                    f"<b>{STATE_NAMES[k]}</b><br>"
-                    "%{x|%b %d}<br>"
-                    "<extra></extra>"
+                    f"<b>{STATE_NAMES[k]}</b><br>%{{x|%b %d}}<br><extra></extra>"
                 ),
             ),
-            row=2, col=1,
+            row=2,
+            col=1,
         )
     _add_event_markers(fig, row=2)
 
@@ -1600,13 +1786,10 @@ def run_rslds_analysis(
                 marker=dict(size=3, color=ACCENT_BLUE, line=dict(width=0)),
                 line=dict(color=ACCENT_BLUE, width=2),
                 name="ELBO" if not used_fallback else "Log-Likelihood",
-                hovertemplate=(
-                    "Iteration %{x}<br>"
-                    "Value: %{y:.1f}<br>"
-                    "<extra></extra>"
-                ),
+                hovertemplate=("Iteration %{x}<br>Value: %{y:.1f}<br><extra></extra>"),
             ),
-            row=3, col=1,
+            row=3,
+            col=1,
         )
 
     fig.update_layout(
@@ -1619,17 +1802,24 @@ def run_rslds_analysis(
     for row_i in range(1, 4):
         fig.update_xaxes(
             gridcolor="rgba(255,255,255,0.05)",
-            spikemode="across", spikethickness=1,
-            spikecolor="rgba(255,255,255,0.15)", spikesnap="cursor",
-            spikedash="dot", row=row_i, col=1,
+            spikemode="across",
+            spikethickness=1,
+            spikecolor="rgba(255,255,255,0.15)",
+            spikesnap="cursor",
+            spikedash="dot",
+            row=row_i,
+            col=1,
         )
         fig.update_yaxes(
             gridcolor="rgba(255,255,255,0.05)",
-            row=row_i, col=1,
+            row=row_i,
+            col=1,
         )
     fig.update_yaxes(title_text="P(state)", range=[0, 1], row=1, col=1)
     fig.update_yaxes(title_text="State", showticklabels=False, row=2, col=1)
-    fig.update_yaxes(title_text="ELBO" if not used_fallback else "Log-Likelihood", row=3, col=1)
+    fig.update_yaxes(
+        title_text="ELBO" if not used_fallback else "Log-Likelihood", row=3, col=1
+    )
     fig.update_xaxes(title_text="Iteration", row=3, col=1)
 
     figures.append(fig)
@@ -1670,13 +1860,17 @@ def evaluate_alerts(
 
         # RED alert: high pre-flare or any active flare probability
         if p_preflare > RED_PREFLARE_PROB or p_flare > RED_FLARE_PROB:
-            alerts.append({
-                "date": date_str,
-                "level": "RED",
-                "p_preflare": round(float(p_preflare), 3),
-                "p_flare": round(float(p_flare), 3),
-                "composite": round(float(composite.iloc[i]), 1) if i < len(composite) else None,
-            })
+            alerts.append(
+                {
+                    "date": date_str,
+                    "level": "RED",
+                    "p_preflare": round(float(p_preflare), 3),
+                    "p_flare": round(float(p_flare), 3),
+                    "composite": round(float(composite.iloc[i]), 1)
+                    if i < len(composite)
+                    else None,
+                }
+            )
             consec_preflare = 0
             active_yellow = False
             continue
@@ -1685,14 +1879,18 @@ def evaluate_alerts(
         if p_preflare > YELLOW_PREFLARE_PROB:
             consec_preflare += 1
             if consec_preflare >= YELLOW_CONSEC_DAYS and not active_yellow:
-                alerts.append({
-                    "date": date_str,
-                    "level": "YELLOW",
-                    "p_preflare": round(float(p_preflare), 3),
-                    "p_flare": round(float(p_flare), 3),
-                    "consecutive_days": consec_preflare,
-                    "composite": round(float(composite.iloc[i]), 1) if i < len(composite) else None,
-                })
+                alerts.append(
+                    {
+                        "date": date_str,
+                        "level": "YELLOW",
+                        "p_preflare": round(float(p_preflare), 3),
+                        "p_flare": round(float(p_flare), 3),
+                        "consecutive_days": consec_preflare,
+                        "composite": round(float(composite.iloc[i]), 1)
+                        if i < len(composite)
+                        else None,
+                    }
+                )
                 active_yellow = True
         else:
             consec_preflare = 0
@@ -1711,11 +1909,11 @@ def evaluate_alerts(
     if event_idx is not None:
         # Find first RED alert before or on event date
         pre_event_reds = [
-            a for a in alerts
-            if a["level"] == "RED" and a["date"] <= KNOWN_EVENT_DATE
+            a for a in alerts if a["level"] == "RED" and a["date"] <= KNOWN_EVENT_DATE
         ]
         pre_event_yellows = [
-            a for a in alerts
+            a
+            for a in alerts
             if a["level"] == "YELLOW" and a["date"] <= KNOWN_EVENT_DATE
         ]
 
@@ -1725,7 +1923,10 @@ def evaluate_alerts(
             validation["first_red_alert"] = first_red["date"]
             validation["red_lead_time_days"] = lead_days
             validation["detected"] = True
-            log("ALERTS", f"  First RED alert: {first_red['date']} ({lead_days}d before event)")
+            log(
+                "ALERTS",
+                f"  First RED alert: {first_red['date']} ({lead_days}d before event)",
+            )
         else:
             validation["detected"] = False
             log("ALERTS", "  No RED alert before Feb 9 event")
@@ -1735,7 +1936,10 @@ def evaluate_alerts(
             lead_days_y = (event_date - pd.Timestamp(first_yellow["date"])).days
             validation["first_yellow_alert"] = first_yellow["date"]
             validation["yellow_lead_time_days"] = lead_days_y
-            log("ALERTS", f"  First YELLOW alert: {first_yellow['date']} ({lead_days_y}d before event)")
+            log(
+                "ALERTS",
+                f"  First YELLOW alert: {first_yellow['date']} ({lead_days_y}d before event)",
+            )
 
         # N=1 case study — descriptive detection statistics only.
         # Sensitivity/specificity require an external validation cohort
@@ -1755,7 +1959,10 @@ def evaluate_alerts(
         validation["red_alerts_outside_event_window"] = red_outside_window
         validation["study_type"] = "N=1 retrospective case study"
         validation["validation_note"] = "External cohort validation required"
-        log("ALERTS", f"  N=1 case study: {red_in_window} RED alert(s) within ±3d of event, {red_outside_window} outside")
+        log(
+            "ALERTS",
+            f"  N=1 case study: {red_in_window} RED alert(s) within ±3d of event, {red_outside_window} outside",
+        )
 
     # Summary
     n_red = sum(1 for a in alerts if a["level"] == "RED")
@@ -1779,7 +1986,8 @@ def evaluate_alerts(
 
     # --- Figure: Alert timeline ---
     fig = make_subplots(
-        rows=2, cols=1,
+        rows=2,
+        cols=1,
         subplot_titles=(
             "Early Warning Alert Timeline",
             "Pre-flare Probability with Alert Thresholds",
@@ -1791,17 +1999,17 @@ def evaluate_alerts(
     # Panel 1: Composite score baseline with dramatic alert markers
     fig.add_trace(
         go.Scatter(
-            x=dates, y=composite,
+            x=dates,
+            y=composite,
             mode="lines",
             line=dict(color=TEXT_SECONDARY, width=1.2),
             name="Composite Score",
             hovertemplate=(
-                "<b>%{x|%b %d}</b><br>"
-                "Composite: %{y:.1f}<br>"
-                "<extra></extra>"
+                "<b>%{x|%b %d}</b><br>Composite: %{y:.1f}<br><extra></extra>"
             ),
         ),
-        row=1, col=1,
+        row=1,
+        col=1,
     )
     # Separate RED and YELLOW alerts for legend clarity
     red_alerts = [a for a in alerts if a["level"] == "RED"]
@@ -1828,7 +2036,8 @@ def evaluate_alerts(
                     "<extra></extra>"
                 ),
             ),
-            row=1, col=1,
+            row=1,
+            col=1,
         )
 
     if yellow_alerts:
@@ -1852,7 +2061,8 @@ def evaluate_alerts(
                     "<extra></extra>"
                 ),
             ),
-            row=1, col=1,
+            row=1,
+            col=1,
         )
     _add_event_markers(fig, row=1)
 
@@ -1867,12 +2077,11 @@ def evaluate_alerts(
             fill="tozeroy",
             fillcolor="rgba(245, 158, 11, 0.10)",
             hovertemplate=(
-                "<b>%{x|%b %d}</b><br>"
-                "P(Pre-flare): %{y:.1%}<br>"
-                "<extra></extra>"
+                "<b>%{x|%b %d}</b><br>P(Pre-flare): %{y:.1%}<br><extra></extra>"
             ),
         ),
-        row=2, col=1,
+        row=2,
+        col=1,
     )
     fig.add_trace(
         go.Scatter(
@@ -1884,24 +2093,33 @@ def evaluate_alerts(
             fill="tozeroy",
             fillcolor="rgba(239, 68, 68, 0.10)",
             hovertemplate=(
-                "<b>%{x|%b %d}</b><br>"
-                "P(Active Flare): %{y:.1%}<br>"
-                "<extra></extra>"
+                "<b>%{x|%b %d}</b><br>P(Active Flare): %{y:.1%}<br><extra></extra>"
             ),
         ),
-        row=2, col=1,
+        row=2,
+        col=1,
     )
     # Threshold lines with refined styling
     fig.add_hline(
-        y=YELLOW_PREFLARE_PROB, line_dash="dash", line_color=ACCENT_AMBER,
-        opacity=0.5, line_width=1, row=2, col=1,
+        y=YELLOW_PREFLARE_PROB,
+        line_dash="dash",
+        line_color=ACCENT_AMBER,
+        opacity=0.5,
+        line_width=1,
+        row=2,
+        col=1,
         annotation_text=f"YELLOW ({YELLOW_PREFLARE_PROB})",
         annotation_position="bottom right",
         annotation_font=dict(size=9, color=ACCENT_AMBER),
     )
     fig.add_hline(
-        y=RED_PREFLARE_PROB, line_dash="dash", line_color=ACCENT_RED,
-        opacity=0.5, line_width=1, row=2, col=1,
+        y=RED_PREFLARE_PROB,
+        line_dash="dash",
+        line_color=ACCENT_RED,
+        opacity=0.5,
+        line_width=1,
+        row=2,
+        col=1,
         annotation_text=f"RED ({RED_PREFLARE_PROB})",
         annotation_position="top right",
         annotation_font=dict(size=9, color=ACCENT_RED),
@@ -1917,13 +2135,18 @@ def evaluate_alerts(
     for row_i in range(1, 3):
         fig.update_xaxes(
             gridcolor="rgba(255,255,255,0.05)",
-            spikemode="across", spikethickness=1,
-            spikecolor="rgba(255,255,255,0.15)", spikesnap="cursor",
-            spikedash="dot", row=row_i, col=1,
+            spikemode="across",
+            spikethickness=1,
+            spikecolor="rgba(255,255,255,0.15)",
+            spikesnap="cursor",
+            spikedash="dot",
+            row=row_i,
+            col=1,
         )
         fig.update_yaxes(
             gridcolor="rgba(255,255,255,0.05)",
-            row=row_i, col=1,
+            row=row_i,
+            col=1,
         )
     fig.update_yaxes(title_text="Composite Score", row=1, col=1)
     fig.update_yaxes(title_text="Probability", range=[0, 1], row=2, col=1)
@@ -2008,10 +2231,16 @@ def compute_feature_importance(
         high_vals = f_vals[t_vals == 1]
         if len(low_vals) > 2 and len(high_vals) > 2:
             n_low, n_high = len(low_vals), len(high_vals)
-            pooled_std = np.sqrt(
-                ((n_low - 1) * low_vals.std(ddof=1)**2 + (n_high - 1) * high_vals.std(ddof=1)**2)
-                / (n_low + n_high - 2)
-            ) + 1e-6
+            pooled_std = (
+                np.sqrt(
+                    (
+                        (n_low - 1) * low_vals.std(ddof=1) ** 2
+                        + (n_high - 1) * high_vals.std(ddof=1) ** 2
+                    )
+                    / (n_low + n_high - 2)
+                )
+                + 1e-6
+            )
             cohens_d = (high_vals.mean() - low_vals.mean()) / pooled_std
         else:
             cohens_d = 0.0
@@ -2024,22 +2253,29 @@ def compute_feature_importance(
             + min(abs(cohens_d) / 2, 1) * 0.2
         )
 
-        results.append({
-            "feature": col,
-            "label": label,
-            "correlation": round(float(corr), 4),
-            "p_value": round(float(p_val), 6),
-            "mutual_info": round(float(mi), 4),
-            "composite_corr": round(float(comp_corr) if not np.isnan(comp_corr) else 0, 4),
-            "cohens_d": round(float(cohens_d), 4),
-            "importance": round(float(importance), 4),
-        })
+        results.append(
+            {
+                "feature": col,
+                "label": label,
+                "correlation": round(float(corr), 4),
+                "p_value": round(float(p_val), 6),
+                "mutual_info": round(float(mi), 4),
+                "composite_corr": round(
+                    float(comp_corr) if not np.isnan(comp_corr) else 0, 4
+                ),
+                "cohens_d": round(float(cohens_d), 4),
+                "importance": round(float(importance), 4),
+            }
+        )
 
     # Sort by importance
     results.sort(key=lambda x: x["importance"], reverse=True)
 
     for r in results[:5]:
-        log("FEATURES", f"  {r['label']}: importance={r['importance']:.3f} (corr={r['correlation']:.3f}, MI={r['mutual_info']:.3f})")
+        log(
+            "FEATURES",
+            f"  {r['label']}: importance={r['importance']:.3f} (corr={r['correlation']:.3f}, MI={r['mutual_info']:.3f})",
+        )
 
     # --- Figure: Feature importance ---
     fig = go.Figure()
@@ -2077,11 +2313,7 @@ def compute_feature_importance(
             text=[f"  {v:.3f}" for v in importances[::-1]],
             textposition="outside",
             textfont=dict(size=11, color=TEXT_PRIMARY),
-            hovertemplate=(
-                "<b>%{y}</b><br>"
-                "Importance: %{x:.3f}<br>"
-                "<extra></extra>"
-            ),
+            hovertemplate=("<b>%{y}</b><br>Importance: %{x:.3f}<br><extra></extra>"),
         )
     )
 
@@ -2129,9 +2361,7 @@ def _mutual_information(x: np.ndarray, y: np.ndarray, n_bins: int = 5) -> float:
 # ===========================================================================
 # Section 8: BOS Risk Integration
 # ===========================================================================
-def bos_risk_integration(
-    daily: pd.DataFrame, composite: pd.Series
-) -> dict[str, Any]:
+def bos_risk_integration(daily: pd.DataFrame, composite: pd.Series) -> dict[str, Any]:
     """
     Integrate BOS (Bronchiolitis Obliterans Syndrome) risk with systemic GVHD.
     BOS is the pulmonary manifestation of chronic GVHD.
@@ -2139,14 +2369,22 @@ def bos_risk_integration(
     log("BOS", "Integrating BOS risk with systemic GVHD assessment...")
 
     if BOS_RISK_SCORE is not None:
-        log("BOS", f"  Loaded BOS score from SpO2 analysis: {BOS_RISK_SCORE} ({BOS_RISK_LEVEL})")
+        log(
+            "BOS",
+            f"  Loaded BOS score from SpO2 analysis: {BOS_RISK_SCORE} ({BOS_RISK_LEVEL})",
+        )
     else:
-        log("BOS", "  WARNING: spo2_bos_metrics.json unavailable — BOS score will be N/A")
+        log(
+            "BOS",
+            "  WARNING: spo2_bos_metrics.json unavailable — BOS score will be N/A",
+        )
 
     result: dict[str, Any] = {
         "bos_risk_score": BOS_RISK_SCORE if BOS_RISK_SCORE is not None else "N/A",
         "bos_risk_level": BOS_RISK_LEVEL if BOS_RISK_LEVEL is not None else "N/A",
-        "bos_recommendation": BOS_RISK_RECOMMENDATION if BOS_RISK_RECOMMENDATION else "N/A",
+        "bos_recommendation": BOS_RISK_RECOMMENDATION
+        if BOS_RISK_RECOMMENDATION
+        else "N/A",
     }
 
     # SpO2 analysis for pulmonary component
@@ -2158,14 +2396,21 @@ def bos_risk_integration(
             "min": round(float(spo2.min()), 2),
             "below_96": int((spo2 < 96).sum()),
             "below_95": int((spo2 < 95).sum()),
-            "trend_slope": round(float(np.polyfit(range(len(spo2)), spo2.values, 1)[0]), 4),
+            "trend_slope": round(
+                float(np.polyfit(range(len(spo2)), spo2.values, 1)[0]), 4
+            ),
             "n_readings": len(spo2),
         }
-        log("BOS", f"  SpO2 mean: {result['spo2_stats']['mean']}%, readings: {result['spo2_stats']['n_readings']}")
+        log(
+            "BOS",
+            f"  SpO2 mean: {result['spo2_stats']['mean']}%, readings: {result['spo2_stats']['n_readings']}",
+        )
         log("BOS", f"  SpO2 < 96%: {result['spo2_stats']['below_96']} days")
         log("BOS", f"  SpO2 trend: {result['spo2_stats']['trend_slope']:.4f} %/day")
     else:
-        result["spo2_stats"] = {"note": "Insufficient SpO2 data for pulmonary assessment"}
+        result["spo2_stats"] = {
+            "note": "Insufficient SpO2 data for pulmonary assessment"
+        }
         log("BOS", "  Insufficient SpO2 data")
 
     # Breathing rate correlation with GVHD composite
@@ -2175,7 +2420,9 @@ def bos_risk_integration(
         shared_idx = breath.index.intersection(composite.dropna().index)
         if len(shared_idx) > 10:
             breath_corr = breath.loc[shared_idx].corr(composite.loc[shared_idx])
-            result["breath_composite_correlation"] = round(float(breath_corr) if pd.notna(breath_corr) else 0.0, 3)
+            result["breath_composite_correlation"] = round(
+                float(breath_corr) if pd.notna(breath_corr) else 0.0, 3
+            )
             log("BOS", f"  Breathing rate - composite correlation: {breath_corr:.3f}")
 
     # Combined pulmonary-systemic risk
@@ -2196,8 +2443,10 @@ def bos_risk_integration(
             "pulmonary_component": round(bos_val * pulmonary_factor, 1),
             "combined_score": round(combined_risk, 1),
             "interpretation": (
-                "HIGH" if combined_risk > 60
-                else "MODERATE" if combined_risk > 40
+                "HIGH"
+                if combined_risk > 60
+                else "MODERATE"
+                if combined_risk > 40
                 else "LOW"
             ),
         }
@@ -2208,13 +2457,18 @@ def bos_risk_integration(
             "pulmonary_component": "N/A",
             "combined_score": round(systemic_mean, 1),
             "interpretation": (
-                "HIGH" if systemic_mean > 60
-                else "MODERATE" if systemic_mean > 40
+                "HIGH"
+                if systemic_mean > 60
+                else "MODERATE"
+                if systemic_mean > 40
                 else "LOW"
             ),
             "note": "BOS component unavailable — systemic score only",
         }
-    log("BOS", f"  Combined risk: {result['combined_risk']['combined_score']:.1f} ({result['combined_risk']['interpretation']})")
+    log(
+        "BOS",
+        f"  Combined risk: {result['combined_risk']['combined_score']:.1f} ({result['combined_risk']['interpretation']})",
+    )
 
     # Ruxolitinib impact assessment
     rux_date = pd.Timestamp(RUXOLITINIB_START)
@@ -2226,10 +2480,15 @@ def bos_risk_integration(
             "post_mean": round(float(post_rux.mean()), 1),
             "delta": round(float(post_rux.mean() - pre_rux.mean()), 1),
             "post_days": len(post_rux),
-            "note": "Too early to assess (< 7 days)" if len(post_rux) < 7 else "Preliminary assessment",
+            "note": "Too early to assess (< 7 days)"
+            if len(post_rux) < 7
+            else "Preliminary assessment",
         }
-        log("BOS", f"  Ruxolitinib: pre={result['ruxolitinib_response']['pre_mean']}, "
-            f"post={result['ruxolitinib_response']['post_mean']} ({result['ruxolitinib_response']['post_days']}d)")
+        log(
+            "BOS",
+            f"  Ruxolitinib: pre={result['ruxolitinib_response']['pre_mean']}, "
+            f"post={result['ruxolitinib_response']['post_mean']} ({result['ruxolitinib_response']['post_days']}d)",
+        )
 
     log("BOS", "BOS risk integration complete.")
     return result
@@ -2252,9 +2511,7 @@ def generate_html_report(
     # --- Build figure HTML snippets ---
     fig_htmls: list[str] = []
     for fig in figures:
-        fig_htmls.append(
-            fig.to_html(full_html=False, include_plotlyjs=False)
-        )
+        fig_htmls.append(fig.to_html(full_html=False, include_plotlyjs=False))
 
     def _fig(idx: int) -> str:
         return fig_htmls[idx] if idx < len(fig_htmls) else "<p>No figure available</p>"
@@ -2268,23 +2525,35 @@ def generate_html_report(
     model_info = rslds_result.get("model_info", {})
     state_model_label = "HMM" if "HMM" in model_type else "rSLDS"
     state_status = (
-        "critical" if viterbi_state in ("Active Flare", "Pre-flare")
-        else "normal" if viterbi_state in ("Remission", "Recovery")
+        "critical"
+        if viterbi_state in ("Active Flare", "Pre-flare")
+        else "normal"
+        if viterbi_state in ("Remission", "Recovery")
         else "info"
     )
     state_label = (
-        "Flare" if viterbi_state in ("Active Flare", "Pre-flare")
-        else "Stable" if viterbi_state in ("Remission", "Recovery")
+        "Flare"
+        if viterbi_state in ("Active Flare", "Pre-flare")
+        else "Stable"
+        if viterbi_state in ("Remission", "Recovery")
         else ""
     )
 
-    red_in_window = alert_result.get("validation", {}).get("red_alerts_in_event_window", 0)
-    red_outside_window = alert_result.get("validation", {}).get("red_alerts_outside_event_window", 0)
+    red_in_window = alert_result.get("validation", {}).get(
+        "red_alerts_in_event_window", 0
+    )
+    red_outside_window = alert_result.get("validation", {}).get(
+        "red_alerts_outside_event_window", 0
+    )
     total_red = alert_result.get("summary", {}).get("n_red", 0)
     red_label = "Detected" if total_red else "None"
 
     top_features = feature_result.get("rankings", [])[:3]
-    top_feature_labels = ", ".join(r["label"] for r in top_features) if top_features else "HRV / heart-rate features"
+    top_feature_labels = (
+        ", ".join(r["label"] for r in top_features)
+        if top_features
+        else "HRV / heart-rate features"
+    )
     model_method = model_info.get("method", model_type)
 
     combined_score = bos_result.get("combined_risk", {}).get("combined_score", "N/A")
@@ -2293,13 +2562,17 @@ def generate_html_report(
     # A low wearable-derived score means the model under-captures organ burden,
     # not that the patient is healthy.
     combined_status = (
-        "critical" if combined_interp == "HIGH"
-        else "warning" if combined_interp in {"MODERATE", "ELEVATED", "LOW"}
+        "critical"
+        if combined_interp == "HIGH"
+        else "warning"
+        if combined_interp in {"MODERATE", "ELEVATED", "LOW"}
         else "normal"
     )
     combined_label = (
-        "High" if combined_interp == "HIGH"
-        else "Elevated" if combined_interp in {"MODERATE", "ELEVATED"}
+        "High"
+        if combined_interp == "HIGH"
+        else "Elevated"
+        if combined_interp in {"MODERATE", "ELEVATED"}
         else "Low — model limited"
     )
 
@@ -2333,7 +2606,9 @@ def generate_html_report(
         ),
         make_kpi_card(
             "Combined GVHD + BOS",
-            combined_score if isinstance(combined_score, (int, float)) else combined_score,
+            combined_score
+            if isinstance(combined_score, (int, float))
+            else combined_score,
             status=combined_status,
             detail=f"{combined_interp} — wearable signals only (14 organ systems affected)",
             decimals=1,
@@ -2378,8 +2653,7 @@ def generate_html_report(
         "Six biometric streams weighted by clinical relevance: "
         "temperature (25%), HRV (20%), SpO2 (15%), sleep fragmentation (15%), resting HR (15%), activity (10%). "
         "Each component z-scored against first 14 days baseline, normalized to 0-100 (higher = more GVHD-like)."
-        "</div>"
-        + _fig(1)
+        "</div>" + _fig(1)
     )
     body += make_section("2. Multi-Stream GVHD Composite Score", sec2)
 
@@ -2397,9 +2671,7 @@ def generate_html_report(
         f"<h3>{state_model_label} State Distribution</h3>"
         "<table><thead><tr>"
         "<th>State</th><th>Days</th><th>Percentage</th>"
-        "</tr></thead><tbody>"
-        + state_rows
-        + "</tbody></table>"
+        "</tr></thead><tbody>" + state_rows + "</tbody></table>"
     )
 
     if "HMM" in model_type:
@@ -2412,9 +2684,7 @@ def generate_html_report(
             '<div class="methodology">'
             "4-state Gaussian HMM (hmmlearn) fitted to composite score + temperature deviation + HRV "
             f"(3 features). rSLDS was unavailable in this run. Reason: {fallback_reason}."
-            "</div>"
-            + _fig(2)
-            + state_table
+            "</div>" + _fig(2) + state_table
         )
     else:
         sec3 = (
@@ -2423,9 +2693,7 @@ def generate_html_report(
             "(Linderman et al. 2017). Each discrete state governs linear dynamics in a continuous "
             "latent space, with recurrent transitions that depend on the latent state. "
             "Observations: composite score + temperature deviation + HRV (3 features)."
-            "</div>"
-            + _fig(2)
-            + state_table
+            "</div>" + _fig(2) + state_table
         )
     body += make_section(f"3. {state_model_label} State Model", sec3)
 
@@ -2433,7 +2701,9 @@ def generate_html_report(
     alerts = alert_result.get("alerts", [])
     alert_rows = ""
     for a in alerts:
-        row_cls = ' class="alert-red"' if a["level"] == "RED" else ' class="alert-yellow"'
+        row_cls = (
+            ' class="alert-red"' if a["level"] == "RED" else ' class="alert-yellow"'
+        )
         alert_rows += (
             f"<tr{row_cls}>"
             f"<td>{a['date']}</td>"
@@ -2447,9 +2717,7 @@ def generate_html_report(
         f"<h3>Alert History ({len(alerts)} total)</h3>"
         "<table><thead><tr>"
         "<th>Date</th><th>Level</th><th>P(Pre-flare)</th><th>P(Flare)</th><th>Composite</th>"
-        "</tr></thead><tbody>"
-        + alert_rows
-        + "</tbody></table>"
+        "</tr></thead><tbody>" + alert_rows + "</tbody></table>"
     )
 
     sec4 = (
@@ -2458,9 +2726,7 @@ def generate_html_report(
         f"RED alert: P(pre-flare) > {RED_PREFLARE_PROB} OR P(active flare) > {RED_FLARE_PROB}.<br>"
         f"Retrospective validation against Feb 9, 2026 acute decompensation: {red_in_window}/{total_red} RED alerts "
         f"fell within ±3d of the event and {red_outside_window} occurred outside that window."
-        "</div>"
-        + _fig(3)
-        + alert_table
+        "</div>" + _fig(3) + alert_table
     )
     body += make_section("4. Retrospective Alert Burden", sec4)
 
@@ -2480,9 +2746,7 @@ def generate_html_report(
         "<table><thead><tr>"
         "<th>Feature</th><th>Importance</th><th>Correlation</th>"
         "<th>Mutual Info</th><th>Cohen's d</th>"
-        "</tr></thead><tbody>"
-        + feature_rows
-        + "</tbody></table>"
+        "</tr></thead><tbody>" + feature_rows + "</tbody></table>"
     )
 
     sec5 = (
@@ -2490,9 +2754,7 @@ def generate_html_report(
         "Features ranked by combined score: point-biserial correlation (30%), "
         "mutual information (30%), composite correlation (20%), Cohen's d effect size (20%). "
         "Binary target: composite score > 65th percentile."
-        "</div>"
-        + _fig(4)
-        + feature_table
+        "</div>" + _fig(4) + feature_table
     )
     body += make_section("5. Predictive Feature Importance", sec5)
 
@@ -2653,13 +2915,19 @@ def main() -> None:
 
         # 9. Generate report
         html_path = generate_html_report(
-            temp_result, composite_result, rslds_result,
-            alert_result, feature_result, bos_result,
+            temp_result,
+            composite_result,
+            rslds_result,
+            alert_result,
+            feature_result,
+            bos_result,
         )
 
         # 10. Save metrics JSON
         metrics["study_type"] = "N=1 retrospective case study"
-        metrics["validation_note"] = "All detection metrics are descriptive. External cohort validation required."
+        metrics["validation_note"] = (
+            "All detection metrics are descriptive. External cohort validation required."
+        )
         metrics["runtime_seconds"] = round(time.time() - t0, 2)
         metrics["progress_log"] = progress_log
         with open(JSON_OUTPUT, "w", encoding="utf-8") as f:
@@ -2676,7 +2944,9 @@ def main() -> None:
 
         # Key findings
         if composite_result.get("composite_stats"):
-            print(f"\n  Peak GVHD score: {composite_result['composite_stats']['max']:.1f} on {composite_result['composite_stats']['max_date']}")
+            print(
+                f"\n  Peak GVHD score: {composite_result['composite_stats']['max']:.1f} on {composite_result['composite_stats']['max_date']}"
+            )
         if rslds_result.get("event_validation"):
             ev = rslds_result["event_validation"]
             model_label = rslds_result.get("model_type", "state model")
@@ -2684,10 +2954,14 @@ def main() -> None:
         if alert_result.get("validation", {}).get("detected"):
             val = alert_result["validation"]
             print(f"  Alert lead time: {val.get('red_lead_time_days', 'N/A')} days")
-            print(f"  N=1 case study: {val.get('red_alerts_in_event_window', 0)} RED in event window, {val.get('red_alerts_outside_event_window', 0)} outside (external cohort validation required)")
+            print(
+                f"  N=1 case study: {val.get('red_alerts_in_event_window', 0)} RED in event window, {val.get('red_alerts_outside_event_window', 0)} outside (external cohort validation required)"
+            )
         if bos_result.get("combined_risk"):
             cr = bos_result["combined_risk"]
-            print(f"  Combined GVHD+BOS risk: {cr['combined_score']:.1f} ({cr['interpretation']})")
+            print(
+                f"  Combined GVHD+BOS risk: {cr['combined_score']:.1f} ({cr['interpretation']})"
+            )
 
         print("=" * 70)
 
