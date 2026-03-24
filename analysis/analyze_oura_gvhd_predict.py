@@ -2166,9 +2166,25 @@ def compute_feature_importance(
 ) -> dict[str, Any]:
     """
     Rank biometric features by predictive power for GVHD state.
-    Uses mutual information and correlation analysis.
+
+    Uses the rSLDS/HMM Viterbi state path as the prediction target, NOT the
+    composite score. The composite score is a direct weighted sum of the input
+    features (temp_dev, hrv_median, sleep_hr, spo2, frag_index, activity_score),
+    so using it as the target would create a circular dependency where features
+    are ranked by how well they predict a function of themselves.
+
+    The Viterbi path is derived from the rSLDS/HMM latent state model which
+    learns state transitions from multivariate observation dynamics - a
+    genuinely independent prediction target.
+
+    Metrics:
+      1. Point-biserial correlation with binary flare target (Viterbi state >= 2)
+      2. Mutual information (discretized) with binary flare target
+      3. Kruskal-Wallis H statistic across all 4 Viterbi states (normalized)
+      4. Cohen's d effect size between non-flare and flare days
     """
     log("FEATURES", "Computing predictive feature importance...")
+    log("FEATURES", "  Target: Viterbi state path (non-circular; independent of composite weights)")
 
     features = [
         ("temp_dev", "Temperature Deviation (\u00b0C)"),
@@ -2192,25 +2208,47 @@ def compute_feature_importance(
 
     results = []
 
-    # Target: binary indicator for high GVHD risk
-    # Use composite score > 65th percentile as binary target
-    target_threshold = composite.quantile(0.65)
-    binary_target = (composite > target_threshold).astype(int)
+    # Target: binary flare indicator from Viterbi state path.
+    # States: 0=Remission, 1=Pre-flare, 2=Active Flare, 3=Recovery
+    # viterbi_path uses -1 for no-data days.
+    # Binary target: state >= 2 (Active Flare or Recovery) = high-risk
+    n_daily = len(daily)
+    vp = viterbi_path[:n_daily] if len(viterbi_path) >= n_daily else np.pad(
+        viterbi_path, (0, n_daily - len(viterbi_path)), constant_values=-1
+    )
+
+    binary_target = pd.Series(
+        np.where(vp >= 2, 1, np.where(vp >= 0, 0, np.nan)),
+        index=daily.index,
+    )
+
+    valid_target = binary_target.dropna()
+    n_flare = int((valid_target == 1).sum())
+    n_nonflare = int((valid_target == 0).sum())
+    log("FEATURES", f"  Flare days: {n_flare}, non-flare days: {n_nonflare}")
+
+    # Fallback: if too few flare days, broaden to state >= 1 (pre-flare+)
+    if n_flare < 3 or n_nonflare < 3:
+        log("FEATURES", "  WARNING: Insufficient state variability, broadening to state >= 1")
+        binary_target = pd.Series(
+            np.where(vp >= 1, 1, np.where(vp >= 0, 0, np.nan)),
+            index=daily.index,
+        )
 
     for col, label in features:
         if col not in daily.columns:
             continue
         feature = daily[col].copy()
 
-        # Drop NaN pairs
+        # Drop NaN pairs (feature NaN or invalid Viterbi state)
         valid = feature.notna() & binary_target.notna()
         if valid.sum() < 10:
             continue
 
         f_vals = feature[valid].values
-        t_vals = binary_target[valid].values
+        t_vals = binary_target[valid].values.astype(int)
 
-        # 1. Point-biserial correlation with binary target
+        # 1. Point-biserial correlation with binary flare target
         if len(np.unique(t_vals)) > 1 and np.std(f_vals) > 0:
             corr, p_val = scipy_stats.pointbiserialr(t_vals, f_vals)
         else:
@@ -2219,14 +2257,26 @@ def compute_feature_importance(
         # 2. Mutual information (discretized)
         mi = _mutual_information(f_vals, t_vals, n_bins=5)
 
-        # 3. Correlation with composite score
-        valid2 = feature.notna() & composite.notna()
-        if valid2.sum() > 10:
-            comp_corr = feature[valid2].corr(composite[valid2])
+        # 3. Kruskal-Wallis H across all Viterbi states (replaces circular
+        #    composite correlation). Measures how well feature discriminates
+        #    between ALL latent states, not just binary.
+        vp_aligned = vp[valid.values]
+        state_groups = [
+            f_vals[vp_aligned == s]
+            for s in range(N_STATES)
+            if np.sum(vp_aligned == s) >= 2
+        ]
+        if len(state_groups) >= 2:
+            try:
+                h_stat, _h_pval = scipy_stats.kruskal(*state_groups)
+                # Normalize: divide by scaling factor, cap at 1.0
+                kw_score = min(h_stat / (max(len(state_groups) - 1, 1) * 50), 1.0)
+            except ValueError:
+                kw_score = 0.0
         else:
-            comp_corr = 0.0
+            kw_score = 0.0
 
-        # 4. Effect size: mean difference between high/low GVHD days
+        # 4. Effect size: Cohen's d between non-flare and flare days
         low_vals = f_vals[t_vals == 0]
         high_vals = f_vals[t_vals == 1]
         if len(low_vals) > 2 and len(high_vals) > 2:
@@ -2245,12 +2295,12 @@ def compute_feature_importance(
         else:
             cohens_d = 0.0
 
-        # Combined importance score
+        # Combined importance score (no circular composite correlation)
         importance = (
-            abs(corr) * 0.3
-            + mi * 0.3
-            + abs(comp_corr) * 0.2
-            + min(abs(cohens_d) / 2, 1) * 0.2
+            abs(corr) * 0.30
+            + mi * 0.30
+            + kw_score * 0.20
+            + min(abs(cohens_d) / 2, 1) * 0.20
         )
 
         results.append(
@@ -2260,9 +2310,7 @@ def compute_feature_importance(
                 "correlation": round(float(corr), 4),
                 "p_value": round(float(p_val), 6),
                 "mutual_info": round(float(mi), 4),
-                "composite_corr": round(
-                    float(comp_corr) if not np.isnan(comp_corr) else 0, 4
-                ),
+                "kruskal_wallis": round(float(kw_score), 4),
                 "cohens_d": round(float(cohens_d), 4),
                 "importance": round(float(importance), 4),
             }
