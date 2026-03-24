@@ -276,6 +276,7 @@ def load_data() -> dict[str, pd.DataFrame]:
     )
     hrv["date"] = pd.to_datetime(hrv["timestamp"]).dt.date.astype(str)
     hrv["rmssd"] = pd.to_numeric(hrv["rmssd"], errors="coerce")
+    hrv = hrv[hrv["rmssd"].notna() & (hrv["rmssd"] > 0)]
 
     # Heart rate (continuous)
     hr = pd.read_sql_query(
