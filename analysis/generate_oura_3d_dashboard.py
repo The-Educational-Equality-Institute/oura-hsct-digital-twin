@@ -41,12 +41,10 @@ from plotly.subplots import make_subplots
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from config import (
     DATABASE_PATH, REPORTS_DIR,
-    TREATMENT_START_STR, KNOWN_EVENT_DATE,
+    TREATMENT_START_STR, KNOWN_EVENT_DATE, HEV_DIAGNOSIS_DATE,
     DATA_START,
     PATIENT_LABEL, PATIENT_TIMEZONE,
     FONT_FAMILY, PLOTLY_CDN_URL,
-    C_CRITICAL, C_ACCENT,
-    C_PRE_TX, C_POST_TX,
 )
 
 from _theme import (
