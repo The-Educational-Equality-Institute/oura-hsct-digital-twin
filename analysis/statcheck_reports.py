@@ -17,6 +17,7 @@ Usage:
 import argparse
 import html
 import json
+import logging
 import re
 import sys
 from dataclasses import dataclass, field, asdict
