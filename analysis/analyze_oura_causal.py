@@ -3373,7 +3373,7 @@ def _build_clinical_interpretation(
             Measurements have inherent noise that can affect causal estimates.</li>
             <li><strong>Single patient:</strong> N=1 study without control group. Causality cannot be
             definitively established, but Bayesian posterior probability of effect provides a strength measure.</li>
-            <li><strong>HEV diagnosis:</strong> HEV was diagnosed 2026-03-18 (2 days after
+            <li><strong>HEV diagnosis:</strong> HEV was diagnosed {HEV_DIAGNOSIS_DATE} (2 days after
             ruxolitinib start). Hepatitis may confound biometric changes.</li>
         </ul>
 
