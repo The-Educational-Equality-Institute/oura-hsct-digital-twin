@@ -364,3 +364,24 @@ The feature importance analysis tests 17 features without correction for multipl
 5. **Feature importance section:** Add caveat about circularity (features that compose the target will trivially rank high).
 
 6. **config.py line 42:** Consider noting that the 49 ms median may be from Shaffer & Ginsberg 2017 rather than directly from Nunan 2010, or verify the exact pooled value.
+
+7. **Cross-script inconsistency:** `config.py` defines `POPULATION_RMSSD_MEDIAN = 49` ms while `analyze_oura_biomarkers.py` (line 74) defines `NORM_RMSSD_MEAN = 42.0` ms, both citing Nunan 2010 / Shaffer & Ginsberg 2017. The difference is likely mean (42) vs median (49), but the config uses "MEDIAN" in the variable name while 49 may actually be a median from a different source or age subset. These values should be reconciled: either use 42 ms as the population mean or clearly document why two different values exist.
+
+---
+
+## Appendix: PubMed Verification
+
+The following references were verified via PubMed API during this audit:
+
+- **Kleiger 1987** (PMID 3812275): Confirmed. "Decreased heart rate variability and its association with increased mortality after acute myocardial infarction." Am J Cardiol. Studies SDNN, not RMSSD.
+- **Bigger 1992** (PMID 1728446): Confirmed. "Frequency domain measures of heart period variability and mortality after myocardial infarction." Circulation. Studies frequency-domain HRV, not RMSSD.
+- **Jagasia 2015** (PMID 25529383): Confirmed. "NIH Consensus Development Project on Criteria for Clinical Trials in Chronic GVHD: I. The 2014 Diagnosis and Staging Working Group report." BBMT.
+- **Zeiser 2021 / REACH3** (PMID 34260836): Confirmed. "Ruxolitinib for Glucocorticoid-Refractory Chronic Graft-versus-Host Disease." NEJM.
+- **Linderman 2017 rSLDS:** Not indexed in PubMed (conference paper, AISTATS 2017). Correct methodological reference.
+- **Nunan 2010:** Not returned by targeted PubMed search but known citation: Pacing Clin Electrophysiol 2010;33:1407-17. Paper reports pooled means from short-term ECG studies.
+
+### Key Literature Not Cited But Should Be Considered
+
+- **ESC/NASPE Task Force 1996.** "Heart rate variability: standards of measurement, physiological interpretation, and clinical use." Circulation 93:1043-65. The foundational HRV standards paper.
+- **Shaffer F, Ginsberg JP 2017.** "An Overview of Heart Rate Variability Metrics and Norms." Front Public Health 5:258. Comprehensive modern HRV norms review. Already cited in some scripts but not config.py.
+- **Moon JH et al. 2014** (PMID 24447907): "Validation of NIH global scoring system for chronic GVHD." Validates the grading system referenced in the script.
