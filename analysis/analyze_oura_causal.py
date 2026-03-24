@@ -1426,14 +1426,14 @@ def plot_pcmci(pcmci_results: dict[str, Any]) -> list[go.Figure]:
             tgt_idx = var_labels.index(link["target"])
 
             # Color by sign: positive = blue/cyan, negative = red/pink
-            if link["val"] > 0:
+            if link["correlation"] > 0:
                 edge_color = ACCENT_BLUE
                 edge_glow = "rgba(59, 130, 246, 0.15)"
             else:
                 edge_color = ACCENT_RED
                 edge_glow = "rgba(239, 68, 68, 0.15)"
 
-            edge_width = max(1.5, min(7, abs(link["val"]) * 12))
+            edge_width = max(1.5, min(7, abs(link["correlation"]) * 12))
 
             # Offset for multiple lags
             offset = link["lag"] * 0.03
