@@ -1320,7 +1320,7 @@ def fig_rmssd_comparison_bar(stats: dict) -> go.Figure:
 
     cats = [
         f"{PATIENT_LABEL}<br>({patient_rmssd:.1f} ms)",
-        f"Deficiency Threshold (Kleiger 1987)<br>(<{ESC_RMSSD_DEFICIENCY} ms)",
+        f"Deficiency Threshold (ESC/NASPE 1996)<br>(<{ESC_RMSSD_DEFICIENCY} ms)",
         f"Post-HSCT Typical<br>({HSCT_RMSSD_LOW}-{HSCT_RMSSD_HIGH} ms)",
         f"Normal {PATIENT_AGE}yo Male<br>({NORM_RMSSD_P25}-{NORM_RMSSD_P75} ms)",
     ]
