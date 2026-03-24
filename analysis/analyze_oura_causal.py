@@ -1099,16 +1099,45 @@ def run_placebo_tests(
                     }
                 )
 
-    # Summary
+    # ------------------------------------------------------------------
+    # Benjamini-Hochberg FDR correction across all placebo tests
+    # ------------------------------------------------------------------
     valid_tests = [t for t in results["tests"] if "error" not in t]
+    if len(valid_tests) > 1 and MULTIPLETESTS_AVAILABLE:
+        raw_pvals = np.array([t["p_value"] for t in valid_tests])
+        try:
+            reject, qvals, _, _ = multipletests(raw_pvals, method="fdr_bh", alpha=0.05)
+            for i, t in enumerate(valid_tests):
+                t["q_value_bh"] = round(float(qvals[i]), 6)
+                t["significant_fdr"] = bool(reject[i])
+            # Use FDR-corrected significance for the validation verdict
+            n_sig_placebo_fdr = int(np.sum(reject))
+            print(
+                f"\n  FDR correction (Benjamini-Hochberg): {n_sig_placebo_fdr}/{len(valid_tests)} "
+                f"placebo tests significant at q < 0.05"
+            )
+        except Exception as fdr_err:
+            print(f"\n  WARNING: FDR correction failed for placebo: {fdr_err}")
+            for t in valid_tests:
+                t["q_value_bh"] = t["p_value"]
+                t["significant_fdr"] = t["significant"]
+    else:
+        for t in valid_tests:
+            t["q_value_bh"] = t.get("p_value", 1.0)
+            t["significant_fdr"] = t.get("significant", False)
+
+    # Summary — use raw significance for backward-compatible verdict
     n_sig_placebo = sum(1 for t in valid_tests if t.get("significant", False))
+    n_sig_placebo_fdr = sum(1 for t in valid_tests if t.get("significant_fdr", False))
     results["n_total_tests"] = len(valid_tests)
     results["n_significant_placebo"] = n_sig_placebo
+    results["n_significant_placebo_fdr"] = n_sig_placebo_fdr
     results["placebo_validation"] = (
         "PASS" if n_sig_placebo == 0 else "PARTIAL" if n_sig_placebo <= 1 else "FAIL"
     )
 
-    print(f"\n  Placebo summary: {n_sig_placebo}/{len(valid_tests)} tests significant")
+    print(f"\n  Placebo summary: {n_sig_placebo}/{len(valid_tests)} tests significant (raw), "
+          f"{n_sig_placebo_fdr}/{len(valid_tests)} after FDR")
     print(f"  Validation: {results['placebo_validation']}")
 
     results["runtime_s"] = round(time.perf_counter() - t0, 2)
