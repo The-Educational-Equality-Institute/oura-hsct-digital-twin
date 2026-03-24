@@ -205,6 +205,7 @@ def load_oura_data() -> pd.DataFrame:
         """
         SELECT substr(timestamp, 1, 10) AS day, AVG(bpm) AS mean_hr
         FROM oura_heart_rate
+        WHERE bpm IS NOT NULL AND bpm > 0
         GROUP BY substr(timestamp, 1, 10)
         ORDER BY day
         """,
