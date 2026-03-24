@@ -1705,7 +1705,7 @@ def build_summary(
         rl_pct = summary["rem_latency"]["pct_elevated"]
         if rl_pct > 30:
             interpretations.append(
-                f"PATHOLOGICAL: {rl_pct}% of nights have REM latency >120 minutes. "
+                f"Below Expected Range: {rl_pct}% of nights have REM latency >120 minutes. "
                 "Elevated REM latency may indicate autonomic dysfunction or medication effects."
             )
 
