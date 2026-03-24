@@ -240,16 +240,20 @@ def refresh() -> None:
         print("Run without --refresh first to complete initial setup")
         sys.exit(1)
 
-    resp = requests.post(
-        TOKEN_URL,
-        data={
-            "grant_type": "refresh_token",
-            "refresh_token": refresh_token,
-            "client_id": client_id,
-            "client_secret": client_secret,
-        },
-        timeout=30,
-    )
+    try:
+        resp = requests.post(
+            TOKEN_URL,
+            data={
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+                "client_id": client_id,
+                "client_secret": client_secret,
+            },
+            timeout=30,
+        )
+    except requests.RequestException as e:
+        print(f"ERROR: Network request failed: {e}")
+        sys.exit(1)
 
     if resp.status_code != 200:
         print(f"Token refresh failed ({resp.status_code}): {resp.text}")
