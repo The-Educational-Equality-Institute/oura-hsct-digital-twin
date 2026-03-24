@@ -2312,7 +2312,7 @@ def generate_html_report(
             "Combined GVHD + BOS",
             combined_score if isinstance(combined_score, (int, float)) else combined_score,
             status=combined_status,
-            detail=f"{combined_interp} — wearable signals only (10+ organs affected)",
+            detail=f"{combined_interp} — wearable signals only (14 organ systems affected)",
             decimals=1,
             status_label=combined_label,
         ),
