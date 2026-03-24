@@ -845,7 +845,8 @@ def compare_pre_post_ruxolitinib(
                     )
                     result["mann_whitney_U"] = float(u_stat)
                     result["p_value"] = float(p_val)
-                except Exception:
+                except (ValueError, RuntimeError) as e:
+                    logging.warning(f"Mann-Whitney U test failed for {metric}: {e}")
                     result["mann_whitney_U"] = None
                     result["p_value"] = None
             else:
