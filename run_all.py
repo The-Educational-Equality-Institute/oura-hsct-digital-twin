@@ -8,6 +8,7 @@ Usage:
     cd oura-digital-twin
     python run_all.py
 """
+
 import os
 import json
 import shutil
@@ -78,8 +79,12 @@ def assemble_send_bundle() -> tuple[list[str], list[str]]:
     """Copy the curated release surface to reports/send_bundle."""
     SEND_BUNDLE_DIR.mkdir(parents=True, exist_ok=True)
 
-    missing_html = [name for name in SEND_BUNDLE_HTML if not (REPORTS_DIR / name).exists()]
-    missing_json = [name for name in SEND_BUNDLE_JSON if not (REPORTS_DIR / name).exists()]
+    missing_html = [
+        name for name in SEND_BUNDLE_HTML if not (REPORTS_DIR / name).exists()
+    ]
+    missing_json = [
+        name for name in SEND_BUNDLE_JSON if not (REPORTS_DIR / name).exists()
+    ]
     if missing_html or missing_json:
         missing = missing_html + missing_json
         raise FileNotFoundError(
@@ -151,6 +156,7 @@ def assemble_send_bundle() -> tuple[list[str], list[str]]:
     )
     return copied_html, copied_json
 
+
 def main():
     t_total = time.perf_counter()
     log("=" * 70)
@@ -185,7 +191,9 @@ def main():
             log(f"\n  → {status} ({elapsed:.1f}s)")
             if proc.returncode != 0:
                 for blocked_script in SCRIPTS[i:]:
-                    results.append((blocked_script, "SKIPPED (blocked by earlier failure)"))
+                    results.append(
+                        (blocked_script, "SKIPPED (blocked by earlier failure)")
+                    )
                 break
         except subprocess.TimeoutExpired:
             results.append((script, "TIMEOUT"))
@@ -215,9 +223,7 @@ def main():
     log(f"  Reports: {REPORTS_DIR}")
 
     failures = sum(
-        1
-        for e in results
-        if e[1] != "OK" and not e[1].startswith("SKIPPED")
+        1 for e in results if e[1] != "OK" and not e[1].startswith("SKIPPED")
     )
     blocked = sum(1 for e in results if e[1].startswith("SKIPPED"))
     if failures:

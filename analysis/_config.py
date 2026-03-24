@@ -3,6 +3,8 @@
 Re-exports from the top-level config.py for backwards compatibility.
 New scripts should import from config directly.
 """
+
+import logging
 import os
 import sys
 from pathlib import Path
@@ -11,7 +13,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent  # oura-digital-twin/
 
 sys.path.insert(0, str(REPO_ROOT))
-from config import DATABASE_PATH, REPORTS_DIR, validate_config  # noqa: E402
+from config import DATABASE_PATH  # noqa: E402
 
 # Backwards-compatible aliases
 BIOMETRICS_DB = DATABASE_PATH
@@ -25,10 +27,7 @@ def _resolve_symlink(p: Path) -> Path | None:
         if target.exists() and os.access(str(target), os.R_OK):
             return target
         # Dangling symlink
-        print(
-            f"WARNING: Symlink exists but target is missing: "
-            f"{p} -> {target}"
-        )
+        print(f"WARNING: Symlink exists but target is missing: {p} -> {target}")
         return None
     if p.exists():
         return p.resolve()

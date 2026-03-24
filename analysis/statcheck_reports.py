@@ -13,6 +13,7 @@ Usage:
     python analysis/statcheck_reports.py --verbose     # show every matched pair
     python analysis/statcheck_reports.py --json        # JSON output only
 """
+
 import argparse
 import html
 import json
@@ -29,30 +30,34 @@ from config import REPORTS_DIR  # noqa: E402
 # Types
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class StatClaim:
     """A statistical claim extracted from HTML."""
+
     report: str
-    stat_type: str          # "p_value", "correlation", "cohens_d", "r_squared", "effect_size"
-    operator: str           # "=", "<", ">", "≤"
+    stat_type: str  # "p_value", "correlation", "cohens_d", "r_squared", "effect_size"
+    operator: str  # "=", "<", ">", "≤"
     value: float
-    context: str            # surrounding text for identification
-    line_hint: int = 0      # approximate position in text
+    context: str  # surrounding text for identification
+    line_hint: int = 0  # approximate position in text
 
 
 @dataclass
 class StatReference:
     """An authoritative value from JSON metrics."""
+
     report: str
     json_path: str
     stat_type: str
     value: float
-    label: str = ""         # human-friendly label if available
+    label: str = ""  # human-friendly label if available
 
 
 @dataclass
 class Mismatch:
     """A flagged discrepancy between HTML and JSON."""
+
     report: str
     stat_type: str
     html_value: float
@@ -61,14 +66,15 @@ class Mismatch:
     json_path: str
     delta: float
     context: str
-    severity: str           # "error", "warning", "info"
+    severity: str  # "error", "warning", "info"
 
 
 @dataclass
 class SanityIssue:
     """A standalone sanity-check finding (no JSON cross-ref needed)."""
+
     report: str
-    issue_type: str         # "p_gt_1", "p_negative", "p_zero_exact", "malformed"
+    issue_type: str  # "p_gt_1", "p_negative", "p_zero_exact", "malformed"
     value: float | str
     context: str
     severity: str
@@ -77,6 +83,7 @@ class SanityIssue:
 @dataclass
 class AuditResult:
     """Complete audit output."""
+
     reports_checked: int = 0
     claims_extracted: int = 0
     references_loaded: int = 0
@@ -195,14 +202,16 @@ def extract_claims(report_name: str, html_content: str) -> list[StatClaim]:
         if val > 1.0:
             continue
 
-        claims.append(StatClaim(
-            report=report_name,
-            stat_type="p_value",
-            operator=op,
-            value=val,
-            context=context,
-            line_hint=m.start(),
-        ))
+        claims.append(
+            StatClaim(
+                report=report_name,
+                stat_type="p_value",
+                operator=op,
+                value=val,
+                context=context,
+                line_hint=m.start(),
+            )
+        )
 
     # --- correlations (r = ...) ---
     for m in CORR_RE.finditer(text):
@@ -217,14 +226,16 @@ def extract_claims(report_name: str, html_content: str) -> list[StatClaim]:
             continue
         if abs(val) > 1.0:
             continue
-        claims.append(StatClaim(
-            report=report_name,
-            stat_type="correlation",
-            operator="=",
-            value=val,
-            context=context,
-            line_hint=m.start(),
-        ))
+        claims.append(
+            StatClaim(
+                report=report_name,
+                stat_type="correlation",
+                operator="=",
+                value=val,
+                context=context,
+                line_hint=m.start(),
+            )
+        )
 
     # --- R² ---
     for m in R2_RE.finditer(text):
@@ -237,14 +248,16 @@ def extract_claims(report_name: str, html_content: str) -> list[StatClaim]:
             continue
         if val > 1.0:
             continue
-        claims.append(StatClaim(
-            report=report_name,
-            stat_type="r_squared",
-            operator="=",
-            value=val,
-            context=context,
-            line_hint=m.start(),
-        ))
+        claims.append(
+            StatClaim(
+                report=report_name,
+                stat_type="r_squared",
+                operator="=",
+                value=val,
+                context=context,
+                line_hint=m.start(),
+            )
+        )
 
     # --- Cohen's d ---
     for m in COHENS_D_RE.finditer(text):
@@ -258,14 +271,16 @@ def extract_claims(report_name: str, html_content: str) -> list[StatClaim]:
             val = float(m.group(1))
         except ValueError:
             continue
-        claims.append(StatClaim(
-            report=report_name,
-            stat_type="cohens_d",
-            operator="=",
-            value=val,
-            context=context,
-            line_hint=m.start(),
-        ))
+        claims.append(
+            StatClaim(
+                report=report_name,
+                stat_type="cohens_d",
+                operator="=",
+                value=val,
+                context=context,
+                line_hint=m.start(),
+            )
+        )
 
     return claims
 
@@ -284,7 +299,9 @@ STAT_KEYS = {
 }
 
 
-def extract_references(report_name: str, json_data: Any, prefix: str = "") -> list[StatReference]:
+def extract_references(
+    report_name: str, json_data: Any, prefix: str = ""
+) -> list[StatReference]:
     """Recursively extract statistical values from JSON metrics."""
     refs: list[StatReference] = []
 
@@ -297,14 +314,18 @@ def extract_references(report_name: str, json_data: Any, prefix: str = "") -> li
                 for pattern, stat_type in STAT_KEYS.items():
                     if pattern in key_lower:
                         # Extract a human label from nearby keys
-                        label = json_data.get("label", json_data.get("feature", json_data.get("name", "")))
-                        refs.append(StatReference(
-                            report=report_name,
-                            json_path=path,
-                            stat_type=stat_type,
-                            value=float(value),
-                            label=str(label) if label else "",
-                        ))
+                        label = json_data.get(
+                            "label", json_data.get("feature", json_data.get("name", ""))
+                        )
+                        refs.append(
+                            StatReference(
+                                report=report_name,
+                                json_path=path,
+                                stat_type=stat_type,
+                                value=float(value),
+                                label=str(label) if label else "",
+                            )
+                        )
                         break
 
             refs.extend(extract_references(report_name, value, path))
@@ -319,6 +340,7 @@ def extract_references(report_name: str, json_data: Any, prefix: str = "") -> li
 # ---------------------------------------------------------------------------
 # Cross-reference & matching
 # ---------------------------------------------------------------------------
+
 
 def _values_match(html_val: float, json_val: float, tolerance: float) -> bool:
     """Check if two values match within tolerance, accounting for rounding."""
@@ -392,17 +414,19 @@ def cross_reference(
             # (avoid matching p=0.012 against p=0.469)
             if best_delta < 0.5:
                 severity = "error" if best_delta > 0.05 else "warning"
-                mismatches.append(Mismatch(
-                    report=claim.report,
-                    stat_type=claim.stat_type,
-                    html_value=claim.value,
-                    html_operator=claim.operator,
-                    json_value=best_ref.value,
-                    json_path=best_ref.json_path,
-                    delta=best_delta,
-                    context=claim.context,
-                    severity=severity,
-                ))
+                mismatches.append(
+                    Mismatch(
+                        report=claim.report,
+                        stat_type=claim.stat_type,
+                        html_value=claim.value,
+                        html_operator=claim.operator,
+                        json_value=best_ref.value,
+                        json_path=best_ref.json_path,
+                        delta=best_delta,
+                        context=claim.context,
+                        severity=severity,
+                    )
+                )
             else:
                 unmatched.append(claim)
 
@@ -413,6 +437,7 @@ def cross_reference(
 # Sanity checks (no JSON needed)
 # ---------------------------------------------------------------------------
 
+
 def sanity_check(claims: list[StatClaim]) -> list[SanityIssue]:
     """Flag statistical values that are inherently suspicious."""
     issues: list[SanityIssue] = []
@@ -420,30 +445,36 @@ def sanity_check(claims: list[StatClaim]) -> list[SanityIssue]:
     for c in claims:
         if c.stat_type == "p_value":
             if c.value < 0:
-                issues.append(SanityIssue(
+                issues.append(
+                    SanityIssue(
+                        report=c.report,
+                        issue_type="p_negative",
+                        value=c.value,
+                        context=c.context,
+                        severity="error",
+                    )
+                )
+            elif c.value == 0.0 and c.operator == "=":
+                issues.append(
+                    SanityIssue(
+                        report=c.report,
+                        issue_type="p_zero_exact",
+                        value=c.value,
+                        context=c.context,
+                        severity="warning",
+                    )
+                )
+
+        if c.stat_type == "correlation" and abs(c.value) > 1.0:
+            issues.append(
+                SanityIssue(
                     report=c.report,
-                    issue_type="p_negative",
+                    issue_type="correlation_gt_1",
                     value=c.value,
                     context=c.context,
                     severity="error",
-                ))
-            elif c.value == 0.0 and c.operator == "=":
-                issues.append(SanityIssue(
-                    report=c.report,
-                    issue_type="p_zero_exact",
-                    value=c.value,
-                    context=c.context,
-                    severity="warning",
-                ))
-
-        if c.stat_type == "correlation" and abs(c.value) > 1.0:
-            issues.append(SanityIssue(
-                report=c.report,
-                issue_type="correlation_gt_1",
-                value=c.value,
-                context=c.context,
-                severity="error",
-            ))
+                )
+            )
 
     return issues
 
@@ -451,6 +482,7 @@ def sanity_check(claims: list[StatClaim]) -> list[SanityIssue]:
 # ---------------------------------------------------------------------------
 # Duplicate p-value detection (HTML says X, also says Y for same metric)
 # ---------------------------------------------------------------------------
+
 
 def detect_internal_inconsistencies(claims: list[StatClaim]) -> list[SanityIssue]:
     """Detect the same p-value reported differently within one report."""
@@ -474,13 +506,15 @@ def detect_internal_inconsistencies(claims: list[StatClaim]) -> list[SanityIssue
             if len(group) > 1:
                 values = {c.value for c in group}
                 if len(values) > 1:
-                    issues.append(SanityIssue(
-                        report=report,
-                        issue_type="inconsistent_self_report",
-                        value=str(values),
-                        context=group[0].context,
-                        severity="warning",
-                    ))
+                    issues.append(
+                        SanityIssue(
+                            report=report,
+                            issue_type="inconsistent_self_report",
+                            value=str(values),
+                            context=group[0].context,
+                            severity="warning",
+                        )
+                    )
 
     return issues
 
@@ -488,6 +522,7 @@ def detect_internal_inconsistencies(claims: list[StatClaim]) -> list[SanityIssue
 # ---------------------------------------------------------------------------
 # Main audit
 # ---------------------------------------------------------------------------
+
 
 def run_audit(
     reports_dir: Path,
@@ -522,7 +557,9 @@ def run_audit(
                     refs = extract_references(report_name, json_data)
                     all_refs.extend(refs)
                 except (json.JSONDecodeError, OSError) as e:
-                    print(f"  WARNING: Could not read {json_name}: {e}", file=sys.stderr)
+                    print(
+                        f"  WARNING: Could not read {json_name}: {e}", file=sys.stderr
+                    )
 
     result.claims_extracted = len(all_claims)
     result.references_loaded = len(all_refs)
@@ -540,9 +577,11 @@ def run_audit(
     if verbose:
         print(f"\n  Matched pairs ({len(matched)}):")
         for claim, ref in matched:
-            print(f"    {claim.report}: {claim.stat_type} "
-                  f"HTML={claim.operator}{claim.value} "
-                  f"JSON={ref.value:.6f} ({ref.json_path})")
+            print(
+                f"    {claim.report}: {claim.stat_type} "
+                f"HTML={claim.operator}{claim.value} "
+                f"JSON={ref.value:.6f} ({ref.json_path})"
+            )
 
     return result
 
@@ -550,6 +589,7 @@ def run_audit(
 # ---------------------------------------------------------------------------
 # Output formatting
 # ---------------------------------------------------------------------------
+
 
 def print_summary(result: AuditResult) -> None:
     """Print a human-readable audit summary."""
@@ -571,8 +611,10 @@ def print_summary(result: AuditResult) -> None:
         for m in result.mismatches:
             icon = "!!" if m.severity == "error" else "!"
             print(f"  [{icon}] {m.report}")
-            print(f"      {m.stat_type}: HTML {m.html_operator}{m.html_value} "
-                  f"vs JSON {m.json_value:.6f} (delta={m.delta:.6f})")
+            print(
+                f"      {m.stat_type}: HTML {m.html_operator}{m.html_value} "
+                f"vs JSON {m.json_value:.6f} (delta={m.delta:.6f})"
+            )
             print(f"      JSON path: {m.json_path}")
             print(f"      Context: ...{m.context[:80]}...")
             print()
@@ -588,9 +630,11 @@ def print_summary(result: AuditResult) -> None:
             print()
 
     if not result.mismatches and not result.sanity_issues:
-        print(f"\n  All statistical claims verified. No issues found.")
+        print("\n  All statistical claims verified. No issues found.")
 
-    n_problems = len(result.mismatches) + len([s for s in result.sanity_issues if s.severity == "error"])
+    n_problems = len(result.mismatches) + len(
+        [s for s in result.sanity_issues if s.severity == "error"]
+    )
     print(f"\n{'=' * 70}")
     if n_problems == 0:
         print("  RESULT: PASS")
@@ -609,9 +653,8 @@ def to_json(result: AuditResult) -> dict:
         "mismatches": [asdict(m) for m in result.mismatches],
         "sanity_issues": [asdict(s) for s in result.sanity_issues],
         "unmatched_count": len(result.unmatched_html),
-        "pass": len(result.mismatches) == 0 and not any(
-            s.severity == "error" for s in result.sanity_issues
-        ),
+        "pass": len(result.mismatches) == 0
+        and not any(s.severity == "error" for s in result.sanity_issues),
     }
 
 
@@ -619,16 +662,32 @@ def to_json(result: AuditResult) -> dict:
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Statistical integrity audit for Oura reports")
-    parser.add_argument("--tolerance", type=float, default=0.005,
-                        help="Maximum allowed delta between HTML and JSON values (default: 0.005)")
-    parser.add_argument("--verbose", "-v", action="store_true",
-                        help="Show all matched pairs")
-    parser.add_argument("--json", dest="json_output", action="store_true",
-                        help="Output JSON instead of text summary")
-    parser.add_argument("--reports-dir", type=Path, default=REPORTS_DIR,
-                        help="Reports directory (default: from config)")
+    parser = argparse.ArgumentParser(
+        description="Statistical integrity audit for Oura reports"
+    )
+    parser.add_argument(
+        "--tolerance",
+        type=float,
+        default=0.005,
+        help="Maximum allowed delta between HTML and JSON values (default: 0.005)",
+    )
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Show all matched pairs"
+    )
+    parser.add_argument(
+        "--json",
+        dest="json_output",
+        action="store_true",
+        help="Output JSON instead of text summary",
+    )
+    parser.add_argument(
+        "--reports-dir",
+        type=Path,
+        default=REPORTS_DIR,
+        help="Reports directory (default: from config)",
+    )
     args = parser.parse_args()
 
     result = run_audit(args.reports_dir, args.tolerance, args.verbose)
@@ -646,7 +705,9 @@ def main() -> int:
     )
 
     # Exit code: 0 = pass, 1 = mismatches found
-    n_errors = len(result.mismatches) + len([s for s in result.sanity_issues if s.severity == "error"])
+    n_errors = len(result.mismatches) + len(
+        [s for s in result.sanity_issues if s.severity == "error"]
+    )
     return 1 if n_errors > 0 else 0
 
 

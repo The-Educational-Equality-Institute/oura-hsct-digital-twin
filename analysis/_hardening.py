@@ -3,6 +3,7 @@
 Provides safe database connections, DataFrame validation, and report section
 isolation so that one failing section does not kill an entire report.
 """
+
 from __future__ import annotations
 
 import sqlite3
@@ -18,6 +19,7 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 # Database connection guard
 # ---------------------------------------------------------------------------
+
 
 def safe_connect(path: Path, *, read_only: bool = True) -> sqlite3.Connection:
     """Open a SQLite connection with existence and integrity checks.
@@ -37,13 +39,16 @@ def safe_connect(path: Path, *, read_only: bool = True) -> sqlite3.Connection:
         conn.execute("SELECT 1")
         return conn
     except sqlite3.DatabaseError as exc:
-        print(f"ERROR: Database corrupt or unreadable: {path}\n  {exc}", file=sys.stderr)
+        print(
+            f"ERROR: Database corrupt or unreadable: {path}\n  {exc}", file=sys.stderr
+        )
         sys.exit(1)
 
 
 # ---------------------------------------------------------------------------
 # Safe pd.read_sql wrapper
 # ---------------------------------------------------------------------------
+
 
 def safe_read_sql(
     sql: str,
@@ -88,6 +93,7 @@ def safe_read_sql(
 # Column existence check
 # ---------------------------------------------------------------------------
 
+
 def require_columns(
     df: pd.DataFrame,
     columns: list[str],
@@ -110,6 +116,7 @@ def require_columns(
 # Safe date parsing
 # ---------------------------------------------------------------------------
 
+
 def safe_to_datetime(
     series: pd.Series,
     *,
@@ -128,6 +135,7 @@ def safe_to_datetime(
 # ---------------------------------------------------------------------------
 # Division-by-zero guard
 # ---------------------------------------------------------------------------
+
 
 def safe_divide(
     numerator: Any,
@@ -157,6 +165,7 @@ def safe_divide(
 # ---------------------------------------------------------------------------
 # Report section isolation
 # ---------------------------------------------------------------------------
+
 
 def safe_section(
     name: str,
@@ -192,6 +201,6 @@ def section_html_or_placeholder(
         return (
             f'<div style="padding:20px;margin:20px 0;background:#fff3f3;'
             f'border:2px solid #e63946;border-radius:8px;">'
-            f'<h3>Section failed: {name}</h3>'
+            f"<h3>Section failed: {name}</h3>"
             f'<p style="color:#666;">{exc}</p></div>'
         )
