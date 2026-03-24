@@ -2177,7 +2177,7 @@ def main() -> int:
     """Run all anomaly detection methods and generate report."""
     print("=" * 70)
     print("  ANOMALY DETECTION ENGINE - Oura Ring Biometric Streams")
-    print("  Data: Jan-Mar 2026")
+    print(f"  Data: {DATA_START.strftime('%b %Y')} onwards")
     print("=" * 70)
     t_total = time.time()
 
