@@ -321,7 +321,7 @@ def build_narrative_summary(outputs: dict, summary: dict) -> str:
 
     if temp_p is not None and temp_p < 0.05:
         headline = (
-            f"Temperature deviation is the strongest exploratory raw-p signal after "
+            f"Temperature deviation is the strongest exploratory unadjusted p-value signal after "
             f"ruxolitinib ({temp_p_label}, q={temp_q_label}{temp_prob_text}). "
         )
         if not temp_sig_fdr or temp_low_conf:
@@ -337,7 +337,7 @@ def build_narrative_summary(outputs: dict, summary: dict) -> str:
         )
     elif temp_p is not None:
         headline = (
-            f"Temperature deviation shows the lowest raw p-value observed "
+            f"Temperature deviation shows the lowest unadjusted p-value observed "
             f"({temp_p_label}, q={temp_q_label}{temp_prob_text}) in a confounded "
             f"{post_days}-day post-intervention window. "
         )
@@ -420,7 +420,7 @@ def build_kpi_cards(outputs: dict, summary: dict) -> str:
     def _card(label: str, value: str, unit: str, detail: str, status: str,
               sparkline_svg: str = "") -> str:
         status_colors = {
-            "good": ACCENT_GREEN, "warning": ACCENT_AMBER,
+            "good": ACCENT_GREEN, "normal": ACCENT_GREEN, "warning": ACCENT_AMBER,
             "critical": ACCENT_RED, "neutral": TEXT_TERTIARY,
         }
         sc = status_colors.get(status, TEXT_SECONDARY)
@@ -1978,7 +1978,7 @@ def build_html(
 
     dt_data = outputs.get("digital_twin", {})
     drug_resp = dt_data.get("drug_response", {}).get("response_stats", {})
-    n_modules = sum(1 for v in outputs.values() if v)
+    n_modules = sum(1 for k, v in outputs.items() if v and k != "causal_ts")
     total_readings = summary['total_hr_readings'] + summary['total_hrv_readings']
 
     # p-value display
@@ -2933,6 +2933,24 @@ def main() -> int:
 
     # Write JSON metrics
     json_path = REPORTS_DIR / "oura_3d_dashboard_metrics.json"
+    bos_payload = outputs.get("spo2", {}).get("bos_risk", {})
+    bos_score = None
+    bos_level = None
+    bos_recommendation = None
+    if isinstance(bos_payload, dict):
+        raw_score = bos_payload.get("composite_score")
+        try:
+            if raw_score is not None:
+                bos_score = float(raw_score)
+        except (TypeError, ValueError):
+            bos_score = None
+        raw_level = bos_payload.get("risk_level")
+        if raw_level is not None:
+            bos_level = str(raw_level).upper()
+        raw_recommendation = bos_payload.get("recommendation")
+        if raw_recommendation is not None:
+            bos_recommendation = str(raw_recommendation)
+
     json_metrics = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "data_range": {
@@ -2954,6 +2972,11 @@ def main() -> int:
             "mean_sleep_efficiency_pct": round(summary["mean_efficiency"], 1) if summary.get("mean_efficiency") else None,
             "mean_temp_deviation_c": round(summary["mean_temp_dev"], 2) if summary.get("mean_temp_dev") else None,
             "mean_total_sleep_h": round(summary["mean_total_sleep_h"], 1) if summary.get("mean_total_sleep_h") else None,
+        },
+        "bos_risk": {
+            "score_100": round(bos_score, 1) if bos_score is not None else None,
+            "level": bos_level,
+            "recommendation": bos_recommendation,
         },
         "pre_vs_post_treatment": {
             "pre_days": summary.get("pre_days", 0),
