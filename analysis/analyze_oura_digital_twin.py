@@ -1879,7 +1879,7 @@ def create_sensor_fusion_figure(
         # Significance line
         fig.add_hline(y=0.05, row=2, col=2,
                        line=dict(color=ACCENT_RED, dash="dash", width=1),
-                       annotation_text="p = 0.05",
+                       annotation_text="p=0.05",
                        annotation_font_size=11,
                        annotation_font_color=ACCENT_RED)
     fig.update_yaxes(title_text="Ljung-Box p-value", row=2, col=2, zeroline=False)
@@ -2286,7 +2286,7 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
             "Residual checks",
             f"{n_residual_pass}/{n_residual_total}" if n_residual_total else "N/A",
             (
-                "Ljung-Box p > 0.05 across modeled sensors"
+                "Ljung-Box p>0.05 across modeled sensors"
                 if n_residual_total else "Residual diagnostics unavailable"
             ),
             residual_tone,
@@ -2549,7 +2549,7 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
         f'<div class="dt-mini-heading">Sensor contribution to state estimation</div>'
         f'<div class="dt-sensor-grid">{sensor_cards_html}</div>'
         f'<div class="dt-mini-heading">Residual diagnostics</div>'
-        f'<p class="dt-note">White noise residuals (Ljung-Box p > 0.05) indicate the model '
+        f'<p class="dt-note">White noise residuals (Ljung-Box p>0.05) indicate the model '
         f'captures temporal structure well. Significant autocorrelation suggests '
         f'model misspecification for that sensor.</p>'
         + fig_divs[5],
