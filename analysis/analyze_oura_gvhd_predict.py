@@ -2401,7 +2401,7 @@ def generate_html_report(
     )
 
     if "HMM" in model_type:
-        fallback_reason = (
+        fallback_reason = _html_escape_mod.escape(
             model_info.get("rslds_failure_reason")
             or model_info.get("rslds_skipped_reason")
             or "rSLDS path unavailable in this run"
