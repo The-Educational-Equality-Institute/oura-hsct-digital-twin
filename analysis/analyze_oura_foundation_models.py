@@ -581,6 +581,13 @@ def run_chronos_nightly(
         anomaly_dates = forecast_dates[outside_90pi]
         anomaly_residuals = actual[outside_90pi] - median_forecast[outside_90pi]
 
+        # Per-point exceedance p-values (Gaussian approx from quantiles)
+        # Estimate sigma from 90% PI width: q90-q10 spans ~2*1.645*sigma
+        pi_spread = forecast["q90"] - forecast["q10"]
+        sigma_est = np.where(pi_spread > 0, pi_spread / (2 * 1.645), 1e-6)
+        z_scores = (actual - median_forecast) / sigma_est
+        raw_pvals = 2 * scipy_stats.norm.sf(np.abs(z_scores))  # two-tailed
+
         # Width of prediction interval
         pi_width_90 = np.mean(forecast["q90"] - forecast["q10"])
         pi_width_50 = np.mean(forecast["q75"] - forecast["q25"])
@@ -622,9 +629,45 @@ def run_chronos_nightly(
             "forecast_dates": forecast_dates,
             "metrics": series_metrics,
             "outside_90pi": outside_90pi,
+            "raw_pvals": raw_pvals,
         }
 
         metrics[f"chronos_nightly_{series_name}"] = series_metrics
+
+    # --- FDR correction across all forecast points and series ---
+    all_pvals = []
+    pval_labels = []
+    for sname, r in results.items():
+        for i, (d, p) in enumerate(zip(r["forecast_dates"], r["raw_pvals"])):
+            all_pvals.append(p)
+            pval_labels.append((sname, str(d), i))
+
+    if len(all_pvals) >= 2:
+        reject, fdr_pvals, _, _ = multipletests(all_pvals, method="fdr_bh")
+        print(f"\n  [FDR] Benjamini-Hochberg correction across {len(all_pvals)} forecast points:")
+
+        # Distribute FDR-corrected p-values back to each series
+        idx = 0
+        for sname, r in results.items():
+            n_pts = len(r["raw_pvals"])
+            fdr_slice = fdr_pvals[idx : idx + n_pts]
+            reject_slice = reject[idx : idx + n_pts]
+            r["fdr_pvals"] = fdr_slice
+            r["outside_90pi_fdr"] = reject_slice
+
+            n_raw = int(np.sum(r["outside_90pi"]))
+            n_fdr = int(np.sum(reject_slice))
+            r["metrics"]["n_anomalies_fdr_corrected"] = n_fdr
+            r["metrics"]["anomaly_dates_fdr"] = [
+                str(d) for d, rej in zip(r["forecast_dates"], reject_slice) if rej
+            ]
+            metrics[f"chronos_nightly_{sname}"]["n_anomalies_fdr_corrected"] = n_fdr
+            metrics[f"chronos_nightly_{sname}"]["anomaly_dates_fdr"] = r["metrics"][
+                "anomaly_dates_fdr"
+            ]
+
+            print(f"    {sname.upper()}: {n_raw} raw anomalies -> {n_fdr} after FDR")
+            idx += n_pts
 
     # Clear GPU memory
     torch.cuda.empty_cache()
