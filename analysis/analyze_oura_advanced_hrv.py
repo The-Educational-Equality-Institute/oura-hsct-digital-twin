@@ -2313,7 +2313,8 @@ def create_poincare_fig(rmssd: np.ndarray, toichi_data: dict) -> go.Figure:
             )  # Invert: sparse = larger
         else:
             sizes = np.full(len(density), 3.0)
-    except Exception:
+    except (ValueError, np.linalg.LinAlgError) as e:
+        logging.debug(f"Poincare KDE density estimation failed, using uniform: {e}")
         sizes = np.full(len(x_n), 3.0)
         density = np.ones(len(x_n))
 
