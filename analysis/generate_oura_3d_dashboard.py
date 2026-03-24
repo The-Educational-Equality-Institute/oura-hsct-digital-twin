@@ -332,7 +332,7 @@ def build_narrative_summary(outputs: dict, summary: dict) -> str:
             headline += "It " + " and ".join(qualifiers) + ". "
         headline += (
             f"The post-intervention window spans {post_days} days and remains confounded by "
-            "HEV diagnosed on 2026-03-18. "
+            f"HEV diagnosed on {HEV_DIAGNOSIS_DATE}. "
         )
     elif temp_p is not None:
         headline = (
