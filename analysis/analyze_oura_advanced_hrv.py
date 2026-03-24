@@ -1064,14 +1064,16 @@ def compute_hr_complexity(hr_bpm: np.ndarray) -> dict:
 
     try:
         perm_ent = float(antropy.perm_entropy(data, order=3, normalize=True))
-    except Exception:
+    except (ValueError, RuntimeError) as e:
+        logging.warning(f"Permutation entropy computation failed: {e}")
         perm_ent = float("nan")
 
     try:
         spec_ent = float(
             antropy.spectral_entropy(data, sf=1.0, method="welch", normalize=True)
         )
-    except Exception:
+    except (ValueError, RuntimeError) as e:
+        logging.warning(f"Spectral entropy computation failed: {e}")
         spec_ent = float("nan")
 
     # Classification
