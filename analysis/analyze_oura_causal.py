@@ -3572,7 +3572,7 @@ def _build_mediation_summary(mediation_results: dict[str, Any]) -> str:
             if "error" in p:
                 rows.append(
                     f"<tr><td>{p.get('label', key)}</td>"
-                    f'<td colspan="7"><em>{p["error"]}</em></td></tr>'
+                    f'<td colspan="8"><em>{p["error"]}</em></td></tr>'
                 )
                 continue
 
