@@ -3328,6 +3328,11 @@ def _build_placebo_summary(placebo_results: dict[str, Any]) -> str:
         for t in valid_tests:
             sig_class = "unfavorable" if t.get("significant") else "favorable"
             sig_label = "Sig (false alarm)" if t.get("significant") else "NS (expected)"
+            fdr_badge = (
+                '<span class="badge badge-sig">FDR-sig</span>'
+                if t.get("significant_fdr")
+                else ""
+            )
             rows.append(
                 f"<tr>"
                 f"<td>{t['placebo_date']}</td>"
@@ -3336,6 +3341,7 @@ def _build_placebo_summary(placebo_results: dict[str, Any]) -> str:
                 f"<td>{t.get('n_post', '-')}</td>"
                 f"<td>{t.get('avg_effect', 0):+.3f}</td>"
                 f"<td>{t.get('p_value', 1):.4f}</td>"
+                f"<td>{t.get('q_value_bh', t.get('p_value', 1)):.4f} {fdr_badge}</td>"
                 f'<td class="{sig_class}">{sig_label}</td>'
                 f"</tr>"
             )
@@ -3344,7 +3350,7 @@ def _build_placebo_summary(placebo_results: dict[str, Any]) -> str:
         <table>
             <thead><tr>
                 <th>Placebo date</th><th>Metric</th><th>N pre</th><th>N post</th>
-                <th>Effect</th><th>p-value</th><th>Result</th>
+                <th>Effect</th><th>Raw p-value</th><th>q-value (BH)</th><th>Result</th>
             </tr></thead>
             <tbody>{"".join(rows)}</tbody>
         </table>""")
