@@ -90,7 +90,7 @@ pio.templates.default = "clinical_dark"
 HTML_OUTPUT = REPORTS_DIR / "digital_twin_report.html"
 JSON_OUTPUT = REPORTS_DIR / "digital_twin_metrics.json"
 
-# Clinical reference values — imported from config.py
+# Clinical reference values - imported from config.py
 HSCT_TYPICAL_RMSSD = HSCT_RMSSD_RANGE  # local alias for backwards compat
 
 # State-space model parameters
@@ -116,7 +116,7 @@ OBS_NAMES = [
     "Sleep Efficiency",
 ]
 
-# Visualization — mapped to dark theme palette
+# Visualization - mapped to dark theme palette
 COLORS = {
     "pre": C_PRE_TX,
     "post": ACCENT_RED,

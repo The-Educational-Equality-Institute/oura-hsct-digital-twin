@@ -115,7 +115,7 @@ try:
     HAS_ANTROPY = True
 except ImportError:
     HAS_ANTROPY = False
-    logging.warning("antropy not installed — nonlinear HRV metrics will be skipped")
+    logging.warning("antropy not installed - nonlinear HRV metrics will be skipped")
 
 # ---------------------------------------------------------------------------
 # Optional dependency: nolds (DFA, SampEn)
@@ -126,16 +126,16 @@ try:
     HAS_NOLDS = True
 except ImportError:
     HAS_NOLDS = False
-    logging.warning("nolds not installed — DFA/SampEn disabled. pip install nolds")
+    logging.warning("nolds not installed - DFA/SampEn disabled. pip install nolds")
 
 HTML_OUTPUT = REPORTS_DIR / "advanced_hrv_analysis.html"
 JSON_OUTPUT = REPORTS_DIR / "advanced_hrv_metrics.json"
 
-# Population norms — imported from config (Nunan 2010, Shaffer & Ginsberg 2017)
+# Population norms - imported from config (Nunan 2010, Shaffer & Ginsberg 2017)
 NORM_RMSSD_P50 = POPULATION_RMSSD_MEDIAN  # ms, median
 # NORM_RMSSD_P25 and NORM_RMSSD_P75 imported from config
 
-# Post-HSCT typical range (Chamorro-Vina 2012, Wood 2013) — from config
+# Post-HSCT typical range (Chamorro-Vina 2012, Wood 2013) - from config
 HSCT_RMSSD_LOW, HSCT_RMSSD_HIGH = HSCT_RMSSD_RANGE
 
 # Color aliases for local use (dark theme)
@@ -591,7 +591,7 @@ def compute_rqa(
 def compute_dfa(rmssd: np.ndarray) -> dict:
     """Compute RMSSD-Epoch DFA (Proxy) alpha-1 and alpha-2 with bootstrap CI.
 
-    Peng et al. 1995. Applied here to 5-min RMSSD epochs as a PROXY — the
+    Peng et al. 1995. Applied here to 5-min RMSSD epochs as a PROXY - the
     original DFA method is designed for beat-to-beat RR-interval time series.
     RMSSD-epoch DFA values may not be directly comparable to published
     RR-interval thresholds.
@@ -659,16 +659,16 @@ def compute_dfa(rmssd: np.ndarray) -> dict:
 
     # Classification
     # NOTE: Thresholds (<0.75, >1.5) are from RR-interval literature.
-    # Not validated for RMSSD-epoch DFA — interpret with caution.
+    # Not validated for RMSSD-epoch DFA - interpret with caution.
     if alpha1 < 0.75:
         a1_class = "reduced_correlation"
-        a1_text = "Reduced short-term correlation (RMSSD-epoke-proxy; RR-intervall-terskel <0.75 — ikke validert for denne metoden)"
+        a1_text = "Reduced short-term correlation (RMSSD-epoke-proxy; RR-intervall-terskel <0.75 - ikke validert for denne metoden)"
     elif alpha1 > 1.5:
         a1_class = "excessive_correlation"
-        a1_text = "Excessive correlation (RMSSD-epoke-proxy; RR-intervall-terskel >1.5 — ikke validert for denne metoden)"
+        a1_text = "Excessive correlation (RMSSD-epoke-proxy; RR-intervall-terskel >1.5 - ikke validert for denne metoden)"
     else:
         a1_class = "normal"
-        a1_text = "Within normal range (RMSSD-epoke-proxy; RR-intervall-terskel ~1.0 — ikke validert for denne metoden)"
+        a1_text = "Within normal range (RMSSD-epoke-proxy; RR-intervall-terskel ~1.0 - ikke validert for denne metoden)"
 
     return {
         "alpha1": round(alpha1, 4),
@@ -680,7 +680,7 @@ def compute_dfa(rmssd: np.ndarray) -> dict:
         "alpha1_interpretation": a1_text,
         "reference_healthy": "~1.0 (RR-interval literature; RMSSD-epoch proxy may differ)",
         "reference_disease": "<0.75 or >1.5 (RR-interval literature; RMSSD-epoch proxy may differ)",
-        "method_note": "RMSSD-Epoch DFA (Proxy) — not beat-to-beat RR-interval DFA",
+        "method_note": "RMSSD-Epoch DFA (Proxy) - not beat-to-beat RR-interval DFA",
     }
 
 
@@ -1428,7 +1428,7 @@ def generate_html_report(metrics: dict, figures: dict) -> str:
             status=dfa_st,
             decimals=4,
             status_label=dfa_lbl,
-            detail=f"Applied to RMSSD epochs (not RR intervals) — ref ~1.0 (not directly comparable) | 95% KI: {dfa.get('alpha1_ci_95', ('?', '?'))}",
+            detail=f"Applied to RMSSD epochs (not RR intervals) - ref ~1.0 (not directly comparable) | 95% KI: {dfa.get('alpha1_ci_95', ('?', '?'))}",
         ),
         make_kpi_card(
             "Sample Entropy",

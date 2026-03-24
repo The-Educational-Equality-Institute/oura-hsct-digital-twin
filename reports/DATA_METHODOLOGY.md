@@ -1,4 +1,4 @@
-# Oura Digital Twin — Data Methodology and Limitations
+# Oura Digital Twin - Data Methodology and Limitations
 
 **Generated:** 2026-03-23
 **Patient:** Post-HSCT, 36M, MDS-AML, 26+ months post-transplant

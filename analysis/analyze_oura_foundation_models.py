@@ -110,7 +110,7 @@ CHRONOS_MODEL = "amazon/chronos-bolt-base"  # Bolt variant (faster, native quant
 CHRONOS_FALLBACK = "amazon/chronos-t5-base"  # Original T5 fallback
 QUANTILE_LEVELS = [0.1, 0.25, 0.5, 0.75, 0.9]
 
-# Visualization — from theme, with dark-theme-aware band colors
+# Visualization - from theme, with dark-theme-aware band colors
 COLOR_PRE = C_PRE_TX
 COLOR_POST = C_POST_TX
 COLOR_RUX_LINE = C_RUX_LINE
@@ -1463,7 +1463,7 @@ def create_forecast_figure(
 
     # --- Bands first (behind lines) ---
 
-    # 90% PI band — very subtle
+    # 90% PI band - very subtle
     fig.add_trace(
         go.Scatter(
             x=np.concatenate([fc_dt, fc_dt[::-1]]),
@@ -1476,7 +1476,7 @@ def create_forecast_figure(
         )
     )
 
-    # 50% PI band — slightly more visible
+    # 50% PI band - slightly more visible
     fig.add_trace(
         go.Scatter(
             x=np.concatenate([fc_dt, fc_dt[::-1]]),
@@ -1491,7 +1491,7 @@ def create_forecast_figure(
 
     # --- Lines on top of bands ---
 
-    # Context (historical) — bold solid
+    # Context (historical) - bold solid
     fig.add_trace(
         go.Scatter(
             x=ctx_dt,
@@ -1508,7 +1508,7 @@ def create_forecast_figure(
         )
     )
 
-    # Actual forecast period — bold solid
+    # Actual forecast period - bold solid
     fig.add_trace(
         go.Scatter(
             x=fc_dt,
@@ -1525,7 +1525,7 @@ def create_forecast_figure(
         )
     )
 
-    # Median forecast — dashed to distinguish from actual
+    # Median forecast - dashed to distinguish from actual
     fig.add_trace(
         go.Scatter(
             x=fc_dt,
@@ -1941,7 +1941,7 @@ def create_hourly_hr_figure(hourly_results: dict) -> go.Figure:
     forecast = hourly_results["forecast"]
     anomalous = hourly_results["anomalous_mask"]
 
-    # --- Band first (behind lines) — very subtle ---
+    # --- Band first (behind lines) - very subtle ---
     fig.add_trace(
         go.Scatter(
             x=np.concatenate([forecast_times, forecast_times[::-1]]),
@@ -1985,7 +1985,7 @@ def create_hourly_hr_figure(hourly_results: dict) -> go.Figure:
         )
     )
 
-    # --- Anomaly markers on top — red with white outlines ---
+    # --- Anomaly markers on top - red with white outlines ---
     if np.any(anomalous):
         fig.add_trace(
             go.Scatter(

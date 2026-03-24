@@ -161,7 +161,7 @@ def main():
     t_total = time.perf_counter()
     log("=" * 70)
     n_scripts = len(SCRIPTS)
-    log(f"  OURA ANALYSIS PIPELINE — ALL {n_scripts} SCRIPTS")
+    log(f"  OURA ANALYSIS PIPELINE - ALL {n_scripts} SCRIPTS")
     log(f"  Output: {REPORTS_DIR}")
     log("=" * 70)
 
@@ -169,7 +169,7 @@ def main():
     for i, script in enumerate(SCRIPTS, 1):
         script_path = ANALYSIS_DIR / script
         if not script_path.exists():
-            log(f"\n[{i}/{n_scripts}] SKIP {script} — file not found")
+            log(f"\n[{i}/{n_scripts}] SKIP {script} - file not found")
             results.append((script, "MISSING"))
             continue
 

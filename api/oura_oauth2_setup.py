@@ -45,7 +45,7 @@ load_dotenv(LOCAL_ENV_PATH)  # optional repo-local fallback for missing vars
 # Oura OAuth2 endpoints
 AUTH_URL = "https://cloud.ouraring.com/oauth/authorize"
 TOKEN_URL = "https://api.ouraring.com/oauth/token"
-# Issuer identifier returned in callback (RFC 9207 — Authorization Server Issuer Identification)
+# Issuer identifier returned in callback (RFC 9207 - Authorization Server Issuer Identification)
 EXPECTED_ISSUER = "https://moi.ouraring.com/oauth/v2/ext/oauth-anonymous"
 
 # Local callback server (using approved dev server port)
@@ -182,7 +182,7 @@ def authorize() -> None:
 
     # Verify state to prevent CSRF (F42)
     if OAuthCallbackHandler.received_state != oauth_state:
-        print("Error: OAuth state mismatch — possible CSRF attack")
+        print("Error: OAuth state mismatch - possible CSRF attack")
         print(f"  Expected: {oauth_state[:8]}...")
         print(f"  Received: {(OAuthCallbackHandler.received_state or 'None')[:8]}...")
         sys.exit(1)

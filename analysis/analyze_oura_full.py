@@ -434,7 +434,7 @@ def compute_stats(data: dict) -> dict:
         s["activity_score_mean"] = act["score"].mean()
         s["activity_total_days"] = len(act)
 
-    # Pre-diagnosis peak capacity (Samsung Health, Aug 2023 — active leukemia, undiagnosed)
+    # Pre-diagnosis peak capacity (Samsung Health, Aug 2023 - active leukemia, undiagnosed)
     samsung = data.get("samsung_steps")
     if samsung is not None and not samsung.empty:
         aug23 = samsung[
@@ -480,7 +480,7 @@ def compute_stats(data: dict) -> dict:
 # Figure builders
 # ---------------------------------------------------------------------------
 
-## Removed: fig_executive_summary (Plotly indicators) — replaced by make_kpi_card HTML cards
+## Removed: fig_executive_summary (Plotly indicators) - replaced by make_kpi_card HTML cards
 
 
 def fig_hrv_deep_dive(data: dict) -> go.Figure:
@@ -2390,7 +2390,7 @@ def clinical_narrative(stats: dict) -> str:
         steps_history_ctx = (
             f'<div class="cs-bar-context" style="margin-top:4px;color:{C_CRITICAL};font-weight:500">'
             f"{peak_steps:,} steps 3 days before emergency admission (active leukemia, undiagnosed) "
-            f"— {decline_pct:.0f}% decline"
+            f"- {decline_pct:.0f}% decline"
             f"</div>"
         )
     else:
@@ -2571,7 +2571,7 @@ def clinical_narrative(stats: dict) -> str:
         <strong>Functional profile consistent with severe impairment:</strong>
         autonomic dysfunction (RMSSD {rmssd:.1f} ms), chronic tachycardia
         (nocturnal HR {"elevated" if ist_met else "borderline"} at {nocturnal_dip:.0f} bpm), vascular aging (+{cv_excess:.0f} yr),
-        and severely reduced physical capacity ({steps:,.0f} steps/day{f" — down {decline_pct:.0f}% from {peak_steps:,} steps/day 3 days before emergency admission" if peak_steps and decline_pct else ""}).
+        and severely reduced physical capacity ({steps:,.0f} steps/day{f" - down {decline_pct:.0f}% from {peak_steps:,} steps/day 3 days before emergency admission" if peak_steps and decline_pct else ""}).
       </div>
 
       <!-- Collapsible references -->
@@ -2696,7 +2696,7 @@ def build_full_report(data: dict, stats: dict) -> str:
             "",
             status=steps_status,
             detail=(
-                f"{stats['pre_dx_peak_steps']:,}/day 3 days before admission — {stats['steps_decline_pct']:.0f}% decline"
+                f"{stats['pre_dx_peak_steps']:,}/day 3 days before admission - {stats['steps_decline_pct']:.0f}% decline"
                 if stats.get("pre_dx_peak_steps")
                 else f"{stats.get('steps_days_under_2000', 0)} days <2000"
             ),

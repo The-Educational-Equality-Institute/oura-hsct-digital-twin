@@ -595,7 +595,7 @@ def run_audit(
 def print_summary(result: AuditResult) -> None:
     """Print a human-readable audit summary."""
     print(f"\n{'=' * 70}")
-    print("  STATCHECK — Statistical Integrity Audit")
+    print("  STATCHECK - Statistical Integrity Audit")
     print(f"{'=' * 70}")
     print(f"  Reports checked:   {result.reports_checked}")
     print(f"  Claims extracted:  {result.claims_extracted}")
@@ -638,9 +638,11 @@ def print_summary(result: AuditResult) -> None:
         for je in result.json_errors:
             print(f"    - {je}")
 
-    n_problems = len(result.mismatches) + len(
-        [s for s in result.sanity_issues if s.severity == "error"]
-    ) + len(result.json_errors)
+    n_problems = (
+        len(result.mismatches)
+        + len([s for s in result.sanity_issues if s.severity == "error"])
+        + len(result.json_errors)
+    )
     print(f"\n{'=' * 70}")
     if n_problems == 0:
         print("  RESULT: PASS")
@@ -713,9 +715,11 @@ def main() -> int:
     )
 
     # Exit code: 0 = pass, 1 = mismatches or JSON errors found
-    n_errors = len(result.mismatches) + len(
-        [s for s in result.sanity_issues if s.severity == "error"]
-    ) + len(result.json_errors)
+    n_errors = (
+        len(result.mismatches)
+        + len([s for s in result.sanity_issues if s.severity == "error"])
+        + len(result.json_errors)
+    )
     return 1 if n_errors > 0 else 0
 
 

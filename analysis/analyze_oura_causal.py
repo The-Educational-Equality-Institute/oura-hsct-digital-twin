@@ -131,7 +131,7 @@ HTML_OUTPUT = REPORTS_DIR / "causal_inference_report.html"
 JSON_OUTPUT = REPORTS_DIR / "causal_inference_metrics.json"
 TS_JSON_OUTPUT = REPORTS_DIR / "causal_timeseries.json"
 
-# Color palette — uses dark theme from _theme
+# Color palette - uses dark theme from _theme
 COLOR_PRE = C_PRE_TX
 COLOR_POST = C_POST_TX
 COLOR_RUX_LINE = C_RUX_LINE
@@ -139,13 +139,13 @@ COLOR_COUNTERFACTUAL = C_COUNTERFACTUAL
 COLOR_CI_BAND = "rgba(147, 197, 253, 0.12)"
 COLOR_EFFECT = C_EFFECT
 
-# Plotly layout defaults — template handles most styling; t=60 since
+# Plotly layout defaults - template handles most styling; t=60 since
 # make_section already provides an h2 header (no redundant Plotly title)
 LAYOUT_DEFAULTS = dict(
     margin=dict(l=70, r=30, t=60, b=40),
 )
 
-# Clinical reference values — imported from config.py
+# Clinical reference values - imported from config.py
 
 # PCMCI parameters
 PCMCI_TAU_MAX = 7
@@ -198,7 +198,7 @@ def _relative_effect_is_meaningful(
 def _format_relative_effect_html(value: float | None) -> str:
     """Render relative effects conservatively in HTML tables."""
     if value is None or not np.isfinite(value):
-        return "&mdash;"
+        return "-"
     return f"{value:+.1f}%"
 
 
@@ -482,7 +482,7 @@ def _add_rux_line(fig: go.Figure, row: int = 1, col: int = 1) -> None:
             col=col,
         )
 
-    # Core line — solid, bright
+    # Core line - solid, bright
     fig.add_shape(
         type="line",
         x0=rux_dt,
@@ -546,7 +546,7 @@ def run_causal_impact(daily: pd.DataFrame) -> dict[str, Any]:
         results["runtime_s"] = round(time.perf_counter() - t0, 2)
         return results
 
-    # Define streams to analyze — all 11 metrics
+    # Define streams to analyze - all 11 metrics
     streams = {
         "rem_sleep_duration": {
             "label": "REM sleep duration (s)",
@@ -1128,7 +1128,7 @@ def run_placebo_tests(
             t["q_value_bh"] = t.get("p_value", 1.0)
             t["significant_fdr"] = t.get("significant", False)
 
-    # Summary — use raw significance for backward-compatible verdict
+    # Summary - use raw significance for backward-compatible verdict
     n_sig_placebo = sum(1 for t in valid_tests if t.get("significant", False))
     n_sig_placebo_fdr = sum(1 for t in valid_tests if t.get("significant_fdr", False))
     results["n_total_tests"] = len(valid_tests)
@@ -1414,7 +1414,7 @@ def run_pcmci(daily: pd.DataFrame) -> dict[str, Any]:
         "runtime_s": 0,
     }
 
-    # Variables for analysis — all 11 metrics
+    # Variables for analysis - all 11 metrics
     var_cols = [
         "rem_sleep_duration",
         "rem_pct",
@@ -3681,7 +3681,7 @@ def _build_statistical_power_section(
             direction_arrow = "&#8595;"  # down arrow
             direction_text = "decreased"
         else:
-            direction_arrow = "&#8212;"  # em dash
+            direction_arrow = "-"  # em dash
             direction_text = "no change"
 
         # Significance status
