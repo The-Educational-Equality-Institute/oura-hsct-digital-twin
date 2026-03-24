@@ -60,6 +60,9 @@ from config import (
     DATA_START,
     BASELINE_DAYS,
 )
+# Config dates are datetime.date objects; this script uses string keys throughout
+KNOWN_EVENT_DATE = str(KNOWN_EVENT_DATE)
+TREATMENT_START_STR = str(TREATMENT_START)
 from _theme import (
     wrap_html, make_kpi_card, make_kpi_row, make_section,
     TEXT_SECONDARY, TEXT_TERTIARY,
