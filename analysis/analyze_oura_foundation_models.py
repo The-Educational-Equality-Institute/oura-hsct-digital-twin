@@ -1336,6 +1336,34 @@ def run_ruxolitinib_analysis(
 
         metrics[f"ruxolitinib_{series_name}"] = rux_metrics
 
+    # --- FDR correction across series for Mann-Whitney p-values ---
+    raw_pvals = []
+    pval_keys = []
+    for sname in ["rmssd", "hr"]:
+        if sname in results:
+            m = results[sname]["metrics"]
+            pc = m.get("post_comparison")
+            if pc and pc.get("mann_whitney_p") is not None:
+                raw_pvals.append(pc["mann_whitney_p"])
+                pval_keys.append(sname)
+
+    if len(raw_pvals) >= 2:
+        reject, fdr_pvals, _, _ = multipletests(raw_pvals, method="fdr_bh")
+        print("\n  [FDR] Benjamini-Hochberg correction across ruxolitinib series:")
+        for sname, raw_p, adj_p, rej in zip(pval_keys, raw_pvals, fdr_pvals, reject):
+            results[sname]["metrics"]["post_comparison"]["mann_whitney_p_fdr"] = round(
+                float(adj_p), 6
+            )
+            results[sname]["metrics"]["post_comparison"]["fdr_significant"] = bool(rej)
+            metrics[f"ruxolitinib_{sname}"]["post_comparison"]["mann_whitney_p_fdr"] = round(
+                float(adj_p), 6
+            )
+            metrics[f"ruxolitinib_{sname}"]["post_comparison"]["fdr_significant"] = bool(rej)
+            print(
+                f"    {sname.upper()}: raw p={raw_p:.4f}, FDR-adjusted p={adj_p:.4f}"
+                f" {'(significant)' if rej else '(not significant)'}"
+            )
+
     torch.cuda.empty_cache()
     gc.collect()
 
