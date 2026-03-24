@@ -2290,11 +2290,7 @@ def generate_html_report(
     pre_tx_mean = pre_tx["ensemble_score"].mean() if len(pre_tx) > 0 else float("nan")
     post_tx_change = ""
     if len(post_tx) > 0 and not pd.isna(pre_tx_mean) and not pd.isna(post_tx_mean):
-        diff_pct = (
-            ((post_tx_mean - pre_tx_mean) / pre_tx_mean * 100)
-            if pre_tx_mean != 0
-            else 0
-        )
+        diff_pct = safe_divide(post_tx_mean - pre_tx_mean, pre_tx_mean) * 100
         direction = "lower" if diff_pct < 0 else "higher"
         post_tx_change = f"{abs(diff_pct):.0f}% {direction} mean anomaly score after ruxolitinib ({len(post_tx)} days)"
     else:
