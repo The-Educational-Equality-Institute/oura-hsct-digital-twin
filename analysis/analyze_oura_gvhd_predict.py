@@ -1946,23 +1946,23 @@ def compute_feature_importance(
     log("FEATURES", "Computing predictive feature importance...")
 
     features = [
-        ("temp_dev", "Temperature Deviation"),
-        ("temp_var_7d", "Temperature Variability (7d)"),
-        ("temp_gradient", "Temperature Gradient"),
-        ("hrv_median", "HRV Median (RMSSD)"),
-        ("hrv_std", "HRV Variability"),
-        ("sleep_hr", "Sleep Heart Rate"),
-        ("lowest_hr", "Lowest HR"),
-        ("sleep_eff", "Sleep Efficiency"),
-        ("frag_index", "Sleep Fragmentation"),
+        ("temp_dev", "Temperature Deviation (\u00b0C)"),
+        ("temp_var_7d", "Temperature Variability 7d (\u00b0C)"),
+        ("temp_gradient", "Temperature Gradient (\u00b0C/night)"),
+        ("hrv_median", "HRV RMSSD (ms)"),
+        ("hrv_std", "HRV Variability (ms)"),
+        ("sleep_hr", "Sleep Heart Rate (bpm)"),
+        ("lowest_hr", "Lowest HR (bpm)"),
+        ("sleep_eff", "Sleep Efficiency (%)"),
+        ("frag_index", "Sleep Fragmentation (transitions/hr)"),
         ("rem_pct", "REM %"),
         ("deep_pct", "Deep Sleep %"),
-        ("spo2_average", "SpO2 Average"),
+        ("spo2_average", "SpO2 Average (%)"),
         ("activity_score", "Activity Score"),
         ("steps", "Steps"),
         ("readiness_score", "Readiness Score"),
         ("stress_high", "Stress High (sec)"),
-        ("sleep_breath", "Respiratory rate (breaths/min)"),
+        ("sleep_breath", "Breathing Rate (breaths/min)"),
     ]
 
     results = []
