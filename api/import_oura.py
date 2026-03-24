@@ -87,7 +87,7 @@ def _unpack_time_series(
 
     if skipped:
         logging.warning(
-            "Skipped %d unparseable/null timestamps in %s", skipped, endpoint
+            "Skipped %d null/non-positive values in %s", skipped, endpoint
         )
 
     return results
