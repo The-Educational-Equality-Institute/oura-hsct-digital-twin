@@ -1965,7 +1965,7 @@ def build_html_report(
 
     body = make_kpi_row(
         make_kpi_card(
-            "BOS Risk Score",
+            "BOS Risk (SpO2 only)",
             f"{bos_risk['composite_score']:.0f}",
             "/100",
             status=bos_status,
