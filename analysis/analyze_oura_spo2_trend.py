@@ -1993,7 +1993,7 @@ def main() -> int:
                 "pre_mean": ruxi.get("pre_mean"),
                 "post_mean": ruxi.get("post_mean"),
                 "status": ruxi.get("status"),
-                "mann_whitney_p": ruxi.get("mann_whitney_p"),
+                "mann_whitney_p_value": ruxi.get("mann_whitney_p"),
                 "effect_size": ruxi.get("effect_size_rbc"),
                 "interpretation": ruxi.get("interpretation", ruxi.get("note")),
             },
