@@ -1,0 +1,11 @@
+
+[tool.ruff.lint]
+ignore = [
+    "E402",   # module-level import not at top (sys.path.insert pattern)
+    "E741",   # ambiguous variable names (l, I, O) - common in scientific code
+    "F841",   # unused local variable - many are intentional documentation/context
+]
+
+[tool.ruff.lint.per-file-ignores]
+"analysis/*.py" = ["E402", "F401"]
+"api/*.py" = ["E402"]
