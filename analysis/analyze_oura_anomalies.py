@@ -614,7 +614,8 @@ def run_lstm_autoencoder(daily: pd.DataFrame) -> dict[str, Any]:
         torch.cuda.manual_seed_all(LSTM_SEED)
     try:
         torch.use_deterministic_algorithms(True, warn_only=True)
-    except Exception:
+    except (RuntimeError, AttributeError):
+        # Older PyTorch versions may not support this API
         pass
     if hasattr(torch.backends, "cudnn"):
         torch.backends.cudnn.deterministic = True
