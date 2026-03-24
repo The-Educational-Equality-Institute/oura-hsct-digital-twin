@@ -37,9 +37,10 @@ def _resolve_symlink(p: Path) -> Path | None:
 # Verify DATABASE_PATH symlink target actually exists
 _db_resolved = _resolve_symlink(DATABASE_PATH)
 if _db_resolved is None and DATABASE_PATH.is_symlink():
-    print(
-        f"WARNING: DATABASE_PATH symlink is dangling: {DATABASE_PATH} "
-        f"-> {DATABASE_PATH.resolve()}"
+    logging.warning(
+        "DATABASE_PATH symlink is dangling: %s -> %s",
+        DATABASE_PATH,
+        DATABASE_PATH.resolve(),
     )
 
 # Investigation DB (used by analyze_oura_full.py)
