@@ -19,8 +19,8 @@ REPORTS_DIR = PROJECT_ROOT / "reports"
 # --- Patient-specific dates (update for your case) ---
 TRANSPLANT_DATE = date(2023, 1, 1)       # Major clinical event / baseline anchor
 TREATMENT_START = date(2026, 1, 15)      # Intervention start (for causal analysis)
-KNOWN_EVENT_DATE = "2026-01-10"          # Known acute episode (str for compat)
-HEV_DIAGNOSIS_DATE = ""                  # Leave empty if not applicable
+KNOWN_EVENT_DATE = date(2026, 1, 10)     # Known acute episode
+HEV_DIAGNOSIS_DATE = None                # Leave as None if not applicable, or date(YYYY, M, D)
 DATA_START = date(2025, 12, 1)           # Analysis window start
 TREATMENT_START_STR = str(TREATMENT_START)
 PATIENT_AGE = 40
