@@ -99,7 +99,7 @@ class OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
 
 
 def update_env_var(key: str, value: str) -> None:
-    """Update or add a variable in the parent project's .env file."""
+    """Update or add a variable in the repo root .env file."""
     env_text = ENV_PATH.read_text() if ENV_PATH.exists() else ""
 
     pattern = re.compile(rf"^{re.escape(key)}=.*$", re.MULTILINE)
