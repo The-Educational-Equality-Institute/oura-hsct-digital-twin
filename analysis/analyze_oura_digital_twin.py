@@ -1810,10 +1810,7 @@ def create_sensor_fusion_figure(
     dates = daily.index
     for j, (col, label) in enumerate(zip(obs_cols, obs_labels)):
         sensor_data = obs_masked[:, j]
-        if hasattr(sensor_data, 'mask') and sensor_data.mask is not np.bool_(False):
-            available = (~sensor_data.mask).astype(float)
-        else:
-            available = (~np.isnan(np.array(sensor_data))).astype(float)
+        available = (~np.ma.getmaskarray(sensor_data)).astype(float)
 
         fig.add_trace(
             go.Scatter(
