@@ -301,6 +301,10 @@ def _compute_dfa_alpha1(rmssd_series: list[float], min_epochs: int = 16) -> floa
 
     try:
         import antropy
+    except ImportError:
+        return None
+
+    try:
         arr = np.array(rmssd_series, dtype=np.float64)
         # Remove NaN/zero
         arr = arr[np.isfinite(arr) & (arr > 0)]
