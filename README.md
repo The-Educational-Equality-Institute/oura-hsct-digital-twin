@@ -54,15 +54,24 @@ oura-digital-twin/
 
 ## Setup
 
-1. Create and activate a Python 3.12+ virtual environment
-2. Install core dependencies:
+1. Create and activate a Python 3.10+ virtual environment
+2. Install dependencies (pick one):
    ```bash
+   # Option A: Core only (recommended for most users)
    pip install -r requirements.txt
-   ```
-   For full stack (includes optional `ssm` rSLDS backend):
-   ```bash
+
+   # Option B: Full stack including ssm rSLDS backend
    bash scripts/install_full_stack.sh
+
+   # Option C: Full stack, skip ssm (use hmmlearn HMM fallback)
+   bash scripts/install_full_stack.sh --no-ssm
    ```
+   **Why the install script?** The `ssm==0.0.1` package requires Cython at
+   build time, but pip's build isolation prevents Cython from being available
+   during the build. The script pre-installs build dependencies and then
+   installs ssm with `--no-build-isolation`. A C compiler (gcc/clang) is
+   required. If ssm fails, the GVHD analysis falls back to hmmlearn
+   automatically.
 3. Copy `.env.example` to `.env` and add your Oura API credentials:
    ```bash
    cp .env.example .env
