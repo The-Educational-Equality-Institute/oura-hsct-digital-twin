@@ -132,12 +132,17 @@ Clinical reference thresholds (ESC, population norms) and the full visual identi
 
 ## Dependencies
 
-Core:
+Core (data import, basic analyses):
 ```
 pip install -r requirements.txt
 ```
 
-Full stack (includes `ssm` rSLDS backend with Cython build workaround):
+Full stack (all optional backends - HRV entropy, Kalman, HMM, Chronos, STUMPY, tsfresh):
+```
+pip install -r requirements-full.txt
+```
+
+Full stack with `ssm` rSLDS backend (requires Cython build toolchain):
 ```bash
 bash scripts/install_full_stack.sh          # includes ssm
 bash scripts/install_full_stack.sh --no-ssm # skip ssm, use hmmlearn fallback
