@@ -47,7 +47,8 @@ oura-digital-twin/
     _hardening.py        Numerical stability utilities
     analyze_oura_*.py    Analysis scripts
     generate_*.py        Dashboard and roadmap generators
-  data/                  SQLite database (created by importer, gitignored)
+  data/demo.db           Demo dataset (79 days of real Oura data, included)
+  data/oura.db           Your own data (created by importer, gitignored)
   reports/               Generated output (gitignored, see live site)
   examples/              Example outputs
 ```
