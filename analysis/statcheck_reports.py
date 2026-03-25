@@ -606,9 +606,9 @@ def print_summary(result: AuditResult) -> None:
     print(f"  Unmatched HTML:    {len(result.unmatched_html)}")
 
     if result.mismatches:
-        print(f"\n{'─' * 70}")
+        print(f"\n{'-' * 70}")
         print("  MISMATCHES (HTML vs JSON)")
-        print(f"{'─' * 70}")
+        print(f"{'-' * 70}")
         for m in result.mismatches:
             icon = "!!" if m.severity == "error" else "!"
             print(f"  [{icon}] {m.report}")
