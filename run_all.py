@@ -143,18 +143,27 @@ def assemble_send_bundle() -> tuple[list[str], list[str]]:
     return copied_html, copied_json
 
 def main():
+    parser = argparse.ArgumentParser(description="Run all Oura analysis scripts.")
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Exit with code 1 if ANY script fails (default: exit 0 if at least one passes)",
+    )
+    args = parser.parse_args()
+
     t_total = time.perf_counter()
     log("=" * 70)
     n_scripts = len(SCRIPTS)
-    log(f"  OURA ANALYSIS PIPELINE — ALL {n_scripts} SCRIPTS")
+    log(f"  OURA ANALYSIS PIPELINE - ALL {n_scripts} SCRIPTS")
     log(f"  Output: {REPORTS_DIR}")
+    log(f"  Mode: {'strict (any failure = exit 1)' if args.strict else 'resilient (exit 0 if any pass)'}")
     log("=" * 70)
 
     results = []
     for i, script in enumerate(SCRIPTS, 1):
         script_path = ANALYSIS_DIR / script
         if not script_path.exists():
-            log(f"\n[{i}/{n_scripts}] SKIP {script} — file not found")
+            log(f"\n[{i}/{n_scripts}] SKIP {script} - file not found")
             results.append((script, "MISSING"))
             continue
 
@@ -173,16 +182,18 @@ def main():
             elapsed = time.perf_counter() - t0
             status = "OK" if proc.returncode == 0 else f"FAIL (rc={proc.returncode})"
             results.append((script, status, elapsed))
-            log(f"\n  → {status} ({elapsed:.1f}s)")
+            log(f"\n  -> {status} ({elapsed:.1f}s)")
         except subprocess.TimeoutExpired:
             results.append((script, "TIMEOUT"))
-            log("\n  → TIMEOUT (>600s)")
+            log("\n  -> TIMEOUT (>600s)")
         except Exception as e:
             results.append((script, f"ERROR: {e}"))
-            log(f"\n  → ERROR: {e}")
+            log(f"\n  -> ERROR: {e}")
 
     # Summary
     total_time = time.perf_counter() - t_total
+    successes = sum(1 for e in results if e[1] == "OK")
+    failures = n_scripts - successes
     log(f"\n{'=' * 70}")
     log("  PIPELINE COMPLETE")
     log(f"{'=' * 70}")
@@ -194,26 +205,39 @@ def main():
 
     log(f"\n  Total runtime: {total_time:.1f}s")
     log(f"  Reports: {REPORTS_DIR}")
+    log(f"  Passed: {successes}/{n_scripts}  Failed: {failures}/{n_scripts}")
 
-    failures = sum(1 for e in results if e[1] != "OK")
     if failures:
         log(f"\n  {failures}/{n_scripts} script(s) failed.")
+
+    # Assemble send bundle only when all scripts passed
+    if failures == 0:
+        try:
+            copied_html, copied_json = assemble_send_bundle()
+            log(f"\n  Curated HTML reports: {len(copied_html)}")
+            for name in copied_html:
+                f = REPORTS_DIR / name
+                size_mb = f.stat().st_size / (1024 * 1024)
+                log(f"    {name} ({size_mb:.1f} MB)")
+            log(f"  Curated JSON metrics: {len(copied_json)}")
+            for name in copied_json:
+                log(f"    {name}")
+            log(f"\n  Send bundle: {SEND_BUNDLE_DIR}")
+            log(f"  Manifest: {SEND_BUNDLE_DIR / 'SEND_MANIFEST.md'}")
+        except FileNotFoundError as exc:
+            log(f"\n  Send bundle assembly failed: {exc}")
+    else:
+        log("  Send bundle skipped (not all scripts passed).")
+
+    # Exit code logic:
+    # --strict: exit 1 if any script failed
+    # default:  exit 1 only if ALL scripts failed (partial success = exit 0)
+    if successes == 0:
+        log("\n  All scripts failed. Exiting with code 1.")
         sys.exit(1)
-
-    copied_html, copied_json = assemble_send_bundle()
-
-    log(f"\n  Curated HTML reports: {len(copied_html)}")
-    for name in copied_html:
-        f = REPORTS_DIR / name
-        size_mb = f.stat().st_size / (1024 * 1024)
-        log(f"    {name} ({size_mb:.1f} MB)")
-
-    log(f"  Curated JSON metrics: {len(copied_json)}")
-    for name in copied_json:
-        log(f"    {name}")
-
-    log(f"\n  Send bundle: {SEND_BUNDLE_DIR}")
-    log(f"  Manifest: {SEND_BUNDLE_DIR / 'SEND_MANIFEST.md'}")
+    if args.strict and failures > 0:
+        log("\n  Strict mode: exiting with code 1 due to failures.")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
