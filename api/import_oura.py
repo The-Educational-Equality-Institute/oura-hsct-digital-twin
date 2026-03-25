@@ -460,7 +460,7 @@ def init_database(db_path: str) -> sqlite3.Connection:
             weight REAL,
             height REAL,
             biological_sex TEXT,
-            email TEXT,
+            email_hash TEXT,
             fetched_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
