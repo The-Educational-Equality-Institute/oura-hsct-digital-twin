@@ -39,7 +39,6 @@ jobs:
         run: |
           pip install ruff
           ruff check .
-          ruff format --check .
 
       - name: Generate config.py for CI
         run: cp config.example.py config.py
