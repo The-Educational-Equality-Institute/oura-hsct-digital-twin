@@ -25,7 +25,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -64,8 +64,17 @@ OUTPUT_FILE = REPORTS_DIR / "oura_3d_dashboard.html"
 # ---------------------------------------------------------------------------
 # Clinical events
 # ---------------------------------------------------------------------------
-RUXOLITINIB_START = TREATMENT_START_STR
-ACUTE_EVENT = KNOWN_EVENT_DATE
+def _to_date_str(value: Any) -> str:
+    """Normalize config date-like values to YYYY-MM-DD strings."""
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    return str(value)
+
+
+RUXOLITINIB_START = _to_date_str(TREATMENT_START_STR)
+ACUTE_EVENT = _to_date_str(KNOWN_EVENT_DATE)
 
 # ---------------------------------------------------------------------------
 # Dark theme color palette (colorblind-safe)

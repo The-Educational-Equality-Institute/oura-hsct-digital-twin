@@ -84,6 +84,7 @@ JSON_OUTPUT = REPORTS_DIR / "foundation_model_metrics.json"
 # Clinical context
 # ---------------------------------------------------------------------------
 RUXOLITINIB_START = TREATMENT_START_STR  # string form for date comparisons
+KNOWN_EVENT_DATE_STR = str(KNOWN_EVENT_DATE)  # string form for date comparisons
 FORECAST_HORIZON = 14  # days
 CONTEXT_LENGTH = 55  # nights for training context
 
@@ -677,7 +678,7 @@ def run_chronos_hourly_hr(
         print("  Insufficient data for sliding window analysis")
 
     # Check if any Feb 9 anomalies were found
-    feb9_anomalies = [a for a in sliding_anomalies if KNOWN_EVENT_DATE in a["datetime"]]
+    feb9_anomalies = [a for a in sliding_anomalies if KNOWN_EVENT_DATE_STR in a["datetime"]]
     if feb9_anomalies:
         print(f"  Feb 9 anomalies in hourly HR: {len(feb9_anomalies)}")
 
@@ -915,7 +916,7 @@ def compute_ensemble_consensus(
             print(f"  {level}: {cnt} date-series pairs")
 
         # Check Feb 9 alignment
-        feb9 = ensemble_df[ensemble_df["date"] == KNOWN_EVENT_DATE]
+        feb9 = ensemble_df[ensemble_df["date"] == KNOWN_EVENT_DATE_STR]
         if len(feb9) > 0:
             print("\n  Feb 9 event consensus:")
             for _, row in feb9.iterrows():
@@ -928,7 +929,7 @@ def compute_ensemble_consensus(
             "high_confidence_anomaly_dates": high_dates,
             "medium_confidence_count": int(len(ensemble_df[ensemble_df["consensus"] == "MEDIUM"])),
             "normal_count": int(len(ensemble_df[ensemble_df["consensus"] == "NORMAL"])),
-            "feb9_detected": KNOWN_EVENT_DATE in high_dates,
+            "feb9_detected": KNOWN_EVENT_DATE_STR in high_dates,
         }
     else:
         metrics["ensemble_consensus"] = {"error": "no overlapping forecasts"}
@@ -1002,7 +1003,7 @@ def run_feb9_retrospective(
         # Check if Feb 9 specifically is anomalous
         feb9_idx = None
         for i, d in enumerate(actual_dates):
-            if str(d) == KNOWN_EVENT_DATE:
+            if str(d) == KNOWN_EVENT_DATE_STR:
                 feb9_idx = i
                 break
 
@@ -1212,7 +1213,7 @@ def create_forecast_figure(
     forecast: dict,
     series_label: str,
     unit: str,
-    known_event_date: str = KNOWN_EVENT_DATE,
+    known_event_date: str = KNOWN_EVENT_DATE_STR,
     rux_date: str = RUXOLITINIB_START,
     outside_90pi=None,
 ) -> go.Figure:
@@ -1778,7 +1779,7 @@ def generate_simple_html_report(
         ),
         make_kpi_card(
             "Ruxolitinib Start",
-            "16. mar 2026",
+            TREATMENT_START.strftime("%-d. %b %Y").lower(),
             status="info",
             decimals=0,
         ),
@@ -2003,7 +2004,7 @@ def main() -> int:
         "generated_at": generated_at,
         "run_timestamp": generated_at,
         "model": CHRONOS_MODEL,
-        "known_event": KNOWN_EVENT_DATE,
+        "known_event": KNOWN_EVENT_DATE_STR,
         "ruxolitinib_start": RUXOLITINIB_START,
     }
 
@@ -2160,6 +2161,7 @@ def main() -> int:
     except Exception as e:
         print(f"[ERROR] HTML generation failed: {e}")
         traceback.print_exc()
+        raise SystemExit(1) from e
 
     # Save JSON metrics
     try:
@@ -2173,7 +2175,7 @@ def main() -> int:
                 return obj.tolist()
             if isinstance(obj, (np.bool_,)):
                 return bool(obj)
-            if isinstance(obj, pd.Timestamp):
+            if isinstance(obj, (pd.Timestamp, datetime, date)):
                 return str(obj)
             return obj
 
@@ -2186,6 +2188,7 @@ def main() -> int:
     except Exception as e:
         print(f"[ERROR] JSON save failed: {e}")
         traceback.print_exc()
+        raise SystemExit(1) from e
 
     # Summary
     print("\n" + "=" * 70)

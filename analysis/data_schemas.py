@@ -5,10 +5,10 @@ analysis. If the daily pipeline produces an impossible value (negative SpO2,
 HR of 500, p-value of 2.0), it crashes loudly instead of publishing garbage.
 
 Usage:
-    from data_schemas import validate_daily_metrics, validate_stats
+    from data_schemas import validate_hrv, validate_heart_rate, validate_spo2, validate_sleep
 
     df = load_data()
-    df = validate_daily_metrics(df)  # raises SchemaError on bad data
+    df = validate_hrv(df)  # raises SchemaError on bad data
 """
 
 import sys
