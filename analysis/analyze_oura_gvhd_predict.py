@@ -208,6 +208,9 @@ def log(tag: str, msg: str) -> None:
 # ===========================================================================
 def load_all_data() -> dict[str, pd.DataFrame]:
     """Load all Oura tables into a dict of DataFrames."""
+    global DATA_END
+    if not DATA_END:
+        DATA_END = _resolve_data_end()
     log("DATA", "Loading Oura biometric data from SQLite...")
     if not Path(DATABASE_PATH).exists():
         print("No data found. Run: python api/import_oura.py --days 90")
