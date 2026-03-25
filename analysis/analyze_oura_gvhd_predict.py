@@ -472,13 +472,8 @@ def compute_epoch_fragmentation(
     frag_df = pd.DataFrame(frag_rows)
     frag_df = frag_df.merge(pid_date, on="period_id", how="left")
 
-    # Take primary period per day (highest frag_index for worst-case)
-    frag_daily = (
-        frag_df.sort_values(["date", "frag_index"], ascending=[True, False])
-        .drop_duplicates(subset="date", keep="first")
-        [["date", "frag_index", "transitions", "awake_epochs_pct"]]
-    )
-    return frag_daily
+    # Return per-period fragmentation (caller selects primary period)
+    return frag_df[["period_id", "date", "frag_index", "transitions", "awake_epochs_pct"]]
 
 
 # ===========================================================================
