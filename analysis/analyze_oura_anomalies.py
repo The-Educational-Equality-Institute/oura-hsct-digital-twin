@@ -2124,11 +2124,11 @@ def main() -> int:
     json_metrics = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "data_range": {
-            "start": daily["date"].iloc[0],
-            "end": daily["date"].iloc[-1],
+            "start": str(daily["date"].iloc[0]),
+            "end": str(daily["date"].iloc[-1]),
             "n_days": len(daily),
         },
-        "known_event": KNOWN_EVENT_DATE,
+        "known_event": str(KNOWN_EVENT_DATE),
         "validation": validation,
         "methods": {},
         "ensemble": {
@@ -2152,7 +2152,10 @@ def main() -> int:
             ),
         }
 
-    JSON_OUTPUT.write_text(json.dumps(json_metrics, indent=2, ensure_ascii=False), encoding="utf-8")
+    JSON_OUTPUT.write_text(
+        json.dumps(json_metrics, indent=2, ensure_ascii=False, default=str),
+        encoding="utf-8",
+    )
     print(f"[REPORT] JSON metrics saved to: {JSON_OUTPUT}")
 
     total_time = round(time.time() - t_total, 2)

@@ -1,43 +1,37 @@
 # Core dependencies
 plotly>=5.18
-pandas>=2.0,<3
+pandas>=2.0
 numpy>=1.24
-cython==3.2.4
 scipy>=1.11
 statsmodels>=0.14
 scikit-learn>=1.3
 requests>=2.31
 python-dotenv>=1.0
-oura-ring>=0.3
+oura-ring>=0.4
 
 # Causal impact analysis (required by analyze_oura_causal.py)
-pycausalimpact>=0.1.1
+pycausalimpact>=0.2
 
 # Entropy / nonlinear HRV metrics (required by advanced_hrv + biomarkers)
 antropy>=0.1
 nolds>=0.5
 
-# Foundation model forecasting
-chronos-forecasting==2.2.2
-torch==2.11.0
+# Optional: Foundation model forecasting (requires GPU)
+# chronos-forecasting>=1.0
+# torch>=2.0
 
-# Causal discovery (PCMCI+)
-tigramite==5.2.10.1
+# Optional: Causal discovery (PCMCI+)
+# tigramite>=5.2
 
-# Matrix Profile anomaly detection
-stumpy==1.14.1
+# Optional: Matrix Profile anomaly detection
+# stumpy>=1.12
 
-# Time-series feature extraction
-tsfresh==0.21.1
+# Optional: Time-series feature extraction
+# tsfresh>=0.20
 
-# Kalman filter digital twin
+# Optional: Kalman filter digital twin
 filterpy>=1.4
-pykalman==0.11.2
+# pykalman>=0.9
 
-# State-space modeling for GVHD prediction (Linderman SSM)
-# For fresh Python 3.12 environments, prefer installing via
-# `bash scripts/install_full_stack.sh` to avoid PEP517 build-isolation issues.
-ssm==0.0.1
-
-# HMM fallback for GVHD prediction
-hmmlearn==0.3.3
+# Optional: HMM state detection (GVHD prediction)
+hmmlearn>=0.3

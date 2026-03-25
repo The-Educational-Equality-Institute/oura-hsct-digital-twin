@@ -8,7 +8,6 @@ Usage:
     cd oura-digital-twin
     python run_all.py
 """
-
 import os
 import json
 import shutil
@@ -26,11 +25,11 @@ SEND_BUNDLE_DIR = REPORTS_DIR / "send_bundle"
 SUBPROCESS_ENV = {**os.environ, "PYTHONUNBUFFERED": "1"}
 
 SCRIPTS = [
-    "analyze_oura_spo2_trend.py",
     "analyze_oura_full.py",
     "analyze_oura_advanced_hrv.py",
     "analyze_oura_sleep_advanced.py",
     "analyze_oura_biomarkers.py",
+    "analyze_oura_spo2_trend.py",
     "analyze_oura_anomalies.py",
     "analyze_oura_foundation_models.py",
     "analyze_oura_digital_twin.py",
@@ -79,12 +78,8 @@ def assemble_send_bundle() -> tuple[list[str], list[str]]:
     """Copy the curated release surface to reports/send_bundle."""
     SEND_BUNDLE_DIR.mkdir(parents=True, exist_ok=True)
 
-    missing_html = [
-        name for name in SEND_BUNDLE_HTML if not (REPORTS_DIR / name).exists()
-    ]
-    missing_json = [
-        name for name in SEND_BUNDLE_JSON if not (REPORTS_DIR / name).exists()
-    ]
+    missing_html = [name for name in SEND_BUNDLE_HTML if not (REPORTS_DIR / name).exists()]
+    missing_json = [name for name in SEND_BUNDLE_JSON if not (REPORTS_DIR / name).exists()]
     if missing_html or missing_json:
         missing = missing_html + missing_json
         raise FileNotFoundError(
@@ -110,26 +105,15 @@ def assemble_send_bundle() -> tuple[list[str], list[str]]:
         shutil.copy2(src, SEND_BUNDLE_DIR / name)
         copied_json.append(name)
 
-    # Keep the canonical HTML pointer, but drop dated-snapshot references that are
-    # intentionally excluded from the external bundle.
+    # The send bundle intentionally excludes dated snapshots; keep references internal.
     full_json_path = SEND_BUNDLE_DIR / "oura_full_analysis.json"
     if full_json_path.exists():
         payload = json.loads(full_json_path.read_text(encoding="utf-8"))
         canonical_html = payload.get("canonical_html", "oura_full_analysis.html")
         payload["report_html"] = canonical_html
-        payload.pop("date_stamped_html", None)
+        payload["date_stamped_html"] = canonical_html
         full_json_path.write_text(
             json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
-
-    # Strip internal execution logs from externally shared metrics payloads.
-    gvhd_json_path = SEND_BUNDLE_DIR / "gvhd_prediction_metrics.json"
-    if gvhd_json_path.exists():
-        gvhd_payload = json.loads(gvhd_json_path.read_text(encoding="utf-8"))
-        gvhd_payload.pop("progress_log", None)
-        gvhd_json_path.write_text(
-            json.dumps(gvhd_payload, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
 
@@ -156,12 +140,11 @@ def assemble_send_bundle() -> tuple[list[str], list[str]]:
     )
     return copied_html, copied_json
 
-
 def main():
     t_total = time.perf_counter()
     log("=" * 70)
     n_scripts = len(SCRIPTS)
-    log(f"  OURA ANALYSIS PIPELINE - ALL {n_scripts} SCRIPTS")
+    log(f"  OURA ANALYSIS PIPELINE — ALL {n_scripts} SCRIPTS")
     log(f"  Output: {REPORTS_DIR}")
     log("=" * 70)
 
@@ -169,7 +152,7 @@ def main():
     for i, script in enumerate(SCRIPTS, 1):
         script_path = ANALYSIS_DIR / script
         if not script_path.exists():
-            log(f"\n[{i}/{n_scripts}] SKIP {script} - file not found")
+            log(f"\n[{i}/{n_scripts}] SKIP {script} — file not found")
             results.append((script, "MISSING"))
             continue
 
@@ -189,24 +172,12 @@ def main():
             status = "OK" if proc.returncode == 0 else f"FAIL (rc={proc.returncode})"
             results.append((script, status, elapsed))
             log(f"\n  → {status} ({elapsed:.1f}s)")
-            if proc.returncode != 0:
-                for blocked_script in SCRIPTS[i:]:
-                    results.append(
-                        (blocked_script, "SKIPPED (blocked by earlier failure)")
-                    )
-                break
         except subprocess.TimeoutExpired:
             results.append((script, "TIMEOUT"))
             log("\n  → TIMEOUT (>600s)")
-            for blocked_script in SCRIPTS[i:]:
-                results.append((blocked_script, "SKIPPED (blocked by earlier failure)"))
-            break
         except Exception as e:
             results.append((script, f"ERROR: {e}"))
             log(f"\n  → ERROR: {e}")
-            for blocked_script in SCRIPTS[i:]:
-                results.append((blocked_script, "SKIPPED (blocked by earlier failure)"))
-            break
 
     # Summary
     total_time = time.perf_counter() - t_total
@@ -222,14 +193,9 @@ def main():
     log(f"\n  Total runtime: {total_time:.1f}s")
     log(f"  Reports: {REPORTS_DIR}")
 
-    failures = sum(
-        1 for e in results if e[1] != "OK" and not e[1].startswith("SKIPPED")
-    )
-    blocked = sum(1 for e in results if e[1].startswith("SKIPPED"))
+    failures = sum(1 for e in results if e[1] != "OK")
     if failures:
         log(f"\n  {failures}/{n_scripts} script(s) failed.")
-        if blocked:
-            log(f"  {blocked}/{n_scripts} script(s) skipped after the first failure.")
         sys.exit(1)
 
     copied_html, copied_json = assemble_send_bundle()
