@@ -201,7 +201,8 @@ def load_data() -> dict[str, pd.DataFrame]:
     print("[DATA] Loading biometric data from database...")
     db_path = Path(DATABASE_PATH).resolve()
     if not db_path.exists():
-        raise FileNotFoundError(f"Database not found: {db_path}")
+        print(f"ERROR: Database not found at {db_path}. Run: python api/import_oura.py --days 90", file=sys.stderr)
+        sys.exit(1)
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     try:
         # HRV epochs (5-min intervals)
