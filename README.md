@@ -47,7 +47,6 @@ oura-digital-twin/
     _hardening.py        Numerical stability utilities
     analyze_oura_*.py    Analysis scripts
     generate_*.py        Dashboard and roadmap generators
-    generate_*.py        Dashboard and roadmap generators
   data/                  SQLite database (created by importer, gitignored)
   reports/               Generated output (gitignored, see live site)
   examples/              Example outputs
