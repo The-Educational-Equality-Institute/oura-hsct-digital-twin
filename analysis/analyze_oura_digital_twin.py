@@ -1226,10 +1226,7 @@ def analyze_sensor_fusion(
         pred_j = predicted[j, :]
 
         actual_j = obs_masked[:, j]
-        if hasattr(actual_j, 'mask') and actual_j.mask is not np.bool_(False):
-            valid = ~actual_j.mask
-        else:
-            valid = ~np.isnan(np.array(actual_j))
+        valid = ~np.ma.getmaskarray(actual_j)
 
         if valid.sum() > 10:
             resid = np.array(actual_j[valid]) - pred_j[valid]
