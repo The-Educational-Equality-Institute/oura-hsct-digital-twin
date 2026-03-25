@@ -264,7 +264,7 @@ def load_data() -> dict[str, pd.DataFrame]:
     print("[DATA] Loading biometric data from database...")
 
     if not DATABASE_PATH.exists():
-        print(f"  ERROR: Database not found: {DATABASE_PATH}", file=sys.stderr)
+        print(f"ERROR: Database not found at {DATABASE_PATH}. Run: python api/import_oura.py --days 90", file=sys.stderr)
         sys.exit(1)
 
     conn = sqlite3.connect(f"file:{DATABASE_PATH}?mode=ro", uri=True)

@@ -105,7 +105,7 @@ NORMS = {
 def get_connection() -> sqlite3.Connection:
     """Open read-only connection to biometrics database."""
     if not DATABASE_PATH.exists():
-        print(f"ERROR: Database not found at {DATABASE_PATH}", file=sys.stderr)
+        print(f"ERROR: Database not found at {DATABASE_PATH}. Run: python api/import_oura.py --days 90", file=sys.stderr)
         sys.exit(1)
     conn = sqlite3.connect(f"file:{DATABASE_PATH}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row

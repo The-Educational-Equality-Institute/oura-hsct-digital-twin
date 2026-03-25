@@ -42,6 +42,7 @@ reports/*.json
 reports/*.png
 reports/screenshots/
 reports/send_bundle/
+reports/pr*
 
 # Local automation (keep daily_pipeline.sh tracked)
 scripts/*

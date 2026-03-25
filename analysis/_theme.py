@@ -1864,7 +1864,7 @@ def disclaimer_banner(post_days: int | None = None) -> str:
         '<span class="odt-ctx-dot"></span>'
         '<span class="odt-ctx-item">N=1 case study — not validated for clinical decisions</span>'
         '<span class="odt-ctx-dot"></span>'
-        f'<span class="odt-ctx-item warn">HEV diagnosed {HEV_DIAGNOSIS_DATE.strftime("%b %-d") if HEV_DIAGNOSIS_DATE else "N/A"}; interpret findings cautiously '
+        f'<span class="odt-ctx-item warn">HEV diagnosed {HEV_DIAGNOSIS_DATE.strftime("%b %d") if HEV_DIAGNOSIS_DATE else "N/A"}; interpret findings cautiously '
         f'in this Day {post_days} post-ruxolitinib window</span>'
         '</div>'
     )
@@ -2123,7 +2123,7 @@ document.querySelectorAll('.chart-box').forEach(el => observer.observe(el));
 <div class="odt-footer">
   <div>All metrics derived from Oura Ring Gen 4 consumer wearable data. Not clinical-grade measurements.</div>
   <div>Single-patient case study (N=1). Not validated for clinical decision-making. Not a medical device.</div>
-  <div>Data: {DATA_START.strftime('%B %-d')} &ndash; {data_end_date.strftime('%B %-d, %Y')} &middot; Post-intervention: {footer_post_days} days (ruxolitinib, {TREATMENT_START.strftime('%B %-d')})</div>
+  <div>Data: {DATA_START.strftime('%B %d')} &ndash; {data_end_date.strftime('%B %d, %Y')} &middot; Post-intervention: {footer_post_days} days (ruxolitinib, {TREATMENT_START.strftime('%B %d')})</div>
   <div>Open source under MIT License &middot; &copy; 2026 <a href="https://theeducationalequalityinstitute.org">The Educational Equality Institute</a> &middot; <a href="https://github.com/theeducationalequalityinstitute/oura-digital-twin">GitHub</a></div>
   <div class="odt-footer-fine">Updated daily at 06:15 CET &middot; Last generated: {generated}</div>
   <div class="odt-footer-fine">This project is not affiliated with, endorsed by, or sponsored by Oura Health Oy. Oura&reg; is a registered trademark of Oura Health Oy.</div>
