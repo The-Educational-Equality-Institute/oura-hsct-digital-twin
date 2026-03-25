@@ -83,7 +83,7 @@ def main() -> None:
 
         conn.close()
         conn = init_database(db_path)
-        print(f"Created DB with full schema from init_database()")
+        print("Created DB with full schema from init_database()")
     except (ImportError, Exception) as e:
         print(f"Falling back to minimal schema: {e}")
         create_minimal_tables(conn)
