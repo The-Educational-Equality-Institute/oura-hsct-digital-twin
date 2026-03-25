@@ -88,6 +88,8 @@ def _unpack_time_series(
     return results
 
 
+_auth_failure_count = 0  # Track 401s across endpoints
+
 def _fetch_paginated(
     session: requests.Session, endpoint: str, start_date: str, end_date: str
 ) -> list[dict[str, Any]]:
