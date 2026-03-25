@@ -1,0 +1,127 @@
+name: Daily Pipeline
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  daily-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.ACTIONS_PAT }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate config.py
+        run: cp config.example.py config.py
+
+      - name: Create data directory
+        run: mkdir -p data
+
+      # --- OAuth2 Token Refresh ---
+      - name: Refresh OAuth2 token
+        id: refresh_token
+        env:
+          OURA_CLIENT_ID: ${{ secrets.OURA_CLIENT_ID }}
+          OURA_CLIENT_SECRET: ${{ secrets.OURA_CLIENT_SECRET }}
+          OURA_REFRESH_TOKEN: ${{ secrets.OURA_REFRESH_TOKEN }}
+        run: |
+          python -c "
+          import os, requests
+
+          resp = requests.post('https://api.ouraring.com/oauth/token', data={
+              'grant_type': 'refresh_token',
+              'refresh_token': os.environ['OURA_REFRESH_TOKEN'],
+              'client_id': os.environ['OURA_CLIENT_ID'],
+              'client_secret': os.environ['OURA_CLIENT_SECRET'],
+          }, timeout=30)
+
+          if resp.status_code != 200:
+              print(f'Token refresh failed: {resp.status_code} {resp.text}')
+              exit(1)
+
+          tokens = resp.json()
+          access_token = tokens['access_token']
+          new_refresh = tokens.get('refresh_token', '')
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f'access_token={access_token}\n')
+              f.write(f'new_refresh_token={new_refresh}\n')
+
+          print(f'Token refreshed: access={len(access_token)} chars, refresh={len(new_refresh)} chars')
+          "
+
+      # --- Rotate refresh token secret for next run ---
+      - name: Rotate refresh token secret
+        if: steps.refresh_token.outputs.new_refresh_token != ''
+        env:
+          GH_TOKEN: ${{ secrets.ACTIONS_PAT }}
+        run: |
+          gh secret set OURA_REFRESH_TOKEN \
+            --body "${{ steps.refresh_token.outputs.new_refresh_token }}" \
+            --repo ${{ github.repository }}
+
+      # --- Import Oura Data ---
+      - name: Import Oura data (last 3 days)
+        env:
+          OURA_ACCESS_TOKEN: ${{ steps.refresh_token.outputs.access_token }}
+          DATABASE_PATH: data/oura.db
+        run: python api/import_oura.py --days 3
+
+      # --- Run Analysis Pipeline ---
+      - name: Run all analysis scripts
+        env:
+          DATABASE_PATH: data/oura.db
+        run: python run_all.py
+
+      # --- Upload reports as artifact ---
+      - name: Upload reports artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reports-${{ github.run_number }}
+          path: |
+            reports/*.html
+            reports/*.json
+          retention-days: 30
+
+      # --- Deploy to Cloudflare Pages ---
+      - name: Deploy to Cloudflare Pages
+        if: success()
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npm install -g wrangler
+
+          mkdir -p deploy
+          cp reports/*.html deploy/ 2>/dev/null || true
+          cp reports/*.json deploy/ 2>/dev/null || true
+
+          cat > deploy/index.html << 'INDEXEOF'
+          <!DOCTYPE html>
+          <html>
+          <head><meta http-equiv="refresh" content="0;url=oura_full_analysis.html"></head>
+          <body><a href="oura_full_analysis.html">Redirecting to full analysis...</a></body>
+          </html>
+          INDEXEOF
+
+          wrangler pages deploy deploy \
+            --project-name=digital-twin \
+            --branch=main \
+            --commit-dirty=true
