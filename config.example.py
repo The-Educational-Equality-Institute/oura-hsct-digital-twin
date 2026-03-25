@@ -14,7 +14,7 @@ from pathlib import Path
 
 # --- Paths ---
 PROJECT_ROOT = Path(__file__).parent
-DATABASE_PATH = PROJECT_ROOT / "data" / "oura.db"
+DATABASE_PATH = PROJECT_ROOT / "data" / "demo.db"
 REPORTS_DIR = PROJECT_ROOT / "reports"
 
 # --- Patient-specific dates (update for your case) ---
