@@ -823,15 +823,16 @@ def compare_pre_post_ruxolitinib(
 
     # Deep sleep %
     lsp_calc = lsp.copy()
+    safe_total = lsp_calc["total_sleep_duration"].replace(0, np.nan)
     lsp_calc["deep_pct"] = (
-        lsp_calc["deep_sleep_duration"] / lsp_calc["total_sleep_duration"] * 100
+        lsp_calc["deep_sleep_duration"] / safe_total * 100
     ).round(1)
     pre_dp, post_dp = split_pre_post(lsp_calc, "deep_pct")
     comparisons.append(run_comparison(pre_dp, post_dp, "deep_sleep_%"))
 
     # REM sleep %
     lsp_calc["rem_pct"] = (
-        lsp_calc["rem_sleep_duration"] / lsp_calc["total_sleep_duration"] * 100
+        lsp_calc["rem_sleep_duration"] / safe_total * 100
     ).round(1)
     pre_rp, post_rp = split_pre_post(lsp_calc, "rem_pct")
     comparisons.append(run_comparison(pre_rp, post_rp, "rem_sleep_%"))
