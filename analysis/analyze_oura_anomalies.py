@@ -864,7 +864,7 @@ def run_spc(daily: pd.DataFrame) -> dict[str, Any]:
 
             for alarms in alarm_lists:
                 for adj_d in range(-1, 2):
-                    d = str((datetime.strptime(KNOWN_EVENT_DATE, "%Y-%m-%d") + timedelta(days=adj_d)).date())
+                    d = str(KNOWN_EVENT_DATE + timedelta(days=adj_d))
                     if d in alarms:
                         results["feb9_detected"] = True
 
