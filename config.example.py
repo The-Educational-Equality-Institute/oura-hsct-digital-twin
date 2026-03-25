@@ -8,6 +8,7 @@ details live in one place.
 """
 import os
 import sys
+import sqlite3
 from datetime import date
 from pathlib import Path
 
@@ -144,9 +145,44 @@ def validate_config() -> bool:
             f"  Create the database by running: python api/import_oura.py"
         )
         ok = False
+    elif db.stat().st_size == 0:
+        print(
+            f"ERROR: Database file exists but is empty (0 bytes): {db}\n"
+            "  This usually means data has not been imported yet.\n"
+            "  Fix: python api/import_oura.py --days 90"
+        )
+        ok = False
     elif not os.access(str(db), os.R_OK):
         print(f"ERROR: Database exists but is not readable: {db}")
         ok = False
+    else:
+        required_tables = [
+            "oura_heart_rate",
+            "oura_sleep_periods",
+            "oura_readiness",
+        ]
+        try:
+            with sqlite3.connect(f"file:{db}?mode=ro", uri=True) as conn:
+                found = {
+                    row[0]
+                    for row in conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                    ).fetchall()
+                }
+            missing = [t for t in required_tables if t not in found]
+            if missing:
+                print(
+                    f"ERROR: Database is missing required tables: {', '.join(missing)}\n"
+                    "  Fix: re-run importer to populate schema and data:\n"
+                    "  python api/import_oura.py --days 90"
+                )
+                ok = False
+        except sqlite3.DatabaseError as e:
+            print(
+                f"ERROR: Database exists but is not a valid SQLite dataset: {db}\n"
+                f"  Details: {type(e).__name__}: {e}"
+            )
+            ok = False
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
