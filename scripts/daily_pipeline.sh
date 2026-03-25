@@ -28,8 +28,11 @@ source "$VENV_DIR/bin/activate"
 
 # 2. Refresh OAuth2 token (prevents expired-token failures)
 echo "[1/4] Refreshing OAuth2 token..."
-python "$DIGITAL_TWIN/api/oura_oauth2_setup.py" --refresh \
-  || echo "  WARNING: Token refresh failed - import may skip endpoints with expired scopes"
+if [ -n "${OURA_CLIENT_ID:-}" ] && [ -n "${OURA_REFRESH_TOKEN:-}" ]; then
+  python "$DIGITAL_TWIN/api/oura_oauth2_setup.py" --refresh
+else
+  echo "  Skipping OAuth2 refresh (no client ID or refresh token configured)"
+fi
 
 # 3. Import fresh Oura data (last 3 days for overlap safety)
 echo "[2/4] Importing Oura data..."
