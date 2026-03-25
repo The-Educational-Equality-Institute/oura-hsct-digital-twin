@@ -75,6 +75,7 @@ JSON_OUTPUT = REPORTS_DIR / "anomaly_detection_metrics.json"
 # ---------------------------------------------------------------------------
 # Clinical context
 # ---------------------------------------------------------------------------
+KNOWN_EVENT_DATE_STR = str(KNOWN_EVENT_DATE)
 CONTAMINATION_RATE = 0.1  # Isolation Forest expected anomaly rate
 HSCT_TYPICAL_RMSSD = HSCT_RMSSD_RANGE  # (25, 40) ms range — imported from config
 
@@ -232,11 +233,14 @@ def build_daily_features(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
                                     "recovery_index"]].copy()
 
     # Merge all on date
-    # Start with HRV daily (most complete)
+    # Seed from ALL sources so no dates are lost during left joins
     all_dates = sorted(set(
         hrv_daily["date"].tolist()
         + hr_daily["date"].tolist()
         + sp_features["date"].tolist()
+        + sleep_score["date"].tolist()
+        + spo2["date"].tolist()
+        + readiness["date"].tolist()
     ))
     daily = pd.DataFrame({"date": all_dates})
 
@@ -486,7 +490,7 @@ def run_isolation_forest(daily: pd.DataFrame) -> dict[str, Any]:
     if results["feb9_detected"]:
         print("  ** Feb 8-10 region detected as anomaly! **")
     else:
-        print(f"  Feb 9 NOT detected (score: {results['date_scores'].get(KNOWN_EVENT_DATE, 'N/A')})")
+        print(f"  Feb 9 NOT detected (score: {results['date_scores'].get(KNOWN_EVENT_DATE_STR, 'N/A')})")
 
     # Feature importances (via isolation depth proxy)
     results["n_anomalies"] = int(n_anomalies)
@@ -1057,7 +1061,7 @@ def validate_feb9(all_results: dict[str, dict]) -> dict[str, Any]:
     print("=" * 70)
 
     validation = {
-        "known_event": KNOWN_EVENT_DATE,
+        "known_event": KNOWN_EVENT_DATE_STR,
         "methods_tested": len(all_results),
         "methods_detected": 0,
         "detection_details": {},
@@ -1071,14 +1075,14 @@ def validate_feb9(all_results: dict[str, dict]) -> dict[str, Any]:
         # Get score for Feb 9
         score = None
         date_scores = result.get("date_scores", {})
-        if KNOWN_EVENT_DATE in date_scores:
-            score = date_scores[KNOWN_EVENT_DATE]
+        if KNOWN_EVENT_DATE_STR in date_scores:
+            score = date_scores[KNOWN_EVENT_DATE_STR]
         elif isinstance(result.get("anomalies_by_window"), dict):
             # Matrix Profile: check across windows
             for window_key, wd in result["anomalies_by_window"].items():
                 ds = wd.get("date_scores", {})
-                if KNOWN_EVENT_DATE in ds:
-                    score = max(score or 0, ds[KNOWN_EVENT_DATE])
+                if KNOWN_EVENT_DATE_STR in ds:
+                    score = max(score or 0, ds[KNOWN_EVENT_DATE_STR])
 
         validation["detection_details"][method_name] = {
             "detected": detected,
@@ -1922,7 +1926,7 @@ def _build_top_anomalies_table(ensemble: pd.DataFrame, daily: pd.DataFrame) -> s
 
     rows = []
     for _, r in top.iterrows():
-        is_event = r["date"] == KNOWN_EVENT_DATE
+        is_event = str(r["date"]) == KNOWN_EVENT_DATE_STR
         cls = ' class="anomaly-high"' if is_event else ""
         event_mark = " **" if is_event else ""
         rmssd = f"{r['mean_rmssd']:.1f}" if pd.notna(r.get("mean_rmssd")) else "-"
@@ -2007,8 +2011,8 @@ def _build_clinical_interpretation(
     top_dates = top5["date"].tolist()
 
     feb9_rank = None
-    if KNOWN_EVENT_DATE in ensemble["date"].values:
-        feb9_row = ensemble[ensemble["date"] == KNOWN_EVENT_DATE]
+    if KNOWN_EVENT_DATE_STR in ensemble["date"].values:
+        feb9_row = ensemble[ensemble["date"] == KNOWN_EVENT_DATE_STR]
         if not feb9_row.empty:
             feb9_rank = int(feb9_row["rank"].iloc[0])
 
