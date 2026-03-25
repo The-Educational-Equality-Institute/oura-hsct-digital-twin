@@ -51,8 +51,9 @@ pykalman>=0.9
 # Optional: HMM state detection (GVHD prediction)
 hmmlearn>=0.3
 
-# Optional: true rSLDS backend (GVHD script already has HMM fallback)
-# To install:
-#   pip install cython numpy setuptools wheel
+# Optional (requires manual install): ssm, Cython
+# The GVHD script already has try/except with HMM fallback.
+# ssm fails to build on clean installs (needs Cython at build time).
+# To install manually:
+#   pip install Cython==3.0.11 numpy setuptools wheel
 #   pip install --no-build-isolation ssm==0.0.1
-# ssm==0.0.1
