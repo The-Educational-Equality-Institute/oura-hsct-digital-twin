@@ -144,6 +144,6 @@ jobs:
           cp reports/*.json deploy/ 2>/dev/null || true
 
           wrangler pages deploy deploy \
-            --project-name=digital-twin-reports \
+            --project-name=digital-twin \
             --branch=main \
             --commit-dirty=true
