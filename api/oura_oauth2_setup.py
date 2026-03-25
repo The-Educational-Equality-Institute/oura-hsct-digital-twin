@@ -3,7 +3,7 @@
 Oura Ring OAuth2 Setup Utility
 
 Performs the OAuth2 authorization code flow to obtain access and refresh tokens
-for the Oura API. Stores tokens in the parent project's .env file for use by
+for the Oura API. Stores tokens in the repo root .env file for use by
 import_oura.py.
 
 PATs (Personal Access Tokens) were deprecated end of 2025. OAuth2 is now required.
@@ -11,7 +11,7 @@ PATs (Personal Access Tokens) were deprecated end of 2025. OAuth2 is now require
 Prerequisites:
     1. Register an app at https://cloud.ouraring.com (developer portal)
     2. Set redirect URI to http://localhost:4421/callback
-    3. Add OURA_CLIENT_ID and OURA_CLIENT_SECRET to the parent .env
+    3. Add OURA_CLIENT_ID and OURA_CLIENT_SECRET to .env (repo root or parent)
 
 Usage:
     python api/oura_oauth2_setup.py              # First-time setup (opens browser)
@@ -35,17 +35,18 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
-# Load the parent project's .env first; repo-local .env is a fallback only.
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-ENV_PATH = PROJECT_ROOT / ".env"
-LOCAL_ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
-load_dotenv(ENV_PATH)  # parent project .env is authoritative
-load_dotenv(LOCAL_ENV_PATH)  # optional repo-local fallback for missing vars
+# Load .env: repo root first, then parent directory as fallback.
+# Matches the load order in import_oura.py.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+ENV_PATH = REPO_ROOT / ".env"
+PARENT_ENV_PATH = REPO_ROOT.parent / ".env"
+load_dotenv(ENV_PATH)  # repo root .env (tokens written here)
+load_dotenv(PARENT_ENV_PATH)  # parent project .env (fallback for client ID/secret)
 
 # Oura OAuth2 endpoints
 AUTH_URL = "https://cloud.ouraring.com/oauth/authorize"
 TOKEN_URL = "https://api.ouraring.com/oauth/token"
-# Issuer identifier returned in callback (RFC 9207 - Authorization Server Issuer Identification)
+# Issuer identifier returned in callback (RFC 9207 — Authorization Server Issuer Identification)
 EXPECTED_ISSUER = "https://moi.ouraring.com/oauth/v2/ext/oauth-anonymous"
 
 # Local callback server (using approved dev server port)
@@ -82,9 +83,7 @@ class OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
                 b"</body></html>"
             )
         elif "error" in params:
-            OAuthCallbackHandler.error = params.get(
-                "error_description", params["error"]
-            )[0]
+            OAuthCallbackHandler.error = params.get("error_description", params["error"])[0]
             self.send_response(400)
             self.send_header("Content-Type", "text/html")
             self.end_headers()
@@ -100,7 +99,7 @@ class OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
 
 
 def update_env_var(key: str, value: str) -> None:
-    """Update or add a variable in the parent project's .env file."""
+    """Update or add a variable in the repo root .env file."""
     env_text = ENV_PATH.read_text() if ENV_PATH.exists() else ""
 
     pattern = re.compile(rf"^{re.escape(key)}=.*$", re.MULTILINE)
@@ -151,16 +150,7 @@ def authorize() -> None:
     auth_url = f"{AUTH_URL}?{urllib.parse.urlencode(params)}"
 
     # Start local server to receive callback
-    try:
-        server = http.server.HTTPServer(
-            (REDIRECT_HOST, REDIRECT_PORT), OAuthCallbackHandler
-        )
-    except OSError as e:
-        print(f"ERROR: Could not start auth server on port {REDIRECT_PORT}: {e}")
-        print(
-            f"  Another process may be using this port. Try: lsof -i :{REDIRECT_PORT}"
-        )
-        sys.exit(1)
+    server = http.server.HTTPServer((REDIRECT_HOST, REDIRECT_PORT), OAuthCallbackHandler)
     server_thread = threading.Thread(target=server.handle_request, daemon=True)
     server_thread.start()
 
@@ -182,7 +172,7 @@ def authorize() -> None:
 
     # Verify state to prevent CSRF (F42)
     if OAuthCallbackHandler.received_state != oauth_state:
-        print("Error: OAuth state mismatch - possible CSRF attack")
+        print("Error: OAuth state mismatch — possible CSRF attack")
         print(f"  Expected: {oauth_state[:8]}...")
         print(f"  Received: {(OAuthCallbackHandler.received_state or 'None')[:8]}...")
         sys.exit(1)
@@ -190,21 +180,13 @@ def authorize() -> None:
     print("Received authorization code, exchanging for tokens...")
 
     # Exchange code for tokens
-    try:
-        resp = requests.post(
-            TOKEN_URL,
-            data={
-                "grant_type": "authorization_code",
-                "code": OAuthCallbackHandler.auth_code,
-                "redirect_uri": REDIRECT_URI,
-                "client_id": client_id,
-                "client_secret": client_secret,
-            },
-            timeout=30,
-        )
-    except requests.RequestException as e:
-        print(f"ERROR: Network request failed: {e}")
-        sys.exit(1)
+    resp = requests.post(TOKEN_URL, data={
+        "grant_type": "authorization_code",
+        "code": OAuthCallbackHandler.auth_code,
+        "redirect_uri": REDIRECT_URI,
+        "client_id": client_id,
+        "client_secret": client_secret,
+    }, timeout=30)
 
     if resp.status_code != 200:
         print(f"Token exchange failed ({resp.status_code}): {resp.text}")
@@ -224,9 +206,7 @@ def authorize() -> None:
     if refresh_token:
         print(f"  Refresh token saved to {ENV_PATH} ({len(refresh_token)} chars)")
     print(f"  Scopes: {SCOPES}")
-    print(
-        "\nimport_oura.py will now use OAuth2 automatically (falls back to PAT if needed)"
-    )
+    print("\nimport_oura.py will now use OAuth2 automatically (falls back to PAT if needed)")
 
 
 def refresh() -> None:
@@ -236,26 +216,16 @@ def refresh() -> None:
     refresh_token = os.getenv("OURA_REFRESH_TOKEN")
 
     if not all([client_id, client_secret, refresh_token]):
-        print(
-            "Error: OURA_CLIENT_ID, OURA_CLIENT_SECRET, and OURA_REFRESH_TOKEN required"
-        )
+        print("Error: OURA_CLIENT_ID, OURA_CLIENT_SECRET, and OURA_REFRESH_TOKEN required")
         print("Run without --refresh first to complete initial setup")
         sys.exit(1)
 
-    try:
-        resp = requests.post(
-            TOKEN_URL,
-            data={
-                "grant_type": "refresh_token",
-                "refresh_token": refresh_token,
-                "client_id": client_id,
-                "client_secret": client_secret,
-            },
-            timeout=30,
-        )
-    except requests.RequestException as e:
-        print(f"ERROR: Network request failed: {e}")
-        sys.exit(1)
+    resp = requests.post(TOKEN_URL, data={
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+        "client_id": client_id,
+        "client_secret": client_secret,
+    }, timeout=30)
 
     if resp.status_code != 200:
         print(f"Token refresh failed ({resp.status_code}): {resp.text}")
@@ -290,19 +260,13 @@ def check_status() -> None:
     # Test whichever token is available
     token = access_token or pat
     if token:
-        try:
-            resp = requests.get(
-                "https://api.ouraring.com/v2/usercollection/personal_info",
-                headers={"Authorization": f"Bearer {token}"},
-                timeout=10,
-            )
-        except requests.RequestException as e:
-            print(f"ERROR: Network request failed: {e}")
-            sys.exit(1)
+        resp = requests.get(
+            "https://api.ouraring.com/v2/usercollection/personal_info",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10,
+        )
         if resp.status_code == 200:
-            print(
-                f"\n  API access: WORKING (using {'OAuth2' if access_token else 'PAT'})"
-            )
+            print(f"\n  API access: WORKING (using {'OAuth2' if access_token else 'PAT'})")
         elif resp.status_code == 401:
             print("\n  API access: EXPIRED/INVALID (HTTP 401)")
             if access_token and refresh_token:
@@ -315,9 +279,7 @@ def check_status() -> None:
 
 def main():
     parser = argparse.ArgumentParser(description="Oura Ring OAuth2 Setup")
-    parser.add_argument(
-        "--refresh", action="store_true", help="Refresh expired access token"
-    )
+    parser.add_argument("--refresh", action="store_true", help="Refresh expired access token")
     parser.add_argument("--status", action="store_true", help="Check token status")
     args = parser.parse_args()
 

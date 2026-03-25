@@ -32,102 +32,30 @@ import plotly.graph_objects as go
 import plotly.io as pio
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from config import (
-    DATABASE_PATH,
-    FONT_FAMILY,
-    PLOTLY_CDN_URL,
-    PATIENT_LABEL,
-    DATA_START,
-    TREATMENT_START,
-)
+from config import DATABASE_PATH, FONT_FAMILY, PLOTLY_CDN_URL, PATIENT_LABEL, DATA_START, TREATMENT_START, HEV_DIAGNOSIS_DATE
 
 # ---------------------------------------------------------------------------
-# Report Registry - 11 reports in 3 groups
+# Report Registry — 11 reports in 3 groups
 # ---------------------------------------------------------------------------
 
 REPORT_REGISTRY = [
-    {
-        "id": "full_analysis",
-        "file": "oura_full_analysis.html",
-        "title": "Full Analysis",
-        "group": "Core",
-    },
-    {
-        "id": "biomarkers",
-        "file": "composite_biomarkers.html",
-        "title": "Biomarker Trends",
-        "group": "Core",
-    },
-    {
-        "id": "sleep",
-        "file": "advanced_sleep_analysis.html",
-        "title": "Sleep Analysis",
-        "group": "Core",
-    },
-    {
-        "id": "causal",
-        "file": "causal_inference_report.html",
-        "title": "Causal: Ruxolitinib",
-        "group": "Clinical",
-    },
-    {
-        "id": "gvhd",
-        "file": "gvhd_prediction_report.html",
-        "title": "GvHD Prediction",
-        "group": "Clinical",
-    },
-    {
-        "id": "spo2",
-        "file": "spo2_bos_screening.html",
-        "title": "SpO2 & BOS",
-        "group": "Clinical",
-    },
-    {
-        "id": "hrv",
-        "file": "advanced_hrv_analysis.html",
-        "title": "Advanced HRV",
-        "group": "Advanced",
-    },
-    {
-        "id": "digital_twin",
-        "file": "digital_twin_report.html",
-        "title": "Digital Twin",
-        "group": "Advanced",
-    },
-    {
-        "id": "foundation",
-        "file": "foundation_model_report.html",
-        "title": "Foundation Model",
-        "group": "Advanced",
-    },
-    {
-        "id": "anomalies",
-        "file": "anomaly_detection_report.html",
-        "title": "Anomaly Detection",
-        "group": "Advanced",
-    },
-    {
-        "id": "3d_dashboard",
-        "file": "oura_3d_dashboard.html",
-        "title": "3D Dashboard",
-        "group": "Advanced",
-    },
-    {
-        "id": "about",
-        "file": "roadmap.html#honest",
-        "title": "About",
-        "group": "Context",
-    },
-    {
-        "id": "roadmap",
-        "file": "roadmap.html#roadmap",
-        "title": "Next Steps",
-        "group": "Context",
-    },
+    {"id": "about", "file": "roadmap.html#honest", "title": "About", "group": "Context"},
+    {"id": "roadmap", "file": "roadmap.html#roadmap", "title": "Next Steps", "group": "Context"},
+    {"id": "full_analysis", "file": "oura_full_analysis.html", "title": "Full Analysis", "group": "Core"},
+    {"id": "biomarkers", "file": "composite_biomarkers.html", "title": "Biomarker Trends", "group": "Core"},
+    {"id": "sleep", "file": "advanced_sleep_analysis.html", "title": "Sleep Analysis", "group": "Core"},
+    {"id": "causal", "file": "causal_inference_report.html", "title": "Causal: Ruxolitinib", "group": "Clinical"},
+    {"id": "gvhd", "file": "gvhd_prediction_report.html", "title": "GvHD Prediction", "group": "Clinical"},
+    {"id": "spo2", "file": "spo2_bos_screening.html", "title": "SpO2 & BOS", "group": "Clinical"},
+    {"id": "hrv", "file": "advanced_hrv_analysis.html", "title": "Advanced HRV", "group": "Advanced"},
+    {"id": "digital_twin", "file": "digital_twin_report.html", "title": "Digital Twin", "group": "Advanced"},
+    {"id": "foundation", "file": "foundation_model_report.html", "title": "Foundation Model", "group": "Advanced"},
+    {"id": "anomalies", "file": "anomaly_detection_report.html", "title": "Anomaly Detection", "group": "Advanced"},
+    {"id": "3d_dashboard", "file": "oura_3d_dashboard.html", "title": "3D Dashboard", "group": "Advanced"},
 ]
 
 # ---------------------------------------------------------------------------
-# Color Palette - premium dark theme
+# Color Palette — premium dark theme
 # ---------------------------------------------------------------------------
 
 # Backgrounds
@@ -166,12 +94,12 @@ STATUS_COLORS = {
 }
 
 # Biometric-specific (clinical monitor standard)
-C_HR = ACCENT_GREEN  # Heart rate - green on patient monitors
-C_SPO2 = ACCENT_CYAN  # SpO2 - cyan on pulse oximeters
-C_HRV = ACCENT_PURPLE  # HRV/RMSSD - autonomic nervous system
-C_SLEEP = ACCENT_INDIGO  # Sleep - calming, sleep-associated
-C_TEMP = ACCENT_ORANGE  # Temperature - warmth association
-C_ACTIVITY = "#34D399"  # Activity - energy/movement (light emerald)
+C_HR = ACCENT_GREEN       # Heart rate — green on patient monitors
+C_SPO2 = ACCENT_CYAN      # SpO2 — cyan on pulse oximeters
+C_HRV = ACCENT_PURPLE     # HRV/RMSSD — autonomic nervous system
+C_SLEEP = ACCENT_INDIGO   # Sleep — calming, sleep-associated
+C_TEMP = ACCENT_ORANGE    # Temperature — warmth association
+C_ACTIVITY = "#34D399"    # Activity — energy/movement (light emerald)
 
 # Period/series colors (for treatment effect plots)
 C_PRE_TX = TEXT_SECONDARY
@@ -184,14 +112,8 @@ C_EFFECT = ACCENT_GREEN
 
 # Plotly colorway (8 colors, colorblind-safe)
 COLORWAY = [
-    ACCENT_BLUE,
-    ACCENT_GREEN,
-    ACCENT_AMBER,
-    ACCENT_PURPLE,
-    ACCENT_PINK,
-    ACCENT_CYAN,
-    ACCENT_ORANGE,
-    ACCENT_INDIGO,
+    ACCENT_BLUE, ACCENT_GREEN, ACCENT_AMBER, ACCENT_PURPLE,
+    ACCENT_PINK, ACCENT_CYAN, ACCENT_ORANGE, ACCENT_INDIGO,
 ]
 
 # Backward-compatible aliases (old config.py light-theme names → dark equivalents)
@@ -214,7 +136,7 @@ C_BG_LIGHT = BG_ELEVATED
 C_CAUTION = ACCENT_AMBER
 
 # ---------------------------------------------------------------------------
-# Metric Descriptions - reusable across reports
+# Metric Descriptions — reusable across reports
 # ---------------------------------------------------------------------------
 
 METRIC_DESCRIPTIONS = {
@@ -237,9 +159,7 @@ def create_clinical_dark_template() -> go.layout.Template:
 
     # Layout
     template.layout.font = dict(
-        family=FONT_FAMILY,
-        size=14,
-        color=TEXT_PRIMARY,
+        family=FONT_FAMILY, size=14, color=TEXT_PRIMARY,
     )
     template.layout.paper_bgcolor = BG_PRIMARY
     template.layout.plot_bgcolor = BG_SURFACE
@@ -251,15 +171,12 @@ def create_clinical_dark_template() -> go.layout.Template:
         bordercolor="rgba(255, 255, 255, 0.1)",
         namelength=-1,
     )
-    template.layout.margin = dict(l=64, r=34, t=112, b=60, pad=4)
+    template.layout.margin = dict(l=64, r=34, t=96, b=60, pad=4)
 
     # Title
     template.layout.title = dict(
         font=dict(size=20, color="#FFFFFF", family=FONT_FAMILY),
-        x=0.0,
-        xanchor="left",
-        y=0.98,
-        yanchor="top",
+        x=0.0, xanchor="left",
         pad=dict(l=10, t=10),
     )
 
@@ -276,8 +193,7 @@ def create_clinical_dark_template() -> go.layout.Template:
         axis_obj.linewidth = 1
         axis_obj.tickfont = dict(size=12, color=TEXT_SECONDARY)
         axis_obj.title = dict(
-            font=dict(size=13, color=TEXT_SECONDARY),
-            standoff=16,
+            font=dict(size=13, color=TEXT_SECONDARY), standoff=16,
         )
         axis_obj.automargin = True
 
@@ -288,10 +204,8 @@ def create_clinical_dark_template() -> go.layout.Template:
         borderwidth=1,
         font=dict(size=12, color=TEXT_PRIMARY),
         orientation="h",
-        yanchor="bottom",
-        y=1.04,
-        xanchor="left",
-        x=0,
+        yanchor="bottom", y=1.04,
+        xanchor="left", x=0,
         itemsizing="constant",
         tracegroupgap=10,
     )
@@ -301,26 +215,19 @@ def create_clinical_dark_template() -> go.layout.Template:
 
     # Colorscales
     template.layout.colorscale.sequential = [
-        [0, BG_PRIMARY],
-        [0.25, "#1E3A5F"],
-        [0.5, ACCENT_BLUE],
-        [0.75, "#93C5FD"],
-        [1.0, "#DBEAFE"],
+        [0, BG_PRIMARY], [0.25, "#1E3A5F"], [0.5, ACCENT_BLUE],
+        [0.75, "#93C5FD"], [1.0, "#DBEAFE"],
     ]
     template.layout.colorscale.diverging = [
-        [0, ACCENT_RED],
-        [0.25, "#FCA5A5"],
-        [0.5, "#F3F4F6"],
-        [0.75, "#6EE7B7"],
-        [1.0, ACCENT_GREEN],
+        [0, ACCENT_RED], [0.25, "#FCA5A5"], [0.5, "#F3F4F6"],
+        [0.75, "#6EE7B7"], [1.0, ACCENT_GREEN],
     ]
 
     # Annotation defaults
     template.layout.annotationdefaults = dict(
         font=dict(size=12, color=TEXT_SECONDARY),
         arrowcolor=TEXT_TERTIARY,
-        arrowhead=2,
-        arrowwidth=1,
+        arrowhead=2, arrowwidth=1,
     )
 
     # Shape defaults (reference bands)
@@ -330,33 +237,24 @@ def create_clinical_dark_template() -> go.layout.Template:
     )
 
     # Trace defaults
-    template.data.scatter = [
-        go.Scatter(
-            line=dict(width=2),
-            marker=dict(size=7, line=dict(width=0)),
-        )
-    ]
-    template.data.bar = [
-        go.Bar(
-            marker=dict(line=dict(width=0), opacity=0.9),
-        )
-    ]
-    template.data.heatmap = [
-        go.Heatmap(
-            colorscale=[
-                [0, BG_PRIMARY],
-                [0.25, "#1E3A5F"],
-                [0.5, ACCENT_BLUE],
-                [0.75, "#93C5FD"],
-                [1.0, "#DBEAFE"],
-            ],
-        )
-    ]
+    template.data.scatter = [go.Scatter(
+        line=dict(width=2),
+        marker=dict(size=7, line=dict(width=0)),
+    )]
+    template.data.bar = [go.Bar(
+        marker=dict(line=dict(width=0), opacity=0.9),
+    )]
+    template.data.heatmap = [go.Heatmap(
+        colorscale=[
+            [0, BG_PRIMARY], [0.25, "#1E3A5F"], [0.5, ACCENT_BLUE],
+            [0.75, "#93C5FD"], [1.0, "#DBEAFE"],
+        ],
+    )]
 
     return template
 
 
-# Auto-register at import time (does NOT set as default - each script opts in)
+# Auto-register at import time (does NOT set as default — each script opts in)
 pio.templates["clinical_dark"] = create_clinical_dark_template()
 
 # ---------------------------------------------------------------------------
@@ -377,16 +275,12 @@ def get_plotly_enhancer_js() -> str:
 <script>
 window.__odtEnhancePlotly = function(graphDiv) {{
   if (!window.Plotly || !graphDiv || !graphDiv.layout) return;
-  let containerWidth = null;
   try {{
     const chartBox = graphDiv.closest(".chart-box");
     if (chartBox) {{
       chartBox.style.display = "block";
       chartBox.style.width = "100%";
       chartBox.style.overflowX = "hidden";
-      containerWidth = chartBox.clientWidth || null;
-    }} else {{
-      containerWidth = graphDiv.parentElement?.clientWidth || null;
     }}
 
     graphDiv.style.marginLeft = "auto";
@@ -433,22 +327,15 @@ window.__odtEnhancePlotly = function(graphDiv) {{
   updates["font.size"] = Math.max(layout.font?.size || 0, 13);
   updates["legend.font.size"] = Math.max(layout.legend?.font?.size || 0, 12);
   updates["hoverlabel.font.size"] = Math.max(layout.hoverlabel?.font?.size || 0, 12);
-  updates["margin.t"] = Math.max(layout.margin?.t || 0, 138);
+  updates["margin.t"] = Math.max(layout.margin?.t || 0, 126);
   updates["margin.b"] = Math.max(layout.margin?.b || 0, 68);
   updates["margin.l"] = Math.max(layout.margin?.l || 0, 64);
   updates["margin.r"] = Math.max(layout.margin?.r || 0, 34);
-  updates["autosize"] = true;
-  if (typeof containerWidth === "number" && containerWidth > 0) {{
-    updates["width"] = Math.floor(containerWidth);
-  }}
 
   if (layout.title) {{
-    updates["title.xanchor"] = layout.title.xanchor || "left";
-    updates["title.yanchor"] = "top";
-    updates["title.y"] =
-      typeof layout.title?.y === "number" ? Math.min(layout.title.y, 0.985) : 0.985;
-    updates["title.pad.t"] = Math.max(layout.title?.pad?.t || 0, 8);
-    updates["title.pad.b"] = Math.max(layout.title?.pad?.b || 0, 14);
+    updates["title.yanchor"] = layout.title.yanchor || "top";
+    updates["title.pad.t"] = Math.max(layout.title?.pad?.t || 0, 6);
+    updates["title.pad.b"] = Math.max(layout.title?.pad?.b || 0, 10);
   }}
 
   if (typeof layout.legend?.y === "number" && layout.legend.y < 0) {{
@@ -472,21 +359,15 @@ window.__odtEnhancePlotly = function(graphDiv) {{
           family: "{FONT_FAMILY}",
         }};
         next.yanchor = "bottom";
-        if (typeof next.y === "number") {{
-          next.y = Math.min(Math.max(next.y, 1.02), 1.08);
-        }} else {{
-          next.y = 1.02;
+        if (typeof next.y === "number" && next.y > 1.0) {{
+          next.y = 1.0;
         }}
       }}
       return next;
     }});
   }}
 
-  Plotly.relayout(graphDiv, updates)
-    .then(() => Plotly.Plots.resize(graphDiv))
-    .catch(() => {{
-      try {{ Plotly.Plots.resize(graphDiv); }} catch (_) {{}}
-    }});
+  Plotly.relayout(graphDiv, updates).catch(() => {{}});
 }};
 
 window.addEventListener("load", () => {{
@@ -494,12 +375,7 @@ window.addEventListener("load", () => {{
     document.querySelectorAll(".js-plotly-plot").forEach((graphDiv) => {{
       window.__odtEnhancePlotly?.(graphDiv);
     }});
-  }}, 120);
-  window.setTimeout(() => {{
-    document.querySelectorAll(".js-plotly-plot").forEach((graphDiv) => {{
-      window.__odtEnhancePlotly?.(graphDiv);
-    }});
-  }}, 900);
+  }}, 80);
 }});
 
 window.addEventListener("resize", () => {{
@@ -509,7 +385,6 @@ window.addEventListener("resize", () => {{
   }});
 }});
 </script>"""
-
 
 # ---------------------------------------------------------------------------
 # CSS
@@ -882,12 +757,12 @@ body {{
 }}
 .odt-kpi-unit {{
   font-size: 0.8125rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.4);
   font-weight: 400;
 }}
 .odt-kpi-detail {{
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.4);
   margin-top: 8px;
   line-height: 1.45;
   padding-top: 8px;
@@ -1092,7 +967,7 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
 /* === Metric Explainer === */
 .odt-kpi-explainer {{
   font-size: 0.6875rem;
-  color: rgba(255, 255, 255, 0.55);
+  color: rgba(255, 255, 255, 0.35);
   margin-top: 6px;
   line-height: 1.45;
 }}
@@ -1284,7 +1159,7 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
   border: 1px solid rgba(245,158,11,0.25);
 }}
 
-/* === Clinical Summary v2 - Enhanced === */
+/* === Clinical Summary v2 — Enhanced === */
 
 /* CSS Houdini: register custom angle for animated border */
 @property --verdict-angle {{
@@ -1335,7 +1210,7 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
   100% {{ opacity: 1; transform: scaleX(1); transform-origin: left; }}
 }}
 
-/* --- Verdict Banner - Animated gradient border with outer glow --- */
+/* --- Verdict Banner — Animated gradient border with outer glow --- */
 .cs-verdict {{
   border: none;
   position: relative;
@@ -1418,17 +1293,17 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
   transition: transform 0.2s ease-out, box-shadow 0.2s ease-out, border-color 0.2s ease-out;
   animation: cs-fade-in-up 0.4s ease-out backwards;
 }}
-/* Staggered entrance - dev cards */
+/* Staggered entrance — dev cards */
 .cs-dev-card:nth-child(1) {{ animation-delay: 0s; }}
 .cs-dev-card:nth-child(2) {{ animation-delay: 0.1s; }}
 .cs-dev-card:nth-child(3) {{ animation-delay: 0.2s; }}
 .cs-dev-card:nth-child(4) {{ animation-delay: 0.3s; }}
-/* Staggered entrance - findings */
+/* Staggered entrance — findings */
 .cs-finding:nth-child(1) {{ animation-delay: 0.15s; }}
 .cs-finding:nth-child(2) {{ animation-delay: 0.25s; }}
 .cs-finding:nth-child(3) {{ animation-delay: 0.35s; }}
 .cs-finding:nth-child(4) {{ animation-delay: 0.45s; }}
-/* Staggered entrance - stats */
+/* Staggered entrance — stats */
 .cs-stat:nth-child(1) {{ animation-delay: 0.4s; }}
 .cs-stat:nth-child(2) {{ animation-delay: 0.5s; }}
 .cs-stat:nth-child(3) {{ animation-delay: 0.6s; }}
@@ -1922,20 +1797,21 @@ def get_navigation_html(current_report_id: str) -> str:
         for r in reports:
             active = " active" if r["id"] == current_report_id else ""
             links.append(
-                f'<a class="odt-nav-link{active}" href="{r["file"]}">{r["title"]}</a>'
+                f'<a class="odt-nav-link{active}" href="{r["file"]}">'
+                f'{r["title"]}</a>'
             )
 
     return (
         '<nav class="odt-nav">\n'
         '  <a class="odt-nav-brand" href="oura_full_analysis.html">'
         '<span class="odt-logo">DT</span>'
-        "Oura <span>Digital Twin</span></a>\n"
+        'Oura <span>Digital Twin</span></a>\n'
         '  <button class="odt-nav-toggle" '
         "onclick=\"let n=this.nextElementSibling;n.classList.toggle('open');"
         "this.setAttribute('aria-expanded',n.classList.contains('open'))\" "
         'aria-label="Menu" aria-expanded="false">&#9776;</button>\n'
         f'  <div class="odt-nav-links">{"".join(links)}</div>\n'
-        "</nav>"
+        '</nav>'
     )
 
 
@@ -1984,13 +1860,13 @@ def disclaimer_banner(post_days: int | None = None) -> str:
 
     return (
         '<div class="odt-context-strip">'
-        '<span class="odt-ctx-item">Oura Ring Gen 4 sensor data - not clinical measurements</span>'
+        '<span class="odt-ctx-item">Oura Ring Gen 4 sensor data — not clinical measurements</span>'
         '<span class="odt-ctx-dot"></span>'
-        '<span class="odt-ctx-item">N=1 case study - not validated for clinical decisions</span>'
+        '<span class="odt-ctx-item">N=1 case study — not validated for clinical decisions</span>'
         '<span class="odt-ctx-dot"></span>'
-        '<span class="odt-ctx-item warn">HEV diagnosed Mar 18; interpret findings cautiously '
-        f"in this Day {post_days} post-ruxolitinib window</span>"
-        "</div>"
+        f'<span class="odt-ctx-item warn">HEV diagnosed {HEV_DIAGNOSIS_DATE.strftime("%b %-d") if HEV_DIAGNOSIS_DATE else "N/A"}; interpret findings cautiously '
+        f'in this Day {post_days} post-ruxolitinib window</span>'
+        '</div>'
     )
 
 
@@ -2005,7 +1881,7 @@ def metric_explainer(name: str, description: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# P-value Formatting - single source of truth for all reports
+# P-value Formatting — single source of truth for all reports
 # ---------------------------------------------------------------------------
 
 
@@ -2019,7 +1895,6 @@ def format_p_value(value: float | None, decimals: int = 3) -> str:
         return "N/A"
     try:
         import math
-
         if not math.isfinite(value):
             return "N/A"
     except (TypeError, ValueError):
@@ -2064,11 +1939,12 @@ def make_kpi_card(
     color = STATUS_COLORS.get(status, "transparent")
     status_bar = (
         f'<div class="odt-kpi-status" style="background:{color}"></div>'
-        if status != "neutral"
-        else ""
+        if status != "neutral" else ""
     )
     unit_html = f'<span class="odt-kpi-unit">{unit}</span>' if unit else ""
-    detail_html = f'<div class="odt-kpi-detail">{detail}</div>' if detail else ""
+    detail_html = (
+        f'<div class="odt-kpi-detail">{detail}</div>' if detail else ""
+    )
     explainer_html = (
         f'<div class="odt-kpi-explainer">{explainer}</div>' if explainer else ""
     )
@@ -2086,13 +1962,13 @@ def make_kpi_card(
         _, label_style = STATUS_LABELS.get(status, ("", ""))
         status_label_html = (
             f'<span class="odt-kpi-status-label" style="{label_style}">'
-            f"{status_label}</span>"
+            f'{status_label}</span>'
         )
     elif status in STATUS_LABELS:
         label_text, label_style = STATUS_LABELS[status]
         status_label_html = (
             f'<span class="odt-kpi-status-label" style="{label_style}">'
-            f"{label_text}</span>"
+            f'{label_text}</span>'
         )
 
     status_cls = f" odt-kpi--{status}" if status != "neutral" else ""
@@ -2101,9 +1977,9 @@ def make_kpi_card(
         f'<div class="odt-kpi{status_cls}">{status_bar}'
         f'<div class="odt-kpi-head">'
         f'<div class="odt-kpi-label">{label}</div>'
-        f"{status_label_html}</div>"
+        f'{status_label_html}</div>'
         f'<div class="odt-kpi-value">{val_str}{unit_html}</div>'
-        f"{detail_html}{explainer_html}</div>"
+        f'{detail_html}{explainer_html}</div>'
     )
 
 
@@ -2120,7 +1996,10 @@ def make_kpi_row(*cards: str) -> str:
 def make_section(title: str, content: str, section_id: str = "") -> str:
     """Wrap content in a styled card section with title."""
     id_attr = f' id="{section_id}"' if section_id else ""
-    return f'<div class="odt-section"{id_attr}><h2>{title}</h2>{content}</div>'
+    return (
+        f'<div class="odt-section"{id_attr}>'
+        f'<h2>{title}</h2>{content}</div>'
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -2137,7 +2016,6 @@ def wrap_html(
     chart_data: dict | None = None,
     extra_css: str = "",
     extra_js: str = "",
-    data_start: str | date | datetime | None = None,
     data_end: str | date | datetime | None = None,
     post_days: int | None = None,
 ) -> str:
@@ -2145,7 +2023,7 @@ def wrap_html(
 
     Args:
         title: Report title (shown in header and <title>)
-        body_content: Main HTML - KPI rows, sections, chart divs
+        body_content: Main HTML — KPI rows, sections, chart divs
         report_id: Must match an id in REPORT_REGISTRY for nav highlighting
         subtitle: Optional subtitle below title
         header_meta: Optional header metadata text after the generated timestamp.
@@ -2155,17 +2033,14 @@ def wrap_html(
             <div id="chart-{key}" class="chart-box" data-chart="{key}">Loading...</div>
         extra_css: Additional CSS rules (without <style> tags)
         extra_js: Additional JS (without <script> tags)
-        data_start: First observed data date for footer/context strip
         data_end: Last observed data date for footer/context strip
         post_days: Inclusive number of post-treatment days represented
     """
     generated = datetime.now().strftime("%Y-%m-%d %H:%M")
-    data_start_date = _coerce_date(data_start) or DATA_START
     data_end_date = _coerce_date(data_end) or _resolve_latest_data_date()
     footer_post_days = (
         max(0, (data_end_date - TREATMENT_START).days + 1)
-        if post_days is None
-        else post_days
+        if post_days is None else post_days
     )
 
     subtitle_html = (
@@ -2174,7 +2049,8 @@ def wrap_html(
     meta_label = PATIENT_LABEL if header_meta is None else header_meta
     meta_suffix = f" &middot; {meta_label}" if meta_label else ""
     metadata_html = (
-        f'\n      <div class="metadata">Generated {generated}{meta_suffix}</div>'
+        f'\n      <div class="metadata">'
+        f'Generated {generated}{meta_suffix}</div>'
     )
 
     extra_style = f"\n<style>\n{extra_css}\n</style>" if extra_css else ""
@@ -2227,7 +2103,7 @@ document.querySelectorAll('.chart-box').forEach(el => observer.observe(el));
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="{BG_PRIMARY}">
 <meta name="robots" content="noindex, nofollow">
-<title>{title} - Oura Digital Twin</title>
+<title>{title} — Oura Digital Twin</title>
 {_INTER_FONT_LINK}
 <script src="{PLOTLY_CDN_URL}"></script>
 {get_base_css()}{extra_style}
@@ -2247,8 +2123,8 @@ document.querySelectorAll('.chart-box').forEach(el => observer.observe(el));
 <div class="odt-footer">
   <div>All metrics derived from Oura Ring Gen 4 consumer wearable data. Not clinical-grade measurements.</div>
   <div>Single-patient case study (N=1). Not validated for clinical decision-making. Not a medical device.</div>
-  <div>Data: {data_start_date.strftime("%B %-d")} &ndash; {data_end_date.strftime("%B %-d, %Y")} &middot; Post-intervention: {footer_post_days} days (ruxolitinib, {TREATMENT_START.strftime("%B %-d")})</div>
-  <div>Open source under MIT License &middot; &copy; 2026 <a href="https://theeducationalequalityinstitute.org">The Educational Equality Institute</a> &middot; <a href="https://github.com/The-Educational-Equality-Institute/oura-hsct-digital-twin">GitHub</a></div>
+  <div>Data: {DATA_START.strftime('%B %-d')} &ndash; {data_end_date.strftime('%B %-d, %Y')} &middot; Post-intervention: {footer_post_days} days (ruxolitinib, {TREATMENT_START.strftime('%B %-d')})</div>
+  <div>Open source under MIT License &middot; &copy; 2026 <a href="https://theeducationalequalityinstitute.org">The Educational Equality Institute</a> &middot; <a href="https://github.com/theeducationalequalityinstitute/oura-digital-twin">GitHub</a></div>
   <div class="odt-footer-fine">Updated daily at 06:15 CET &middot; Last generated: {generated}</div>
   <div class="odt-footer-fine">This project is not affiliated with, endorsed by, or sponsored by Oura Health Oy. Oura&reg; is a registered trademark of Oura Health Oy.</div>
 </div>

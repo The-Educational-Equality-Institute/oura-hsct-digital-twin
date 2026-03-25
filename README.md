@@ -1,4 +1,4 @@
-# Oura HSCT Digital Twin
+# Oura Digital Twin
 
 Exploratory wearable-analysis toolkit for post-transplant monitoring with Oura Ring data.
 
@@ -36,7 +36,7 @@ The pipeline re-computes all reported values from the current data on every run.
 ```
 oura-digital-twin/
   config.py              Patient-specific constants (dates, paths, thresholds)
-  run_all.py             Pipeline runner - executes all 12 scripts sequentially
+  run_all.py             Pipeline runner — executes all 12 scripts sequentially
   requirements.txt       Core dependencies
   api/
     oura_oauth2_setup.py OAuth2 authorization flow
@@ -54,21 +54,38 @@ oura-digital-twin/
 
 ## Setup
 
-1. Create and activate a Python 3.12+ virtual environment
-2. Install dependencies:
+1. Create and activate a Python 3.10+ virtual environment
+2. Install dependencies (pick one):
    ```bash
+   # Option A: Core only (recommended for most users)
    pip install -r requirements.txt
+
+   # Option B: Full stack (all optional backends, no ssm)
+   pip install -r requirements-full.txt
+
+   # Option C: Full stack including ssm rSLDS backend
+   bash scripts/install_full_stack.sh
+
+   # Option D: Full stack, skip ssm (use hmmlearn HMM fallback)
+   bash scripts/install_full_stack.sh --no-ssm
    ```
+   **Why the install script?** The `ssm==0.0.1` package requires Cython at
+   build time, but pip's build isolation prevents Cython from being available
+   during the build. The script pre-installs build dependencies and then
+   installs ssm with `--no-build-isolation`. A C compiler (gcc/clang) is
+   required. If ssm fails, the GVHD analysis falls back to hmmlearn
+   automatically.
 3. Copy `.env.example` to `.env` and add your Oura API credentials:
    ```bash
    cp .env.example .env
-   # Edit .env - add your Personal Access Token or OAuth2 credentials
+   # Edit .env — add your Personal Access Token or OAuth2 credentials
    ```
 4. Copy and edit the config file for your patient:
    ```bash
    cp config.example.py config.py
-   # Edit config.py - set your dates, patient label, and thresholds
+   # Edit config.py — set your dates, patient label, and thresholds
    ```
+   `.env` is for API auth secrets. `config.py` is for analysis constants and clinical/context parameters.
 5. Import your Oura data (creates the SQLite database in `data/`):
    ```bash
    python api/import_oura.py --days 90
@@ -91,6 +108,8 @@ Full pipeline (all 12 scripts, ~10 minutes):
 ```bash
 python run_all.py
 ```
+If data is missing/empty, `run_all.py` now stops at precheck with an actionable import command
+instead of emitting long per-script tracebacks.
 
 All output goes to `reports/`.
 
@@ -107,7 +126,7 @@ Key fields to set:
 ```python
 TRANSPLANT_DATE = date(2023, 1, 1)       # Major clinical event / baseline anchor
 TREATMENT_START = date(2026, 1, 15)      # Intervention start (for causal analysis)
-KNOWN_EVENT_DATE = "2026-01-10"          # Known acute episode (validation anchor)
+KNOWN_EVENT_DATE = date(2026, 1, 10)     # Known acute episode (validation anchor)
 PATIENT_AGE = 40
 PATIENT_LABEL = "Patient"
 ```
@@ -116,22 +135,38 @@ Clinical reference thresholds (ESC, population norms) and the full visual identi
 
 ## Dependencies
 
-Core:
+Core (data import, basic analyses):
 ```
 pip install -r requirements.txt
 ```
 
-Optional (for advanced analyses):
+Full stack (all optional backends - HRV entropy, Kalman, HMM, Chronos, STUMPY, tsfresh):
 ```
-pip install nolds filterpy hmmlearn chronos-forecasting torch tigramite stumpy
+pip install -r requirements-full.txt
 ```
 
-- `nolds` - Nonlinear dynamics (DFA, Lyapunov) for advanced HRV
-- `filterpy` - Kalman / UKF components for the digital twin
-- `hmmlearn` - Hidden Markov Model for GVHD flare prediction
-- `chronos-forecasting` + `torch` - Foundation model forecasting (GPU recommended)
-- `tigramite` - PCMCI+ causal discovery
-- `stumpy` - Matrix Profile anomaly detection
+Full stack with `ssm` rSLDS backend (requires Cython build toolchain):
+```bash
+bash scripts/install_full_stack.sh          # includes ssm
+bash scripts/install_full_stack.sh --no-ssm # skip ssm, use hmmlearn fallback
+```
+
+The install script handles the `ssm==0.0.1` Cython build isolation issue,
+checks Python version, verifies imports after install, and provides clear
+error messages at each step. Run `bash scripts/install_full_stack.sh --help`
+for details.
+
+Optional extras (for advanced analyses beyond core):
+```
+pip install chronos-forecasting torch tigramite stumpy
+```
+
+- `nolds` — Nonlinear dynamics (DFA, Lyapunov) for advanced HRV
+- `filterpy` — Kalman / UKF components for the digital twin
+- `hmmlearn` — Hidden Markov Model for GVHD flare prediction
+- `chronos-forecasting` + `torch` — Foundation model forecasting (GPU recommended)
+- `tigramite` — PCMCI+ causal discovery
+- `stumpy` — Matrix Profile anomaly detection
 
 ## Reports
 
@@ -152,7 +187,7 @@ Running the pipeline generates 12 self-contained HTML reports + JSON metrics in 
 | `causal_inference_report.html` | CausalImpact, Granger causality, Transfer Entropy |
 | `gvhd_prediction_report.html` | 4-state flare-state model with retrospective alert validation |
 | `oura_3d_dashboard.html` | Interactive 3D biometric visualizations |
-| `roadmap.html` | What's next - family control, multi-user studies |
+| `roadmap.html` | What's next — family control, multi-user studies |
 
 ## Methodology
 
@@ -171,10 +206,10 @@ See [`reports/DATA_METHODOLOGY.md`](reports/DATA_METHODOLOGY.md) for detailed do
 
 ## Built With
 
-- [Oura Ring Gen 4](https://ouraring.com) - wearable biometric data
-- [Claude Code](https://claude.ai/code) - AI-assisted development
-- [Plotly](https://plotly.com/python/) - interactive visualizations
-- [CausalImpact](https://github.com/jamalsenouci/causalimpact) - Bayesian causal inference
+- [Oura Ring Gen 4](https://ouraring.com) — wearable biometric data
+- [Claude Code](https://claude.ai/code) — AI-assisted development
+- [Plotly](https://plotly.com/python/) — interactive visualizations
+- [CausalImpact](https://github.com/jamalsenouci/causalimpact) — Bayesian causal inference
 - Python 3.12 / pandas / scipy / statsmodels / scikit-learn
 
 ## Disclaimer
@@ -187,6 +222,4 @@ Not affiliated with, endorsed by, or sponsored by Oura Health Oy. Oura is a regi
 
 ## License
 
-MIT - see [LICENSE](LICENSE).
-
-<!-- Greptile test: 1774373971 -->
+MIT — see [LICENSE](LICENSE).
