@@ -586,7 +586,7 @@ def run_lstm_autoencoder(daily: pd.DataFrame) -> dict[str, Any]:
     # Find stable period (exclude Feb 8-10 from training)
     exclude_dates = set()
     for delta in range(-2, 3):
-        d = (datetime.strptime(KNOWN_EVENT_DATE, "%Y-%m-%d") + timedelta(days=delta)).strftime("%Y-%m-%d")
+        d = (KNOWN_EVENT_DATE + timedelta(days=delta)).strftime("%Y-%m-%d")
         exclude_dates.add(d)
 
     train_mask = []
