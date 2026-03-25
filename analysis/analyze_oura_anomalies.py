@@ -1024,7 +1024,7 @@ def run_tsfresh_clustering(data: dict[str, pd.DataFrame]) -> dict[str, Any]:
     feb9_adjacent = set()
     for delta in range(-1, 2):
         feb9_adjacent.add(
-            str((datetime.strptime(KNOWN_EVENT_DATE, "%Y-%m-%d") + timedelta(days=delta)).date())
+            str(KNOWN_EVENT_DATE + timedelta(days=delta))
         )
     for a in results["anomalies"]:
         if a["date"] in feb9_adjacent:
