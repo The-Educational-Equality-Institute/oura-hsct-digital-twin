@@ -155,5 +155,5 @@ def validate_config() -> bool:
         ok = False
 
     if ok:
-        print(f"Config OK — DB: {db}  Reports: {REPORTS_DIR}")
+        print(f"Config OK - DB: {db}  Reports: {REPORTS_DIR}")
     return ok
