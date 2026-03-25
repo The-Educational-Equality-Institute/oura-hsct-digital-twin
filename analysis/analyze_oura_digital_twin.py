@@ -1409,10 +1409,7 @@ def create_prediction_figure(
     ]):
         actual = obs_masked[:, j]
         pred = predicted_obs[:, j]
-        if hasattr(actual, 'mask') and actual.mask is not np.bool_(False):
-            valid = ~actual.mask & ~np.isnan(pred)
-        else:
-            valid = ~np.isnan(np.array(actual)) & ~np.isnan(pred)
+        valid = ~np.ma.getmaskarray(actual) & ~np.isnan(pred)
 
         if valid.any():
             a = np.array(actual[valid], dtype=float)
@@ -1915,7 +1912,7 @@ def create_observation_overlay_figure(
     obs_cols = ["mean_rmssd", "mean_hr", "spo2_average",
                 "temperature_deviation", "sleep_efficiency"]
     obs_titles = ["HRV (RMSSD, ms)", "Heart Rate (bpm)", "SpO2 (%)",
-                  "Temperature Deviation (C)", "Sleep Efficiency (%)"]
+                  "Temperature Deviation (°C)", "Sleep Efficiency (%)"]
     obs_colors = [COLORS["hrv"], COLORS["hr"], COLORS["spo2"],
                   COLORS["temp"], COLORS["sleep"]]
 
