@@ -32,7 +32,7 @@ import plotly.graph_objects as go
 import plotly.io as pio
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from config import DATABASE_PATH, FONT_FAMILY, PLOTLY_CDN_URL, PATIENT_LABEL, DATA_START, TREATMENT_START
+from config import DATABASE_PATH, FONT_FAMILY, PLOTLY_CDN_URL, PATIENT_LABEL, DATA_START, TREATMENT_START, HEV_DIAGNOSIS_DATE
 
 # ---------------------------------------------------------------------------
 # Report Registry — 11 reports in 3 groups
