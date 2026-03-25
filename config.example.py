@@ -36,8 +36,38 @@ IST_HR_THRESHOLD = 90         # IST criterion: mean 24-hour HR (HRS/EHRA 2015) �
 POPULATION_RMSSD_MEDIAN = 49  # General population median RMSSD (ms) — Nunan 2010
 NORM_RMSSD_P25 = 36           # Population 25th percentile (young adults, Nunan 2010)
 NORM_RMSSD_P75 = 72           # Population 75th percentile (young adults, Nunan 2010)
-HSCT_RMSSD_RANGE = (25, 40)   # Estimated RMSSD range for HSCT patients (ms) — clinical estimate
+POPULATION_RMSSD_MEAN = 42.0  # Shaffer & Ginsberg 2017, healthy adults
+POPULATION_RMSSD_SD = 15.0    # Shaffer & Ginsberg 2017
+# NOTE: Median (49) and mean (42) differ because RMSSD is right-skewed in the population.
+HSCT_RMSSD_RANGE = (25, 40)   # Estimated RMSSD range for HSCT patients (ms) - clinical estimate
 BASELINE_DAYS = 14            # Days before treatment start for baseline window
+
+# --- SpO2 / BOS clinical constants ---
+SPO2_NORMAL_MIN = 95.0        # Lower bound of normal adult SpO2 range (%)
+SPO2_NORMAL_MAX = 100.0       # Upper bound of normal adult SpO2 range (%)
+SPO2_CONCERN_THRESHOLD = 94.0 # Desaturation cutoff (%)
+SPO2_CONCERN_SLOPE = -0.02    # Concerning SpO2 slope (%/day) - 1% decline per 50 days
+
+# Breathing Disturbance Index thresholds (events/hour)
+BDI_NORMAL = 5.0
+BDI_MILD = 15.0
+BDI_MODERATE = 30.0
+
+# BOS (Bronchiolitis Obliterans Syndrome) risk score component weights
+BOS_WEIGHTS = {
+    "spo2_slope": 0.30,
+    "spo2_variability": 0.20,
+    "desaturation_freq": 0.20,
+    "bdi": 0.15,
+    "hr_decoupling": 0.15,
+}
+
+# DLCO measurements from medical records (date, DLCO%, context)
+# Update with your own pulmonary function test results
+DLCO_MEASUREMENTS = [
+    (date(2024, 1, 1), 80.0, "Baseline"),
+    (date(2025, 1, 1), 75.0, "Follow-up"),
+]
 
 # --- Visual identity: clinical white/blue palette ---
 FONT_FAMILY = "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
