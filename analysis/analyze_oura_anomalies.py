@@ -471,7 +471,7 @@ def run_isolation_forest(daily: pd.DataFrame) -> dict[str, Any]:
 
     # Check Feb 9
     feb9_adjacent = [
-        str((datetime.strptime(KNOWN_EVENT_DATE, "%Y-%m-%d") + timedelta(days=d)).date())
+        str(KNOWN_EVENT_DATE + timedelta(days=d))
         for d in [-1, 0, 1]
     ]
     for d in feb9_adjacent:
