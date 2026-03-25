@@ -64,7 +64,7 @@ oura-digital-twin/
 ```bash
 git clone https://github.com/The-Educational-Equality-Institute/oura-hsct-digital-twin.git
 cd oura-hsct-digital-twin
-python -m venv .venv && source .venv/bin/activate
+python -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 cp config.example.py config.py
 python run_all.py
