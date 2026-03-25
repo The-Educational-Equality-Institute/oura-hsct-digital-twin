@@ -351,7 +351,7 @@ def standardize_observations(
 
     # Create masked array (mask where NaN)
     obs_masked = np.ma.masked_invalid(obs_std)
-    n_masked = obs_masked.mask.sum() if obs_masked.mask is not np.bool_(False) else 0
+    n_masked = int(np.ma.getmaskarray(obs_masked).sum())
     total = obs_masked.size
     log("DATA", f"  Observations: {obs_masked.shape}, "
          f"masked: {n_masked}/{total} ({100*n_masked/total:.1f}%)")
