@@ -43,28 +43,38 @@ def subject_cards() -> str:
 
 
 def honest_assessment() -> str:
-    """What day 8 can and cannot tell us."""
-    return """
+    """What the current post-treatment window can and cannot tell us."""
+    today = date.today()
+    total_days = (today - DATA_START).days
+    pre_days = (TREATMENT_START - DATA_START).days
+    post_days = (today - TREATMENT_START).days
+    hev_str = HEV_DIAGNOSIS_DATE.strftime("%B %-d") if HEV_DIAGNOSIS_DATE else "N/A"
+    rux_str = TREATMENT_START.strftime("%B %-d")
+    confound_gap = (HEV_DIAGNOSIS_DATE - TREATMENT_START).days if HEV_DIAGNOSIS_DATE else 0
+    day28 = TREATMENT_START + __import__("datetime").timedelta(days=28)
+    day28_str = day28.strftime("~%B %-d")
+
+    return f"""
 <h3>What we have</h3>
-<p>79 days of continuous Oura data. 67 days pre-intervention baseline.
-8 days post-ruxolitinib. 11 core analysis modules plus a roadmap appendix.
+<p>{total_days} days of continuous Oura data. {pre_days} days pre-intervention baseline.
+{post_days} days post-ruxolitinib. 11 core analysis modules plus a roadmap appendix.
 A CausalImpact model that
 returns a statistically significant treatment signal (see causal inference report for current p-values).</p>
 
 <h3>What that p-value actually means</h3>
 <p>The model detected a statistically significant change in the biometric
-signal after March 16. It cannot tell us <em>why</em>.</p>
+signal after {rux_str}. It cannot tell us <em>why</em>.</p>
 
 <h3>The problem</h3>
-<p>Ruxolitinib started March 16. Hepatitis E was diagnosed March 18.
-Two days apart. At day 8, we cannot separate the two.</p>
+<p>Ruxolitinib started {rux_str}. Hepatitis E was diagnosed {hev_str}.
+{confound_gap} days apart. At day {post_days}, we cannot separate the two.</p>
 
 <table>
 <thead>
 <tr>
   <th>Signal</th>
-  <th>Pre-rux (67 days)</th>
-  <th>Post-rux (8 days)</th>
+  <th>Pre-rux ({pre_days} days)</th>
+  <th>Post-rux ({post_days} days)</th>
   <th>Could be rux?</th>
   <th>Could be HEV?</th>
 </tr>
