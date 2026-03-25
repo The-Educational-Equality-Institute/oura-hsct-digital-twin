@@ -72,4 +72,21 @@ Fixing all CRITICAL and actionable MAJOR issues. Deferring cosmetic MINOR issues
 | 18 | api/oura_oauth2_setup.py:270 | Removed extraneous f-string prefix | DONE |
 | 19 | README.md:50 | Removed duplicate generate_*.py line | DONE |
 
-### Running pipeline verification...
+### CodeRabbit first run verification
+- run_all.py: 12/12 PASS
+- statcheck_reports.py: PASS
+
+## Greptile Review (4 P1 issues)
+
+| # | File | Issue | Fix | Status |
+|---|------|-------|-----|--------|
+| G1 | analyze_oura_anomalies.py:654 | ZeroDivisionError on empty DataLoader | Restored max(len(loader), 1) guard | DONE |
+| G2 | api/import_oura.py:125 | Silent 401 swallow for all endpoints | Added _auth_failure_count + warning at >=3 failures | DONE |
+| G3 | api/import_oura.py:458 | PII regression: raw email stored | Changed to email_hash (SHA-256 prefix 16 chars) | DONE |
+| G4 | analyze_oura_gvhd_predict.py:105 | DATA_END="" unsafe without main() | Added lazy-init guard in load_all_data() | DONE |
+
+## Additional CodeRabbit Comments (2nd batch)
+- analyze_oura_anomalies.py:57 - Normalize KNOWN_EVENT_DATE type: Already done (line 78 has KNOWN_EVENT_DATE_STR)
+- analyze_oura_anomalies.py:380 - Same topic: Already handled by config.example.py fix
+
+### Running final pipeline verification...
