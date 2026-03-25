@@ -88,6 +88,8 @@ def _unpack_time_series(
     return results
 
 
+_auth_failure_count = 0  # Track 401s across endpoints
+
 def _fetch_paginated(
     session: requests.Session, endpoint: str, start_date: str, end_date: str
 ) -> list[dict[str, Any]]:
@@ -120,8 +122,14 @@ def _fetch_paginated(
                 time.sleep(retry_after)
                 continue
             if resp.status_code == 401:
+                global _auth_failure_count
+                _auth_failure_count += 1
                 logging.warning("Oura API returned 401 for %s - skipping (scope/token issue). "
                                 "Try: python api/oura_oauth2_setup.py", endpoint)
+                if _auth_failure_count >= 3:
+                    logging.error("Multiple 401 errors (%d endpoints) - token may be fully "
+                                  "expired or revoked. Run: python api/oura_oauth2_setup.py --refresh",
+                                  _auth_failure_count)
                 return []
             break  # Got a non-429, non-401 response
         else:
@@ -452,7 +460,7 @@ def init_database(db_path: str) -> sqlite3.Connection:
             weight REAL,
             height REAL,
             biological_sex TEXT,
-            email TEXT,
+            email_hash TEXT,
             fetched_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -987,15 +995,18 @@ def import_oura_data(
         if isinstance(info, dict):
             data = info.get("data", info) if "data" in info else info
             cursor.execute("DELETE FROM oura_personal_info")  # Single-row table
+            import hashlib
+            raw_email = data.get("email", "")
+            email_hash = hashlib.sha256(raw_email.encode()).hexdigest()[:16] if raw_email else None
             cursor.execute("""
-                INSERT INTO oura_personal_info (age, weight, height, biological_sex, email)
+                INSERT INTO oura_personal_info (age, weight, height, biological_sex, email_hash)
                 VALUES (?, ?, ?, ?, ?)
             """, (
                 data.get("age"),
                 data.get("weight"),
                 data.get("height"),
                 data.get("biological_sex"),
-                data.get("email"),
+                email_hash,
             ))
             stats["personal_info"] += 1
     except Exception as e:
@@ -1055,7 +1066,9 @@ def main():
 
     # Initialize database
     db_path = args.db or get_database_path()
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    db_dir = os.path.dirname(db_path)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
     conn = init_database(db_path)
 
     try:

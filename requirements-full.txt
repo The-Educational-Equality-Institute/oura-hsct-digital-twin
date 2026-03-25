@@ -1,0 +1,58 @@
+# ---------------------------------------------------------------------------
+# Full stack: core + all optional backends.
+#
+#   pip install -r requirements-full.txt
+#
+# NOTE: ssm requires a local C/C++ toolchain and Cython at build time.
+# It often fails on fresh systems. The GVHD script falls back to hmmlearn
+# automatically when ssm is not installed.
+#
+# To install ssm manually:
+#   pip install Cython==3.0.11 numpy setuptools wheel
+#   pip install --no-build-isolation ssm==0.0.1
+# ---------------------------------------------------------------------------
+
+# Pull in all core dependencies
+-r requirements.txt
+
+# Causal impact analysis (analyze_oura_causal.py)
+# Guarded: CAUSALIMPACT_AVAILABLE flag, script runs without it
+pycausalimpact>=0.1,<0.2
+
+# Entropy / nonlinear HRV metrics (advanced_hrv + biomarkers)
+# Guarded: HAS_ANTROPY / HAS_NOLDS flags
+antropy>=0.1
+nolds>=0.5
+
+# Kalman filter digital twin (analyze_oura_digital_twin.py)
+# pykalman: hard import (no guard) - needed for core Kalman filter
+# filterpy: guarded try/except for UKF extension
+filterpy>=1.4
+pykalman>=0.9
+
+# HMM state detection (analyze_oura_gvhd_predict.py)
+# Guarded: HMMLEARN_AVAILABLE flag
+hmmlearn>=0.3
+
+# Foundation model forecasting (analyze_oura_foundation_models.py)
+# Guarded: pipeline=None fallback, ARIMA-only mode
+# Requires GPU for reasonable performance
+chronos-forecasting>=1.0
+torch>=2.0
+
+# Causal discovery via PCMCI+ (analyze_oura_causal.py)
+# Guarded: not imported at module level
+tigramite>=5.2
+
+# Matrix Profile anomaly detection (analyze_oura_anomalies.py)
+# Guarded: try/except inside function
+stumpy>=1.12
+
+# Time-series feature extraction (analyze_oura_anomalies.py)
+# Guarded: try/except inside function
+tsfresh>=0.20
+
+# rSLDS backend (analyze_oura_gvhd_predict.py)
+# Guarded: SSM_AVAILABLE flag, falls back to hmmlearn
+# Requires manual install - see comment block at top of this file
+# ssm==0.0.1

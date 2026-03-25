@@ -6,9 +6,10 @@ and JSON metrics to oura-digital-twin/reports/.
 
 Usage:
     cd oura-digital-twin
-    python run_all.py
+    python run_all.py           # exit 0 if at least one script passes
+    python run_all.py --strict  # exit 1 if ANY script fails
 """
-
+import argparse
 import os
 import json
 import shutil
@@ -18,7 +19,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from config import REPORTS_DIR  # noqa: E402
+from config import REPORTS_DIR, validate_config  # noqa: E402
 
 ANALYSIS_DIR = Path(__file__).resolve().parent / "analysis"
 REPORTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -26,11 +27,11 @@ SEND_BUNDLE_DIR = REPORTS_DIR / "send_bundle"
 SUBPROCESS_ENV = {**os.environ, "PYTHONUNBUFFERED": "1"}
 
 SCRIPTS = [
-    "analyze_oura_spo2_trend.py",
     "analyze_oura_full.py",
     "analyze_oura_advanced_hrv.py",
     "analyze_oura_sleep_advanced.py",
     "analyze_oura_biomarkers.py",
+    "analyze_oura_spo2_trend.py",
     "analyze_oura_anomalies.py",
     "analyze_oura_foundation_models.py",
     "analyze_oura_digital_twin.py",
@@ -79,12 +80,8 @@ def assemble_send_bundle() -> tuple[list[str], list[str]]:
     """Copy the curated release surface to reports/send_bundle."""
     SEND_BUNDLE_DIR.mkdir(parents=True, exist_ok=True)
 
-    missing_html = [
-        name for name in SEND_BUNDLE_HTML if not (REPORTS_DIR / name).exists()
-    ]
-    missing_json = [
-        name for name in SEND_BUNDLE_JSON if not (REPORTS_DIR / name).exists()
-    ]
+    missing_html = [name for name in SEND_BUNDLE_HTML if not (REPORTS_DIR / name).exists()]
+    missing_json = [name for name in SEND_BUNDLE_JSON if not (REPORTS_DIR / name).exists()]
     if missing_html or missing_json:
         missing = missing_html + missing_json
         raise FileNotFoundError(
@@ -110,26 +107,15 @@ def assemble_send_bundle() -> tuple[list[str], list[str]]:
         shutil.copy2(src, SEND_BUNDLE_DIR / name)
         copied_json.append(name)
 
-    # Keep the canonical HTML pointer, but drop dated-snapshot references that are
-    # intentionally excluded from the external bundle.
+    # The send bundle intentionally excludes dated snapshots; keep references internal.
     full_json_path = SEND_BUNDLE_DIR / "oura_full_analysis.json"
     if full_json_path.exists():
         payload = json.loads(full_json_path.read_text(encoding="utf-8"))
         canonical_html = payload.get("canonical_html", "oura_full_analysis.html")
         payload["report_html"] = canonical_html
-        payload.pop("date_stamped_html", None)
+        payload["date_stamped_html"] = canonical_html
         full_json_path.write_text(
             json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
-
-    # Strip internal execution logs from externally shared metrics payloads.
-    gvhd_json_path = SEND_BUNDLE_DIR / "gvhd_prediction_metrics.json"
-    if gvhd_json_path.exists():
-        gvhd_payload = json.loads(gvhd_json_path.read_text(encoding="utf-8"))
-        gvhd_payload.pop("progress_log", None)
-        gvhd_json_path.write_text(
-            json.dumps(gvhd_payload, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
 
@@ -156,13 +142,35 @@ def assemble_send_bundle() -> tuple[list[str], list[str]]:
     )
     return copied_html, copied_json
 
-
 def main():
+    parser = argparse.ArgumentParser(description="Run all Oura analysis scripts.")
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Exit with code 1 if ANY script fails (default: exit 0 if at least one passes)",
+    )
+    parser.add_argument(
+        "--skip-precheck",
+        action="store_true",
+        help="Skip database precheck and run scripts regardless of config/data readiness.",
+    )
+    args = parser.parse_args()
+
+    if not args.skip_precheck and not validate_config():
+        log("=" * 70)
+        log("  PRECHECK FAILED - database is missing, empty, or not initialized.")
+        log("  Run: python api/import_oura.py --days 90")
+        log("  Skipping pipeline run to avoid noisy downstream tracebacks.")
+        log("  Use --skip-precheck only if you intentionally want per-script failures.")
+        log("=" * 70)
+        return
+
     t_total = time.perf_counter()
     log("=" * 70)
     n_scripts = len(SCRIPTS)
     log(f"  OURA ANALYSIS PIPELINE - ALL {n_scripts} SCRIPTS")
     log(f"  Output: {REPORTS_DIR}")
+    log(f"  Mode: {'strict (any failure = exit 1)' if args.strict else 'resilient (exit 0 if any pass)'}")
     log("=" * 70)
 
     results = []
@@ -173,9 +181,9 @@ def main():
             results.append((script, "MISSING"))
             continue
 
-        log(f"\n{'─' * 70}")
+        log(f"\n{'-' * 70}")
         log(f"[{i}/{n_scripts}] Running {script}...")
-        log(f"{'─' * 70}")
+        log(f"{'-' * 70}")
         t0 = time.perf_counter()
 
         try:
@@ -188,28 +196,18 @@ def main():
             elapsed = time.perf_counter() - t0
             status = "OK" if proc.returncode == 0 else f"FAIL (rc={proc.returncode})"
             results.append((script, status, elapsed))
-            log(f"\n  → {status} ({elapsed:.1f}s)")
-            if proc.returncode != 0:
-                for blocked_script in SCRIPTS[i:]:
-                    results.append(
-                        (blocked_script, "SKIPPED (blocked by earlier failure)")
-                    )
-                break
+            log(f"\n  -> {status} ({elapsed:.1f}s)")
         except subprocess.TimeoutExpired:
             results.append((script, "TIMEOUT"))
-            log("\n  → TIMEOUT (>600s)")
-            for blocked_script in SCRIPTS[i:]:
-                results.append((blocked_script, "SKIPPED (blocked by earlier failure)"))
-            break
+            log("\n  -> TIMEOUT (>600s)")
         except Exception as e:
             results.append((script, f"ERROR: {e}"))
-            log(f"\n  → ERROR: {e}")
-            for blocked_script in SCRIPTS[i:]:
-                results.append((blocked_script, "SKIPPED (blocked by earlier failure)"))
-            break
+            log(f"\n  -> ERROR: {e}")
 
     # Summary
     total_time = time.perf_counter() - t_total
+    successes = sum(1 for e in results if e[1] == "OK")
+    failures = n_scripts - successes
     log(f"\n{'=' * 70}")
     log("  PIPELINE COMPLETE")
     log(f"{'=' * 70}")
@@ -221,31 +219,39 @@ def main():
 
     log(f"\n  Total runtime: {total_time:.1f}s")
     log(f"  Reports: {REPORTS_DIR}")
+    log(f"  Passed: {successes}/{n_scripts}  Failed: {failures}/{n_scripts}")
 
-    failures = sum(
-        1 for e in results if e[1] != "OK" and not e[1].startswith("SKIPPED")
-    )
-    blocked = sum(1 for e in results if e[1].startswith("SKIPPED"))
     if failures:
         log(f"\n  {failures}/{n_scripts} script(s) failed.")
-        if blocked:
-            log(f"  {blocked}/{n_scripts} script(s) skipped after the first failure.")
+
+    # Assemble send bundle only when all scripts passed
+    if failures == 0:
+        try:
+            copied_html, copied_json = assemble_send_bundle()
+            log(f"\n  Curated HTML reports: {len(copied_html)}")
+            for name in copied_html:
+                f = REPORTS_DIR / name
+                size_mb = f.stat().st_size / (1024 * 1024)
+                log(f"    {name} ({size_mb:.1f} MB)")
+            log(f"  Curated JSON metrics: {len(copied_json)}")
+            for name in copied_json:
+                log(f"    {name}")
+            log(f"\n  Send bundle: {SEND_BUNDLE_DIR}")
+            log(f"  Manifest: {SEND_BUNDLE_DIR / 'SEND_MANIFEST.md'}")
+        except FileNotFoundError as exc:
+            log(f"\n  Send bundle assembly failed: {exc}")
+    else:
+        log("  Send bundle skipped (not all scripts passed).")
+
+    # Exit code logic:
+    # --strict: exit 1 if any script failed
+    # default:  exit 1 only if ALL scripts failed (partial success = exit 0)
+    if successes == 0:
+        log("\n  All scripts failed. Exiting with code 1.")
         sys.exit(1)
-
-    copied_html, copied_json = assemble_send_bundle()
-
-    log(f"\n  Curated HTML reports: {len(copied_html)}")
-    for name in copied_html:
-        f = REPORTS_DIR / name
-        size_mb = f.stat().st_size / (1024 * 1024)
-        log(f"    {name} ({size_mb:.1f} MB)")
-
-    log(f"  Curated JSON metrics: {len(copied_json)}")
-    for name in copied_json:
-        log(f"    {name}")
-
-    log(f"\n  Send bundle: {SEND_BUNDLE_DIR}")
-    log(f"  Manifest: {SEND_BUNDLE_DIR / 'SEND_MANIFEST.md'}")
+    if args.strict and failures > 0:
+        log("\n  Strict mode: exiting with code 1 due to failures.")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

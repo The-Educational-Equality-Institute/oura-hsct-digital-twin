@@ -1,4 +1,4 @@
-# Oura Digital Twin - Data Methodology and Limitations
+# Oura Digital Twin — Data Methodology and Limitations
 
 **Generated:** 2026-03-23
 **Patient:** Post-HSCT, 36M, MDS-AML, 26+ months post-transplant
@@ -37,7 +37,7 @@ Whether multiple sleep periods within the same day should be treated as independ
 
 Ruxolitinib started 2026-03-16. As of 2026-03-23, we have **7 calendar days** of post-intervention data. This is a severe limitation:
 
-- **CausalImpact (BSTS):** Typically requires 2-4 weeks post-intervention for reliable estimates. Our 7-day window means the posterior interval is wide. The temperature signal (p=0.014) passes despite this because the effect size is large relative to pre-intervention variance.
+- **CausalImpact (BSTS):** Typically requires 2-4 weeks post-intervention for reliable estimates. Our 7-day window means the posterior interval is wide. The temperature signal (p=0.009) passes despite this because the effect size is large relative to pre-intervention variance.
 - **UKF state shifts:** The Mann-Whitney U test compares 71 pre-treatment observations to 8 post-treatment observations. Small post-treatment n limits statistical power.
 - **rSLDS disease states:** The Hidden Markov model has limited data for state transition estimation in the post-intervention window.
 - **Composite biomarkers:** Pre/post deltas are computed but should be treated as preliminary trends, not confirmed effects.

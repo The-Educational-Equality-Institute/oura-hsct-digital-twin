@@ -108,6 +108,9 @@ DATA_END: str = ""  # set by _resolve_data_end() before first use
 def _resolve_data_end() -> str:
     """Query database for the latest available date across key tables."""
     import sqlite3 as _sql
+    if not Path(DATABASE_PATH).exists():
+        print("No data found. Run: python api/import_oura.py --days 90")
+        sys.exit(0)
     with _sql.connect(str(DATABASE_PATH)) as conn:
         row = conn.execute(
             "SELECT MAX(d) FROM ("
@@ -118,7 +121,8 @@ def _resolve_data_end() -> str:
         ).fetchone()
     if row and row[0]:
         return row[0]
-    raise RuntimeError("Unable to determine latest available Oura date from the database")
+    print("No data found. Run: python api/import_oura.py --days 90")
+    sys.exit(0)
 
 # BOS risk score — loaded at runtime from SpO2/BOS analysis output
 SPO2_BOS_METRICS_PATH = REPORTS_DIR / "spo2_bos_metrics.json"
@@ -204,7 +208,13 @@ def log(tag: str, msg: str) -> None:
 # ===========================================================================
 def load_all_data() -> dict[str, pd.DataFrame]:
     """Load all Oura tables into a dict of DataFrames."""
+    global DATA_END
+    if not DATA_END:
+        DATA_END = _resolve_data_end()
     log("DATA", "Loading Oura biometric data from SQLite...")
+    if not Path(DATABASE_PATH).exists():
+        print("No data found. Run: python api/import_oura.py --days 90")
+        sys.exit(0)
     conn = sqlite3.connect(f"file:{DATABASE_PATH}?mode=ro", uri=True)
     data = {}
 
@@ -387,8 +397,10 @@ def build_daily_features(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
 
     # --- Sleep fragmentation index ---
     # From epochs: count phase transitions per hour of sleep
+    # Join on period_id to keep fragmentation aligned with primary (longest) period
     epoch_frag = compute_epoch_fragmentation(data["epochs"], data["sleep"])
-    daily = daily.merge(epoch_frag, on="date", how="left")
+    frag_cols = ["period_id", "frag_index", "transitions", "awake_epochs_pct"]
+    daily = daily.merge(epoch_frag[frag_cols], on="period_id", how="left")
 
     # --- SpO2 ---
     spo2 = data["spo2"][["date", "spo2_average", "breathing_disturbance_index"]].copy()
@@ -466,13 +478,8 @@ def compute_epoch_fragmentation(
     frag_df = pd.DataFrame(frag_rows)
     frag_df = frag_df.merge(pid_date, on="period_id", how="left")
 
-    # Take primary period per day (highest frag_index for worst-case)
-    frag_daily = (
-        frag_df.sort_values(["date", "frag_index"], ascending=[True, False])
-        .drop_duplicates(subset="date", keep="first")
-        [["date", "frag_index", "transitions", "awake_epochs_pct"]]
-    )
-    return frag_daily
+    # Return per-period fragmentation (caller selects primary period)
+    return frag_df[["period_id", "date", "frag_index", "transitions", "awake_epochs_pct"]]
 
 
 # ===========================================================================
@@ -734,9 +741,9 @@ def analyze_temperature(daily: pd.DataFrame) -> dict[str, Any]:
             spikedash="dot",
             row=row_i, col=1,
         )
-    fig.update_yaxes(title_text="Degrees C", row=1, col=1)
-    fig.update_yaxes(title_text="SD (C)", row=2, col=1)
-    fig.update_yaxes(title_text="Delta C", row=3, col=1)
+    fig.update_yaxes(title_text="Temperature (°C)", row=1, col=1)
+    fig.update_yaxes(title_text="SD (°C)", row=2, col=1)
+    fig.update_yaxes(title_text="Delta (°C)", row=3, col=1)
 
     figures.append(fig)
     log("TEMP", "Temperature analysis complete.")

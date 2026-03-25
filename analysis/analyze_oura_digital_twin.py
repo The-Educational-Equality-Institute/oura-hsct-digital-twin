@@ -35,7 +35,7 @@ import sys
 import time
 import traceback
 import warnings
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -56,32 +56,16 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 # ---------------------------------------------------------------------------
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from config import (
-    DATABASE_PATH,
-    REPORTS_DIR,
-    TREATMENT_START,
-    KNOWN_EVENT_DATE,
-    HEV_DIAGNOSIS_DATE,
-    PATIENT_AGE,
-    PATIENT_LABEL,
-    HSCT_RMSSD_RANGE,
+    DATABASE_PATH, REPORTS_DIR, TRANSPLANT_DATE, TREATMENT_START, KNOWN_EVENT_DATE,
+    HEV_DIAGNOSIS_DATE, PATIENT_AGE, PATIENT_LABEL,
+    ESC_RMSSD_DEFICIENCY, NOCTURNAL_HR_ELEVATED, POPULATION_RMSSD_MEDIAN, HSCT_RMSSD_RANGE,
 )
 from _theme import (
-    wrap_html,
-    make_kpi_card,
-    make_kpi_row,
-    make_section,
-    BG_ELEVATED,
-    BORDER_SUBTLE,
-    TEXT_PRIMARY,
-    TEXT_SECONDARY,
-    TEXT_TERTIARY,
-    ACCENT_BLUE,
-    ACCENT_GREEN,
-    ACCENT_RED,
-    ACCENT_AMBER,
-    ACCENT_PURPLE,
-    ACCENT_CYAN,
-    ACCENT_ORANGE,
+    wrap_html, make_kpi_card, make_kpi_row, make_section,
+    BG_ELEVATED, BORDER_SUBTLE,
+    TEXT_PRIMARY, TEXT_SECONDARY, TEXT_TERTIARY,
+    ACCENT_BLUE, ACCENT_GREEN, ACCENT_RED, ACCENT_AMBER,
+    ACCENT_PURPLE, ACCENT_CYAN, ACCENT_ORANGE,
     C_PRE_TX,
 )
 
@@ -90,7 +74,7 @@ pio.templates.default = "clinical_dark"
 HTML_OUTPUT = REPORTS_DIR / "digital_twin_report.html"
 JSON_OUTPUT = REPORTS_DIR / "digital_twin_metrics.json"
 
-# Clinical reference values - imported from config.py
+# Clinical reference values — imported from config.py
 HSCT_TYPICAL_RMSSD = HSCT_RMSSD_RANGE  # local alias for backwards compat
 
 # State-space model parameters
@@ -116,7 +100,7 @@ OBS_NAMES = [
     "Sleep Efficiency",
 ]
 
-# Visualization - mapped to dark theme palette
+# Visualization — mapped to dark theme palette
 COLORS = {
     "pre": C_PRE_TX,
     "post": ACCENT_RED,
@@ -142,7 +126,7 @@ TIMELINE_MARKERS = [
 def _hex_to_rgba(hex_color: str, alpha: float) -> str:
     """Convert hex color to rgba string."""
     h = hex_color.lstrip("#")
-    return f"rgba({int(h[0:2], 16)},{int(h[2:4], 16)},{int(h[4:6], 16)},{alpha})"
+    return f"rgba({int(h[0:2],16)},{int(h[2:4],16)},{int(h[4:6],16)},{alpha})"
 
 
 def _add_timeline_vlines(
@@ -200,78 +184,83 @@ def load_oura_data() -> pd.DataFrame:
     """
     log("DATA", "Loading Oura Ring data from database...")
 
-    with sqlite3.connect(f"file:{DATABASE_PATH}?mode=ro", uri=True) as conn:
-        # --- HRV: aggregate 5-minute samples to daily mean ---
-        hrv_df = pd.read_sql_query(
-            """
-            SELECT substr(timestamp, 1, 10) AS day, AVG(rmssd) AS mean_rmssd
-            FROM oura_hrv
-            WHERE rmssd IS NOT NULL AND rmssd > 0
-            GROUP BY substr(timestamp, 1, 10)
-            ORDER BY day
-            """,
-            conn,
-        )
-        hrv_df["day"] = pd.to_datetime(hrv_df["day"])
-        log("DATA", f"  HRV: {len(hrv_df)} daily aggregates")
+    if not Path(DATABASE_PATH).exists():
+        print("No data found. Run: python api/import_oura.py --days 90")
+        sys.exit(0)
 
-        # --- Heart rate: aggregate to daily mean ---
-        hr_df = pd.read_sql_query(
-            """
-            SELECT substr(timestamp, 1, 10) AS day, AVG(bpm) AS mean_hr
-            FROM oura_heart_rate
-            WHERE bpm IS NOT NULL AND bpm > 0
-            GROUP BY substr(timestamp, 1, 10)
-            ORDER BY day
-            """,
-            conn,
-        )
-        hr_df["day"] = pd.to_datetime(hr_df["day"])
-        log("DATA", f"  HR: {len(hr_df)} daily aggregates")
+    conn = sqlite3.connect(f"file:{DATABASE_PATH}?mode=ro", uri=True)
 
-        # --- SpO2: already daily ---
-        spo2_df = pd.read_sql_query(
-            """
-            SELECT date AS day, spo2_average
-            FROM oura_spo2
-            WHERE spo2_average IS NOT NULL AND spo2_average > 0
-            ORDER BY date
-            """,
-            conn,
-        )
-        spo2_df["day"] = pd.to_datetime(spo2_df["day"])
-        log("DATA", f"  SpO2: {len(spo2_df)} valid days")
+    # --- HRV: aggregate 5-minute samples to daily mean ---
+    hrv_df = pd.read_sql_query(
+        """
+        SELECT substr(timestamp, 1, 10) AS day, AVG(rmssd) AS mean_rmssd
+        FROM oura_hrv
+        GROUP BY substr(timestamp, 1, 10)
+        ORDER BY day
+        """,
+        conn,
+    )
+    hrv_df["day"] = pd.to_datetime(hrv_df["day"])
+    log("DATA", f"  HRV: {len(hrv_df)} daily aggregates")
 
-        # --- Temperature deviation from readiness ---
-        temp_df = pd.read_sql_query(
-            """
-            SELECT date AS day, temperature_deviation
-            FROM oura_readiness
-            WHERE temperature_deviation IS NOT NULL
-            ORDER BY date
-            """,
-            conn,
-        )
-        temp_df["day"] = pd.to_datetime(temp_df["day"])
-        log("DATA", f"  Temp deviation: {len(temp_df)} days")
+    # --- Heart rate: aggregate to daily mean ---
+    hr_df = pd.read_sql_query(
+        """
+        SELECT substr(timestamp, 1, 10) AS day, AVG(bpm) AS mean_hr
+        FROM oura_heart_rate
+        GROUP BY substr(timestamp, 1, 10)
+        ORDER BY day
+        """,
+        conn,
+    )
+    hr_df["day"] = pd.to_datetime(hr_df["day"])
+    log("DATA", f"  HR: {len(hr_df)} daily aggregates")
 
-        # --- Sleep efficiency from long_sleep periods ---
-        sleep_df = pd.read_sql_query(
-            """
-            SELECT day, efficiency AS sleep_efficiency,
-                   average_hrv, average_heart_rate, lowest_heart_rate,
-                   total_sleep_duration, rem_sleep_duration, deep_sleep_duration
-            FROM oura_sleep_periods
-            WHERE type = 'long_sleep'
-            ORDER BY day
-            """,
-            conn,
-        )
-        sleep_df["day"] = pd.to_datetime(sleep_df["day"])
-        # Handle duplicate days (multiple sleep periods): take the longest
-        sleep_df = sleep_df.sort_values("total_sleep_duration", ascending=False)
-        sleep_df = sleep_df.drop_duplicates(subset=["day"], keep="first")
-        log("DATA", f"  Sleep: {len(sleep_df)} nights")
+    # --- SpO2: already daily ---
+    spo2_df = pd.read_sql_query(
+        """
+        SELECT date AS day, spo2_average
+        FROM oura_spo2
+        WHERE spo2_average > 0
+        ORDER BY date
+        """,
+        conn,
+    )
+    spo2_df["day"] = pd.to_datetime(spo2_df["day"])
+    log("DATA", f"  SpO2: {len(spo2_df)} valid days")
+
+    # --- Temperature deviation from readiness ---
+    temp_df = pd.read_sql_query(
+        """
+        SELECT date AS day, temperature_deviation
+        FROM oura_readiness
+        WHERE temperature_deviation IS NOT NULL
+        ORDER BY date
+        """,
+        conn,
+    )
+    temp_df["day"] = pd.to_datetime(temp_df["day"])
+    log("DATA", f"  Temp deviation: {len(temp_df)} days")
+
+    # --- Sleep efficiency from long_sleep periods ---
+    sleep_df = pd.read_sql_query(
+        """
+        SELECT day, efficiency AS sleep_efficiency,
+               average_hrv, average_heart_rate, lowest_heart_rate,
+               total_sleep_duration, rem_sleep_duration, deep_sleep_duration
+        FROM oura_sleep_periods
+        WHERE type = 'long_sleep'
+        ORDER BY day
+        """,
+        conn,
+    )
+    sleep_df["day"] = pd.to_datetime(sleep_df["day"])
+    # Handle duplicate days (multiple sleep periods): take the longest
+    sleep_df = sleep_df.sort_values("total_sleep_duration", ascending=False)
+    sleep_df = sleep_df.drop_duplicates(subset=["day"], keep="first")
+    log("DATA", f"  Sleep: {len(sleep_df)} nights")
+
+    conn.close()
 
     # --- Merge into daily panel ---
     # Create full date range
@@ -298,19 +287,12 @@ def load_oura_data() -> pd.DataFrame:
     daily = daily.merge(hrv_df[["day", "mean_rmssd"]], on="day", how="left")
     daily = daily.merge(hr_df[["day", "mean_hr"]], on="day", how="left")
     daily = daily.merge(spo2_df[["day", "spo2_average"]], on="day", how="left")
-    daily = daily.merge(temp_df[["day", "temperature_deviation"]], on="day", how="left")
     daily = daily.merge(
-        sleep_df[
-            [
-                "day",
-                "sleep_efficiency",
-                "average_hrv",
-                "lowest_heart_rate",
-                "rem_sleep_duration",
-                "deep_sleep_duration",
-                "total_sleep_duration",
-            ]
-        ],
+        temp_df[["day", "temperature_deviation"]], on="day", how="left"
+    )
+    daily = daily.merge(
+        sleep_df[["day", "sleep_efficiency", "average_hrv", "lowest_heart_rate",
+                   "rem_sleep_duration", "deep_sleep_duration", "total_sleep_duration"]],
         on="day",
         how="left",
     )
@@ -319,19 +301,9 @@ def load_oura_data() -> pd.DataFrame:
 
     # Report completeness
     n_total = len(daily)
-    for col in [
-        "mean_rmssd",
-        "mean_hr",
-        "spo2_average",
-        "temperature_deviation",
-        "sleep_efficiency",
-    ]:
+    for col in ["mean_rmssd", "mean_hr", "spo2_average", "temperature_deviation", "sleep_efficiency"]:
         n_valid = daily[col].notna().sum()
-        pct = 100 * n_valid / n_total if n_total > 0 else 0
-        log(
-            "DATA",
-            f"  {col}: {n_valid}/{n_total} days ({pct:.0f}%)",
-        )
+        log("DATA", f"  {col}: {n_valid}/{n_total} days ({100*n_valid/n_total:.0f}%)")
 
     metrics["data_range"] = {
         "start": str(daily.index.min().date()),
@@ -339,13 +311,8 @@ def load_oura_data() -> pd.DataFrame:
         "n_days": n_total,
         "completeness": {
             col: float(daily[col].notna().mean())
-            for col in [
-                "mean_rmssd",
-                "mean_hr",
-                "spo2_average",
-                "temperature_deviation",
-                "sleep_efficiency",
-            ]
+            for col in ["mean_rmssd", "mean_hr", "spo2_average",
+                         "temperature_deviation", "sleep_efficiency"]
         },
     }
 
@@ -366,13 +333,8 @@ def standardize_observations(
     """
     log("DATA", "Standardizing observations...")
 
-    obs_cols = [
-        "mean_rmssd",
-        "mean_hr",
-        "spo2_average",
-        "temperature_deviation",
-        "sleep_efficiency",
-    ]
+    obs_cols = ["mean_rmssd", "mean_hr", "spo2_average",
+                "temperature_deviation", "sleep_efficiency"]
     obs_raw = daily[obs_cols].values.astype(np.float64)
 
     scalers: dict[str, tuple[float, float]] = {}
@@ -393,14 +355,10 @@ def standardize_observations(
 
     # Create masked array (mask where NaN)
     obs_masked = np.ma.masked_invalid(obs_std)
-    n_masked = obs_masked.mask.sum() if obs_masked.mask is not np.bool_(False) else 0
+    n_masked = int(np.ma.getmaskarray(obs_masked).sum())
     total = obs_masked.size
-    masked_pct = 100 * n_masked / total if total > 0 else 0
-    log(
-        "DATA",
-        f"  Observations: {obs_masked.shape}, "
-        f"masked: {n_masked}/{total} ({masked_pct:.1f}%)",
-    )
+    log("DATA", f"  Observations: {obs_masked.shape}, "
+         f"masked: {n_masked}/{total} ({100*n_masked/total:.1f}%)")
 
     return obs_masked, scalers
 
@@ -436,21 +394,13 @@ def run_kalman_filter(
     # - circadian_phase: near-unit root with small coupling to autonomic tone
     # - inflammation: slow decay toward baseline (0.92)
     # - sleep_quality: moderate persistence (0.90) + coupling from autonomic tone
-    A = np.array(
-        [
-            [0.95, 0.00, 0.00, -0.05, 0.05],  # autonomic <- inflammation(-), sleep(+)
-            [0.03, 0.98, 0.00, -0.02, 0.00],  # cardiac <- autonomic(+), inflammation(-)
-            [0.00, 0.00, 0.97, 0.00, 0.00],  # circadian: slow drift
-            [-0.02, 0.00, 0.00, 0.92, -0.03],  # inflammation <- autonomic(-), sleep(-)
-            [
-                0.05,
-                0.02,
-                0.03,
-                -0.04,
-                0.90,
-            ],  # sleep <- autonomic(+), cardiac(+), circadian(+)
-        ]
-    )
+    A = np.array([
+        [0.95, 0.00, 0.00, -0.05, 0.05],  # autonomic <- inflammation(-), sleep(+)
+        [0.03, 0.98, 0.00, -0.02, 0.00],   # cardiac <- autonomic(+), inflammation(-)
+        [0.00, 0.00, 0.97, 0.00, 0.00],     # circadian: slow drift
+        [-0.02, 0.00, 0.00, 0.92, -0.03],   # inflammation <- autonomic(-), sleep(-)
+        [0.05, 0.02, 0.03, -0.04, 0.90],    # sleep <- autonomic(+), cardiac(+), circadian(+)
+    ])
 
     # --- Define observation matrix H ---
     # Maps latent states to observables:
@@ -459,15 +409,13 @@ def run_kalman_filter(
     # spo2 ~ cardiac_reserve (+) + inflammation (-)
     # temp_dev ~ inflammation (+) + circadian_phase (+)
     # sleep_eff ~ sleep_quality (+) + autonomic_tone (+)
-    H = np.array(
-        [
-            [0.70, 0.10, 0.00, -0.10, 0.30],  # rmssd
-            [-0.20, -0.50, 0.00, 0.40, -0.10],  # hr (inverted: low state = high HR)
-            [0.10, 0.40, 0.00, -0.50, 0.10],  # spo2
-            [-0.10, 0.00, 0.30, 0.60, 0.00],  # temp deviation
-            [0.30, 0.10, 0.10, -0.10, 0.60],  # sleep efficiency
-        ]
-    )
+    H = np.array([
+        [0.70, 0.10, 0.00, -0.10, 0.30],   # rmssd
+        [-0.20, -0.50, 0.00, 0.40, -0.10],  # hr (inverted: low state = high HR)
+        [0.10, 0.40, 0.00, -0.50, 0.10],    # spo2
+        [-0.10, 0.00, 0.30, 0.60, 0.00],    # temp deviation
+        [0.30, 0.10, 0.10, -0.10, 0.60],    # sleep efficiency
+    ])
 
     # --- Initial state ---
     initial_state_mean = np.zeros(N_STATES)
@@ -589,11 +537,11 @@ def _has_nan_inf(arr: np.ndarray) -> bool:
 
 # Physiologically plausible state bounds (z-scored units)
 _STATE_BOUNDS = [
-    (-5.0, 5.0),  # Autonomic Tone
-    (-5.0, 5.0),  # Cardiac Reserve
-    (0.0, 2.0 * np.pi),  # Circadian Phase (wrap)
-    (-5.0, 5.0),  # Inflammation Level
-    (-5.0, 5.0),  # Sleep Quality
+    (-5.0, 5.0),           # Autonomic Tone
+    (-5.0, 5.0),           # Cardiac Reserve
+    (0.0, 2.0 * np.pi),    # Circadian Phase (wrap)
+    (-5.0, 5.0),           # Inflammation Level
+    (-5.0, 5.0),           # Sleep Quality
 ]
 
 
@@ -617,7 +565,9 @@ _COV_COLLAPSE_THRESHOLD = 1e-8
 _COV_REINFLATE = 0.01
 
 
-def run_ukf(obs_masked: np.ma.MaskedArray, daily: pd.DataFrame) -> dict[str, Any]:
+def run_ukf(
+    obs_masked: np.ma.MaskedArray, daily: pd.DataFrame
+) -> dict[str, Any]:
     """Unscented Kalman Filter with nonlinear circadian dynamics.
 
     Uses MerweScaledSigmaPoints to propagate uncertainty through the
@@ -669,15 +619,13 @@ def run_ukf(obs_masked: np.ma.MaskedArray, daily: pd.DataFrame) -> dict[str, Any
     AUTONOMIC_DECAY = np.exp(-1.0 / AUTONOMIC_TAU)
 
     # Observation matrix (same as linear KF)
-    H_matrix = np.array(
-        [
-            [0.70, 0.10, 0.00, -0.10, 0.30],
-            [-0.20, -0.50, 0.00, 0.40, -0.10],
-            [0.10, 0.40, 0.00, -0.50, 0.10],
-            [-0.10, 0.00, 0.30, 0.60, 0.00],
-            [0.30, 0.10, 0.10, -0.10, 0.60],
-        ]
-    )
+    H_matrix = np.array([
+        [0.70, 0.10, 0.00, -0.10, 0.30],
+        [-0.20, -0.50, 0.00, 0.40, -0.10],
+        [0.10, 0.40, 0.00, -0.50, 0.10],
+        [-0.10, 0.00, 0.30, 0.60, 0.00],
+        [0.30, 0.10, 0.10, -0.10, 0.60],
+    ])
 
     def fx(x: np.ndarray, dt: float) -> np.ndarray:
         """Nonlinear state transition function for UKF.
@@ -711,20 +659,13 @@ def run_ukf(obs_masked: np.ma.MaskedArray, daily: pd.DataFrame) -> dict[str, Any
     # MerweScaledSigmaPoints: alpha controls spread, beta=2 optimal for Gaussian,
     # kappa=3-n is a common choice
     sigma_points = MerweScaledSigmaPoints(
-        n=N_STATES,
-        alpha=0.1,
-        beta=2.0,
-        kappa=3.0 - N_STATES,
+        n=N_STATES, alpha=0.1, beta=2.0, kappa=3.0 - N_STATES,
     )
 
     # --- UKF setup ---
     ukf = UnscentedKalmanFilter(
-        dim_x=N_STATES,
-        dim_z=N_OBS,
-        dt=1.0,
-        fx=fx,
-        hx=hx,
-        points=sigma_points,
+        dim_x=N_STATES, dim_z=N_OBS, dt=1.0,
+        fx=fx, hx=hx, points=sigma_points,
     )
 
     # Initial state
@@ -759,10 +700,7 @@ def run_ukf(obs_masked: np.ma.MaskedArray, daily: pd.DataFrame) -> dict[str, Any
 
         # --- NaN/Inf check after predict ---
         if _has_nan_inf(ukf.x) or _has_nan_inf(ukf.P):
-            log(
-                "UKF",
-                f"  WARNING: NaN/Inf at t={t} after predict. Resetting to last good state.",
-            )
+            log("UKF", f"  WARNING: NaN/Inf at t={t} after predict. Resetting to last good state.")
             ukf.x = last_good_x.copy()
             ukf.P = last_good_P.copy()
             n_resets += 1
@@ -773,10 +711,7 @@ def run_ukf(obs_masked: np.ma.MaskedArray, daily: pd.DataFrame) -> dict[str, Any
         # --- Sigma-point collapse detection ---
         max_diag = np.max(np.diag(ukf.P))
         if max_diag < _COV_COLLAPSE_THRESHOLD:
-            log(
-                "UKF",
-                f"  WARNING: Sigma-point collapse at t={t} (max diag P = {max_diag:.2e}). Re-inflating.",
-            )
+            log("UKF", f"  WARNING: Sigma-point collapse at t={t} (max diag P = {max_diag:.2e}). Re-inflating.")
             ukf.P += np.eye(N_STATES) * _COV_REINFLATE
             n_reinflations += 1
 
@@ -817,10 +752,7 @@ def run_ukf(obs_masked: np.ma.MaskedArray, daily: pd.DataFrame) -> dict[str, Any
 
         # --- NaN/Inf check after update ---
         if _has_nan_inf(ukf.x) or _has_nan_inf(ukf.P):
-            log(
-                "UKF",
-                f"  WARNING: NaN/Inf at t={t} after update. Resetting to last good state.",
-            )
+            log("UKF", f"  WARNING: NaN/Inf at t={t} after update. Resetting to last good state.")
             ukf.x = last_good_x.copy()
             ukf.P = last_good_P.copy()
             n_resets += 1
@@ -860,10 +792,12 @@ def run_ukf(obs_masked: np.ma.MaskedArray, daily: pd.DataFrame) -> dict[str, Any
         "n_cov_pd_fixes": n_cov_fixes,
         "n_sigma_reinflations": n_reinflations,
         "state_means_final": {
-            STATE_NAMES[i]: round(float(ukf_states[-1, i]), 4) for i in range(N_STATES)
+            STATE_NAMES[i]: round(float(ukf_states[-1, i]), 4)
+            for i in range(N_STATES)
         },
         "state_stds_final": {
-            STATE_NAMES[i]: round(float(ukf_stds[-1, i]), 4) for i in range(N_STATES)
+            STATE_NAMES[i]: round(float(ukf_stds[-1, i]), 4)
+            for i in range(N_STATES)
         },
     }
 
@@ -878,9 +812,7 @@ def run_ukf(obs_masked: np.ma.MaskedArray, daily: pd.DataFrame) -> dict[str, Any
 # Section 5: Real-Time State Estimation & Prediction
 # ===========================================================================
 def run_prediction_analysis(
-    kf_results: dict,
-    obs_masked: np.ma.MaskedArray,
-    daily: pd.DataFrame,
+    kf_results: dict, obs_masked: np.ma.MaskedArray, daily: pd.DataFrame,
     scalers: dict[str, tuple[float, float]],
 ) -> dict[str, Any]:
     """One-step-ahead prediction and innovation monitoring.
@@ -904,13 +836,8 @@ def run_prediction_analysis(
     filtered_covs = kf_results["filtered_covs"]
 
     n_days = obs_masked.shape[0]
-    obs_cols = [
-        "mean_rmssd",
-        "mean_hr",
-        "spo2_average",
-        "temperature_deviation",
-        "sleep_efficiency",
-    ]
+    obs_cols = ["mean_rmssd", "mean_hr", "spo2_average",
+                "temperature_deviation", "sleep_efficiency"]
 
     # --- One-step-ahead predictions ---
     predicted_obs = np.full((n_days, N_OBS), np.nan)
@@ -929,9 +856,7 @@ def run_prediction_analysis(
 
         # Innovation
         z_actual = obs_masked[t]
-        if not np.ma.is_masked(z_actual) or (
-            hasattr(z_actual, "mask") and not np.all(z_actual.mask)
-        ):
+        if not np.ma.is_masked(z_actual) or (hasattr(z_actual, 'mask') and not np.all(z_actual.mask)):
             z_arr = np.ma.filled(z_actual, fill_value=np.nan)
             valid = ~np.isnan(z_arr)
             if valid.any():
@@ -945,17 +870,13 @@ def run_prediction_analysis(
                 for j in np.where(valid)[0]:
                     std_innov = np.sqrt(S[j, j])
                     if std_innov > 0 and abs(innov[j]) > ALERT_SIGMA * std_innov:
-                        alerts.append(
-                            {
-                                "day": str(daily.index[t].date()),
-                                "variable": OBS_NAMES[j],
-                                "innovation": round(float(innov[j]), 3),
-                                "threshold": round(float(ALERT_SIGMA * std_innov), 3),
-                                "sigma_ratio": round(
-                                    float(abs(innov[j]) / std_innov), 2
-                                ),
-                            }
-                        )
+                        alerts.append({
+                            "day": str(daily.index[t].date()),
+                            "variable": OBS_NAMES[j],
+                            "innovation": round(float(innov[j]), 3),
+                            "threshold": round(float(ALERT_SIGMA * std_innov), 3),
+                            "sigma_ratio": round(float(abs(innov[j]) / std_innov), 2),
+                        })
 
     log("PREDICT", f"  Found {len(alerts)} alert events (>{ALERT_SIGMA} sigma)")
 
@@ -965,7 +886,7 @@ def run_prediction_analysis(
         actual = obs_masked[:, j]
         pred = predicted_obs[:, j]
         # Find where both are valid
-        if hasattr(actual, "mask"):
+        if hasattr(actual, 'mask'):
             valid = ~actual.mask & ~np.isnan(pred)
         else:
             valid = ~np.isnan(np.array(actual)) & ~np.isnan(pred)
@@ -993,12 +914,7 @@ def run_prediction_analysis(
                 "n_valid": int(valid.sum()),
             }
         else:
-            pred_metrics[col] = {
-                "rmse_std": None,
-                "mae_std": None,
-                "r2": None,
-                "n_valid": 0,
-            }
+            pred_metrics[col] = {"rmse_std": None, "mae_std": None, "r2": None, "n_valid": 0}
 
     # --- 7-day forecast from last filtered state ---
     log("PREDICT", f"Generating {PREDICTION_HORIZON}-day forecast...")
@@ -1036,26 +952,17 @@ def run_prediction_analysis(
         forecast_orig_std[:, j] = forecast_stds[:, j] * sigma
 
     last_date = daily.index[-1]
-    forecast_dates = [
-        last_date + timedelta(days=i + 1) for i in range(PREDICTION_HORIZON)
-    ]
+    forecast_dates = [last_date + timedelta(days=i + 1) for i in range(PREDICTION_HORIZON)]
 
     log("PREDICT", "  Forecast summary (original units):")
     for j, col in enumerate(obs_cols):
-        log(
-            "PREDICT",
-            f"    {col}: {forecast_orig[0, j]:.2f} +/- {forecast_orig_std[0, j]:.2f} (day+1) "
-            f"-> {forecast_orig[-1, j]:.2f} +/- {forecast_orig_std[-1, j]:.2f} (day+{PREDICTION_HORIZON})",
-        )
+        log("PREDICT", f"    {col}: {forecast_orig[0, j]:.2f} +/- {forecast_orig_std[0, j]:.2f} (day+1) "
+            f"-> {forecast_orig[-1, j]:.2f} +/- {forecast_orig_std[-1, j]:.2f} (day+{PREDICTION_HORIZON})")
 
     metrics["prediction"] = {
         "per_variable": pred_metrics,
         "n_alerts": len(alerts),
-        "alerts_last_7d": [
-            a
-            for a in alerts
-            if a["day"] >= str((daily.index[-1] - timedelta(days=7)).date())
-        ],
+        "alerts_last_7d": [a for a in alerts if a["day"] >= str((daily.index[-1] - timedelta(days=7)).date())],
         "forecast": {
             "horizon_days": PREDICTION_HORIZON,
             "start_date": str(forecast_dates[0].date()),
@@ -1156,24 +1063,14 @@ def analyze_drug_response(
             "pre_mean": round(pre_mean, 4),
             "post_mean": round(post_mean, 4),
             "shift_sd": round(shift_sd, 3),
-            "mann_whitney_p_value": round(float(pval), 4),
-            "direction": "improved"
-            if (
-                (
-                    name in ["Autonomic Tone", "Cardiac Reserve", "Sleep Quality"]
-                    and shift_sd > 0.1
-                )
+            "mann_whitney_p": round(float(pval), 4),
+            "direction": "improved" if (
+                (name in ["Autonomic Tone", "Cardiac Reserve", "Sleep Quality"] and shift_sd > 0.1)
                 or (name == "Inflammation Level" and shift_sd < -0.1)
-            )
-            else "worsened"
-            if (
-                (
-                    name in ["Autonomic Tone", "Cardiac Reserve", "Sleep Quality"]
-                    and shift_sd < -0.1
-                )
+            ) else "worsened" if (
+                (name in ["Autonomic Tone", "Cardiac Reserve", "Sleep Quality"] and shift_sd < -0.1)
                 or (name == "Inflammation Level" and shift_sd > 0.1)
-            )
-            else "stable",
+            ) else "stable",
         }
 
     # --- Method 2: Exponential response fit ---
@@ -1206,11 +1103,8 @@ def analyze_drug_response(
             )
             tau_estimates[name] = round(float(popt[1]), 2)
             steady_state[name] = round(float(popt[0] + baseline), 4)
-            log(
-                "DRUG_RESPONSE",
-                f"  {name}: tau={popt[1]:.1f}d, "
-                f"amplitude={popt[0]:.3f}, steady-state={popt[0] + baseline:.3f}",
-            )
+            log("DRUG_RESPONSE", f"  {name}: tau={popt[1]:.1f}d, "
+                f"amplitude={popt[0]:.3f}, steady-state={popt[0]+baseline:.3f}")
         except (RuntimeError, ValueError):
             tau_estimates[name] = None
             steady_state[name] = None
@@ -1221,9 +1115,7 @@ def analyze_drug_response(
     for i, name in enumerate(STATE_NAMES):
         ukf_pre = ukf_states[:drug_idx, i]
         ukf_post = ukf_states[drug_idx:, i]
-        ukf_shift = (np.mean(ukf_post) - np.mean(ukf_pre)) / (
-            np.std(ukf_pre) if np.std(ukf_pre) > 0 else 1.0
-        )
+        ukf_shift = (np.mean(ukf_post) - np.mean(ukf_pre)) / (np.std(ukf_pre) if np.std(ukf_pre) > 0 else 1.0)
         ukf_response[name] = {
             "ukf_shift_sd": round(float(ukf_shift), 3),
             "kf_shift_sd": response_stats[name]["shift_sd"],
@@ -1274,26 +1166,17 @@ def analyze_sensor_fusion(
     filtered_covs = kf_results["filtered_covs"]
 
     n_days = obs_masked.shape[0]
-    obs_cols = [
-        "mean_rmssd",
-        "mean_hr",
-        "spo2_average",
-        "temperature_deviation",
-        "sleep_efficiency",
-    ]
+    obs_cols = ["mean_rmssd", "mean_hr", "spo2_average",
+                "temperature_deviation", "sleep_efficiency"]
 
     # --- Observation availability ---
     availability = {}
     for j, col in enumerate(obs_cols):
-        if hasattr(obs_masked[:, j], "mask") and obs_masked[:, j].mask is not np.bool_(
-            False
-        ):
-            n_avail = int((~obs_masked[:, j].mask).sum())
-        else:
-            n_avail = int((~np.isnan(np.array(obs_masked[:, j]))).sum())
+        mask_j = np.ma.getmaskarray(obs_masked[:, j])
+        n_avail = int((~mask_j).sum())
         availability[col] = {
             "n_available": n_avail,
-            "fraction": round(n_avail / n_days, 3) if n_days > 0 else 0.0,
+            "fraction": round(n_avail / n_days, 3),
         }
 
     # --- Sensor information content (via R^-1 and H) ---
@@ -1311,17 +1194,12 @@ def analyze_sensor_fusion(
     total_info = sum(sensor_info.values())
     sensor_weight: dict[str, float] = {}
     for col in obs_cols:
-        sensor_weight[col] = (
-            round(sensor_info[col] / total_info * 100, 1) if total_info > 0 else 0.0
-        )
+        sensor_weight[col] = round(sensor_info[col] / total_info * 100, 1) if total_info > 0 else 0.0
 
     log("FUSION", "  Sensor contribution to state estimation:")
     for col in obs_cols:
-        log(
-            "FUSION",
-            f"    {col}: {sensor_weight[col]:.1f}% "
-            f"(avail: {availability[col]['fraction'] * 100:.0f}%)",
-        )
+        log("FUSION", f"    {col}: {sensor_weight[col]:.1f}% "
+            f"(avail: {availability[col]['fraction']*100:.0f}%)")
 
     # --- Average Kalman gain norms per sensor ---
     avg_gain = np.zeros(N_OBS)
@@ -1343,23 +1221,16 @@ def analyze_sensor_fusion(
     gain_contribution: dict[str, float] = {}
     total_gain = avg_gain.sum()
     for j, col in enumerate(obs_cols):
-        gain_contribution[col] = round(
-            float(avg_gain[j] / total_gain * 100) if total_gain > 0 else 0.0, 1
-        )
+        gain_contribution[col] = round(float(avg_gain[j] / total_gain * 100) if total_gain > 0 else 0.0, 1)
 
     # --- Residual analysis (should be white noise if model correct) ---
     residuals: dict[str, dict] = {}
     for j, col in enumerate(obs_cols):
-        predicted = (
-            kf_results["kf"].observation_matrices @ kf_results["filtered_means"].T
-        )
+        predicted = kf_results["kf"].observation_matrices @ kf_results["filtered_means"].T
         pred_j = predicted[j, :]
 
         actual_j = obs_masked[:, j]
-        if hasattr(actual_j, "mask") and actual_j.mask is not np.bool_(False):
-            valid = ~actual_j.mask
-        else:
-            valid = ~np.isnan(np.array(actual_j))
+        valid = ~np.ma.getmaskarray(actual_j)
 
         if valid.sum() > 10:
             resid = np.array(actual_j[valid]) - pred_j[valid]
@@ -1367,15 +1238,9 @@ def analyze_sensor_fusion(
             n_r = len(resid)
             lags = min(10, n_r // 5)
             if lags >= 1:
-                acf_vals = [
-                    float(np.corrcoef(resid[:-k], resid[k:])[0, 1]) if k > 0 else 1.0
-                    for k in range(1, lags + 1)
-                ]
-                lb_stat = (
-                    n_r
-                    * (n_r + 2)
-                    * sum(ac**2 / (n_r - k) for k, ac in enumerate(acf_vals, 1))
-                )
+                acf_vals = [float(np.corrcoef(resid[:-k], resid[k:])[0, 1]) if k > 0 else 1.0
+                            for k in range(1, lags + 1)]
+                lb_stat = n_r * (n_r + 2) * sum(ac**2 / (n_r - k) for k, ac in enumerate(acf_vals, 1))
                 lb_pval = float(1 - scipy_stats.chi2.cdf(lb_stat, df=lags))
             else:
                 lb_pval = 1.0
@@ -1384,13 +1249,10 @@ def analyze_sensor_fusion(
             residuals[col] = {
                 "mean": round(float(np.mean(resid)), 4),
                 "std": round(float(np.std(resid)), 4),
-                "ljung_box_p_value": round(lb_pval, 4),
+                "ljung_box_p": round(lb_pval, 4),
                 "white_noise": lb_pval > 0.05,
                 "acf_lag1": round(float(acf_vals[0]), 4) if acf_vals else None,
             }
-
-    n_lb_pass = sum(1 for r in residuals.values() if r.get("white_noise"))
-    n_lb_total = len(residuals)
 
     metrics["sensor_fusion"] = {
         "availability": availability,
@@ -1398,9 +1260,6 @@ def analyze_sensor_fusion(
         "sensor_weight_pct": sensor_weight,
         "kalman_gain_contribution_pct": gain_contribution,
         "residual_diagnostics": residuals,
-        "significance_threshold_p_value": 0.05,
-        "ljung_box_pass_count": n_lb_pass,
-        "ljung_box_total": n_lb_total,
     }
 
     return {
@@ -1431,20 +1290,13 @@ def create_state_trajectory_figure(
     ukf_stds = ukf_results["ukf_stds"]
 
     fig = make_subplots(
-        rows=5,
-        cols=1,
-        shared_xaxes=True,
+        rows=5, cols=1, shared_xaxes=True,
         subplot_titles=[f"{name}" for name in STATE_NAMES],
         vertical_spacing=0.06,
     )
 
-    state_colors = [
-        COLORS["hrv"],
-        COLORS["hr"],
-        COLORS["spo2"],
-        COLORS["temp"],
-        COLORS["sleep"],
-    ]
+    state_colors = [COLORS["hrv"], COLORS["hr"], COLORS["spo2"],
+                    COLORS["temp"], COLORS["sleep"]]
     state_units = ["SD", "SD", "SD", "SD", "SD"]
 
     for i, name in enumerate(STATE_NAMES):
@@ -1458,56 +1310,47 @@ def create_state_trajectory_figure(
             go.Scatter(
                 x=list(dates) + list(dates[::-1]),
                 y=list(upper) + list(lower[::-1]),
-                fill="toself",
-                fillcolor=_hex_to_rgba(color, 0.07),
+                fill="toself", fillcolor=_hex_to_rgba(color, 0.07),
                 line=dict(width=0),
                 name="95% CI",
                 legendgroup="ci",
-                showlegend=(i == 0),
-                hoverinfo="skip",
+                showlegend=(i == 0), hoverinfo="skip",
             ),
-            row=row,
-            col=1,
+            row=row, col=1,
         )
 
         # UKF overlay (behind the KF line, subtle)
         fig.add_trace(
             go.Scatter(
-                x=dates,
-                y=ukf_states[:, i],
+                x=dates, y=ukf_states[:, i],
                 name="UKF Filtered" if i == 0 else name,
                 legendgroup="ukf",
                 line=dict(color=color, width=1.2, dash="dot"),
-                showlegend=(i == 0),
-                opacity=0.45,
+                showlegend=(i == 0), opacity=0.45,
                 hovertemplate=f"<b>%{{x|%Y-%m-%d}}</b><br>{name} (UKF): %{{y:.3f}} {state_units[i]}<extra></extra>",
             ),
-            row=row,
-            col=1,
+            row=row, col=1,
         )
 
         # KF smoothed mean (PROMINENT - drawn last for visual priority)
         fig.add_trace(
             go.Scatter(
-                x=dates,
-                y=smoothed[:, i],
+                x=dates, y=smoothed[:, i],
                 name="KF Smoothed" if i == 0 else name,
                 legendgroup="kf",
                 line=dict(color=color, width=2.5),
                 showlegend=(i == 0),
                 hovertemplate=f"<b>%{{x|%Y-%m-%d}}</b><br>{name} (KF): %{{y:.3f}} {state_units[i]}<extra></extra>",
             ),
-            row=row,
-            col=1,
+            row=row, col=1,
         )
 
         # Zero reference line
-        fig.add_hline(
-            y=0, row=row, col=1, line=dict(color=TEXT_TERTIARY, width=0.5, dash="dash")
-        )
+        fig.add_hline(y=0, row=row, col=1,
+                       line=dict(color=TEXT_TERTIARY, width=0.5, dash="dash"))
 
     fig.update_layout(
-        height=1520,
+        height=1520, width=1200,
         margin=dict(l=64, r=34, t=132, b=68),
         font=dict(size=12),
         hovermode="x unified",
@@ -1520,24 +1363,18 @@ def create_state_trajectory_figure(
         ax_num = i + 1
         yax = f"yaxis{ax_num}" if ax_num > 1 else "yaxis"
         xax = f"xaxis{ax_num}" if ax_num > 1 else "xaxis"
-        fig.update_layout(
-            **{
-                yax: dict(
-                    title="State (SD units)",
-                    gridcolor="rgba(255,255,255,0.05)",
-                    griddash="dot",
-                    zeroline=False,
-                ),
-                xax: dict(
-                    gridcolor="rgba(255,255,255,0.05)",
-                    griddash="dot",
-                    spikemode="across",
-                    spikethickness=1,
-                    spikecolor=TEXT_TERTIARY,
-                    spikedash="dot",
-                ),
-            }
-        )
+        fig.update_layout(**{
+            yax: dict(
+                title="State (SD units)",
+                gridcolor="rgba(255,255,255,0.05)", griddash="dot",
+                zeroline=False,
+            ),
+            xax: dict(
+                gridcolor="rgba(255,255,255,0.05)", griddash="dot",
+                spikemode="across", spikethickness=1,
+                spikecolor=TEXT_TERTIARY, spikedash="dot",
+            ),
+        })
 
     return fig
 
@@ -1552,46 +1389,31 @@ def create_prediction_figure(
     log("VIZ", "Creating prediction performance figure...")
 
     dates = daily.index
-    obs_cols = [
-        "mean_rmssd",
-        "mean_hr",
-        "spo2_average",
-        "temperature_deviation",
-        "sleep_efficiency",
-    ]
+    obs_cols = ["mean_rmssd", "mean_hr", "spo2_average",
+                "temperature_deviation", "sleep_efficiency"]
     predicted_obs = pred_results["predicted_obs"]
     innovation = pred_results["innovation"]
     innovation_var = pred_results["innovation_var"]
 
     fig = make_subplots(
-        rows=3,
-        cols=2,
+        rows=3, cols=2,
         subplot_titles=[
-            "HRV Prediction",
-            "Heart Rate Prediction",
-            "Innovation Sequence (HRV)",
-            "Innovation Sequence (HR)",
-            "Prediction R-sq Summary",
-            "7-Day Forecast (HRV)",
+            "HRV Prediction", "Heart Rate Prediction",
+            "Innovation Sequence (HRV)", "Innovation Sequence (HR)",
+            "Prediction R-sq Summary", "7-Day Forecast (HRV)",
         ],
-        vertical_spacing=0.10,
-        horizontal_spacing=0.10,
+        vertical_spacing=0.10, horizontal_spacing=0.10,
     )
 
     # --- Scatter: Actual vs Predicted for HRV and HR ---
     scatter_units = {"mean_rmssd": "ms", "mean_hr": "bpm"}
-    for j, (col, title, row_col) in enumerate(
-        [
-            ("mean_rmssd", "HRV", (1, 1)),
-            ("mean_hr", "HR", (1, 2)),
-        ]
-    ):
+    for j, (col, title, row_col) in enumerate([
+        ("mean_rmssd", "HRV", (1, 1)),
+        ("mean_hr", "HR", (1, 2)),
+    ]):
         actual = obs_masked[:, j]
         pred = predicted_obs[:, j]
-        if hasattr(actual, "mask") and actual.mask is not np.bool_(False):
-            valid = ~actual.mask & ~np.isnan(pred)
-        else:
-            valid = ~np.isnan(np.array(actual)) & ~np.isnan(pred)
+        valid = ~np.ma.getmaskarray(actual) & ~np.isnan(pred)
 
         if valid.any():
             a = np.array(actual[valid], dtype=float)
@@ -1609,45 +1431,33 @@ def create_prediction_figure(
             pad = (vmax - vmin) * 0.05
             fig.add_trace(
                 go.Scatter(
-                    x=[vmin - pad, vmax + pad],
-                    y=[vmin - pad, vmax + pad],
+                    x=[vmin - pad, vmax + pad], y=[vmin - pad, vmax + pad],
                     mode="lines",
                     line=dict(color=TEXT_TERTIARY, dash="dash", width=1),
-                    showlegend=False,
-                    hoverinfo="skip",
+                    showlegend=False, hoverinfo="skip",
                 ),
-                row=row_col[0],
-                col=row_col[1],
+                row=row_col[0], col=row_col[1],
             )
 
             # Scatter points with transparency for density
             fig.add_trace(
                 go.Scatter(
-                    x=a_orig,
-                    y=p_orig,
-                    mode="markers",
-                    marker=dict(
-                        size=5,
-                        color=COLORS["actual"],
-                        opacity=0.45,
-                        symbol="circle",
-                        line=dict(width=0.5, color=_hex_to_rgba(COLORS["actual"], 0.7)),
-                    ),
+                    x=a_orig, y=p_orig, mode="markers",
+                    marker=dict(size=5, color=COLORS["actual"], opacity=0.45,
+                                symbol="circle",
+                                line=dict(width=0.5, color=_hex_to_rgba(COLORS["actual"], 0.7))),
                     name=f"{title} actual vs pred",
                     showlegend=False,
                     hovertemplate=f"<b>Actual:</b> %{{x:.1f}} {unit}<br><b>Predicted:</b> %{{y:.1f}} {unit}<extra></extra>",
                 ),
-                row=row_col[0],
-                col=row_col[1],
+                row=row_col[0], col=row_col[1],
             )
 
     # --- Innovation time series ---
-    for j, (col, title, row_col) in enumerate(
-        [
-            ("mean_rmssd", "HRV", (2, 1)),
-            ("mean_hr", "HR", (2, 2)),
-        ]
-    ):
+    for j, (col, title, row_col) in enumerate([
+        ("mean_rmssd", "HRV", (2, 1)),
+        ("mean_hr", "HR", (2, 2)),
+    ]):
         innov = innovation[:, j]
         innov_v = innovation_var[:, j]
         valid = ~np.isnan(innov)
@@ -1655,26 +1465,18 @@ def create_prediction_figure(
         if valid.any():
             fig.add_trace(
                 go.Scatter(
-                    x=dates[valid],
-                    y=innov[valid],
+                    x=dates[valid], y=innov[valid],
                     mode="lines+markers",
-                    marker=dict(size=2.5),
-                    line=dict(width=1.5, color=COLORS["innovation"]),
-                    name=f"{title} innovation",
-                    showlegend=False,
+                    marker=dict(size=2.5), line=dict(width=1.5, color=COLORS["innovation"]),
+                    name=f"{title} innovation", showlegend=False,
                     hovertemplate=f"<b>%{{x|%Y-%m-%d}}</b><br>{title} Innovation: %{{y:.3f}}<extra></extra>",
                 ),
-                row=row_col[0],
-                col=row_col[1],
+                row=row_col[0], col=row_col[1],
             )
 
             # Zero reference
-            fig.add_hline(
-                y=0,
-                row=row_col[0],
-                col=row_col[1],
-                line=dict(color=TEXT_TERTIARY, width=0.5, dash="dash"),
-            )
+            fig.add_hline(y=0, row=row_col[0], col=row_col[1],
+                          line=dict(color=TEXT_TERTIARY, width=0.5, dash="dash"))
 
             # Alert thresholds
             valid_v = ~np.isnan(innov_v)
@@ -1683,29 +1485,23 @@ def create_prediction_figure(
                 thresh = ALERT_SIGMA * np.sqrt(innov_v[combined])
                 fig.add_trace(
                     go.Scatter(
-                        x=dates[combined],
-                        y=thresh,
+                        x=dates[combined], y=thresh,
                         mode="lines",
                         line=dict(color=COLORS["alert"], dash="dot", width=1),
-                        name=f"+{ALERT_SIGMA:.0f}\u03c3",
-                        showlegend=False,
+                        name=f"+{ALERT_SIGMA:.0f}\u03c3", showlegend=False,
                         hoverinfo="skip",
                     ),
-                    row=row_col[0],
-                    col=row_col[1],
+                    row=row_col[0], col=row_col[1],
                 )
                 fig.add_trace(
                     go.Scatter(
-                        x=dates[combined],
-                        y=-thresh,
+                        x=dates[combined], y=-thresh,
                         mode="lines",
                         line=dict(color=COLORS["alert"], dash="dot", width=1),
-                        name=f"-{ALERT_SIGMA:.0f}\u03c3",
-                        showlegend=False,
+                        name=f"-{ALERT_SIGMA:.0f}\u03c3", showlegend=False,
                         hoverinfo="skip",
                     ),
-                    row=row_col[0],
-                    col=row_col[1],
+                    row=row_col[0], col=row_col[1],
                 )
 
     # --- R-squared summary bar chart ---
@@ -1722,16 +1518,12 @@ def create_prediction_figure(
 
     fig.add_trace(
         go.Bar(
-            x=r2_labels,
-            y=r2_vals,
-            marker_color=r2_colors,
-            showlegend=False,
-            text=[f"{v:.3f}" for v in r2_vals],
-            textposition="outside",
+            x=r2_labels, y=r2_vals,
+            marker_color=r2_colors, showlegend=False,
+            text=[f"{v:.3f}" for v in r2_vals], textposition="outside",
             hovertemplate="<b>%{x}</b><br>R\u00b2: %{y:.4f}<extra></extra>",
         ),
-        row=3,
-        col=1,
+        row=3, col=1,
     )
 
     # --- 7-day forecast for HRV ---
@@ -1744,26 +1536,20 @@ def create_prediction_figure(
     n_hist = 14
     hist_dates = dates[-n_hist:]
     hist_hrv = obs_masked[-n_hist:, 0]
-    if hasattr(hist_hrv, "mask") and hist_hrv.mask is not np.bool_(False):
-        hist_valid = ~hist_hrv.mask
-    else:
-        hist_valid = ~np.isnan(np.array(hist_hrv))
+    hist_valid = ~np.ma.getmaskarray(hist_hrv)
 
     if hist_valid.any():
         h = np.array(hist_hrv[hist_valid], dtype=float) * sigma_hrv + mu_hrv
         fig.add_trace(
             go.Scatter(
-                x=hist_dates[hist_valid],
-                y=h,
+                x=hist_dates[hist_valid], y=h,
                 mode="lines+markers",
                 marker=dict(size=4, symbol="circle"),
                 line=dict(color=COLORS["actual"], width=2),
-                name="Historical HRV",
-                showlegend=False,
+                name="Historical HRV", showlegend=False,
                 hovertemplate="<b>%{x|%Y-%m-%d}</b><br>Observed RMSSD: %{y:.1f} ms<extra></extra>",
             ),
-            row=3,
-            col=2,
+            row=3, col=2,
         )
 
     # Forecast
@@ -1778,33 +1564,26 @@ def create_prediction_figure(
         go.Scatter(
             x=list(fc_dates_ts) + list(fc_dates_ts[::-1]),
             y=list(upper) + list(lower[::-1]),
-            fill="toself",
-            fillcolor=_hex_to_rgba(COLORS["predicted"], 0.12),
-            line=dict(width=0),
-            showlegend=False,
-            hoverinfo="skip",
+            fill="toself", fillcolor=_hex_to_rgba(COLORS["predicted"], 0.12),
+            line=dict(width=0), showlegend=False, hoverinfo="skip",
         ),
-        row=3,
-        col=2,
+        row=3, col=2,
     )
 
     fig.add_trace(
         go.Scatter(
-            x=fc_dates_ts,
-            y=fc_hrv,
+            x=fc_dates_ts, y=fc_hrv,
             mode="lines+markers",
             marker=dict(size=6, symbol="diamond", line=dict(width=1, color="white")),
             line=dict(color=COLORS["predicted"], width=2.5),
-            name="Forecast HRV",
-            showlegend=False,
+            name="Forecast HRV", showlegend=False,
             hovertemplate="<b>%{x|%Y-%m-%d}</b><br>Forecast RMSSD: %{y:.1f} ms<extra></extra>",
         ),
-        row=3,
-        col=2,
+        row=3, col=2,
     )
 
     fig.update_layout(
-        height=1040,
+        height=1040, width=1200,
         margin=dict(l=64, r=34, t=128, b=70),
         font=dict(size=12),
     )
@@ -1825,34 +1604,24 @@ def create_prediction_figure(
     for row_i in range(1, 4):
         for col_i in range(1, 3):
             fig.update_xaxes(
-                gridcolor="rgba(255,255,255,0.05)",
-                griddash="dot",
-                row=row_i,
-                col=col_i,
+                gridcolor="rgba(255,255,255,0.05)", griddash="dot",
+                row=row_i, col=col_i,
             )
             fig.update_yaxes(
-                gridcolor="rgba(255,255,255,0.05)",
-                griddash="dot",
-                row=row_i,
-                col=col_i,
+                gridcolor="rgba(255,255,255,0.05)", griddash="dot",
+                row=row_i, col=col_i,
             )
     # Crosshair spikes on time-series panels (row 2 and 3,col2)
     for col_i in range(1, 3):
         fig.update_xaxes(
-            spikemode="across",
-            spikethickness=1,
-            spikecolor=TEXT_TERTIARY,
-            spikedash="dot",
-            row=2,
-            col=col_i,
+            spikemode="across", spikethickness=1,
+            spikecolor=TEXT_TERTIARY, spikedash="dot",
+            row=2, col=col_i,
         )
     fig.update_xaxes(
-        spikemode="across",
-        spikethickness=1,
-        spikecolor=TEXT_TERTIARY,
-        spikedash="dot",
-        row=3,
-        col=2,
+        spikemode="across", spikethickness=1,
+        spikecolor=TEXT_TERTIARY, spikedash="dot",
+        row=3, col=2,
     )
 
     return fig
@@ -1872,31 +1641,19 @@ def create_drug_response_figure(
 
     if drug_idx is None:
         fig = go.Figure()
-        fig.add_annotation(
-            text="Insufficient post-drug data",
-            x=0.5,
-            y=0.5,
-            xref="paper",
-            yref="paper",
-            showarrow=False,
-        )
+        fig.add_annotation(text="Insufficient post-drug data", x=0.5, y=0.5,
+                            xref="paper", yref="paper", showarrow=False)
         return fig
 
-    state_colors = [
-        COLORS["hrv"],
-        COLORS["hr"],
-        COLORS["spo2"],
-        COLORS["temp"],
-        COLORS["sleep"],
-    ]
+    state_colors = [COLORS["hrv"], COLORS["hr"], COLORS["spo2"],
+                    COLORS["temp"], COLORS["sleep"]]
 
     fig = make_subplots(
-        rows=2,
-        cols=3,
-        subplot_titles=[f"{name} Response" for name in STATE_NAMES]
-        + ["Response Summary"],
-        vertical_spacing=0.15,
-        horizontal_spacing=0.08,
+        rows=2, cols=3,
+        subplot_titles=[
+            f"{name} Response" for name in STATE_NAMES
+        ] + ["Response Summary"],
+        vertical_spacing=0.15, horizontal_spacing=0.08,
     )
 
     row_col_map = [(1, 1), (1, 2), (1, 3), (2, 1), (2, 2)]
@@ -1910,25 +1667,20 @@ def create_drug_response_figure(
         # Pre-drug (muted baseline)
         fig.add_trace(
             go.Scatter(
-                x=dates[:drug_idx],
-                y=smoothed[:drug_idx, i],
-                mode="lines",
-                line=dict(color=color, width=1.5, dash="solid"),
+                x=dates[:drug_idx], y=smoothed[:drug_idx, i],
+                mode="lines", line=dict(color=color, width=1.5, dash="solid"),
                 name="Pre-drug" if i == 0 else f"Pre {name}",
                 legendgroup="pre",
-                showlegend=(i == 0),
-                opacity=0.4,
+                showlegend=(i == 0), opacity=0.4,
                 hovertemplate=f"<b>%{{x|%Y-%m-%d}}</b><br>{name} (pre): %{{y:.3f}} SD<extra></extra>",
             ),
-            row=r,
-            col=c,
+            row=r, col=c,
         )
 
         # Post-drug (bold, prominent)
         fig.add_trace(
             go.Scatter(
-                x=dates[drug_idx:],
-                y=smoothed[drug_idx:, i],
+                x=dates[drug_idx:], y=smoothed[drug_idx:, i],
                 mode="lines",
                 line=dict(color=color, width=2.5, shape="spline"),
                 name="Post-drug" if i == 0 else f"Post {name}",
@@ -1936,8 +1688,7 @@ def create_drug_response_figure(
                 showlegend=(i == 0),
                 hovertemplate=f"<b>%{{x|%Y-%m-%d}}</b><br>{name} (post): %{{y:.3f}} SD<extra></extra>",
             ),
-            row=r,
-            col=c,
+            row=r, col=c,
         )
 
         # Prominent effect size annotation
@@ -1947,24 +1698,14 @@ def create_drug_response_figure(
         tau = tau_estimates.get(name)
         tau_str = f"  |  \u03c4 = {tau:.1f}d" if tau else ""
         # Color the annotation by direction
-        ann_color = (
-            ACCENT_GREEN
-            if direction == "improved"
-            else ACCENT_RED
-            if direction == "worsened"
-            else TEXT_SECONDARY
-        )
+        ann_color = ACCENT_GREEN if direction == "improved" else ACCENT_RED if direction == "worsened" else TEXT_SECONDARY
         fig.add_annotation(
-            x=0.5,
-            y=1.02,
+            x=0.5, y=1.02,
             xref=f"x{i + 1} domain" if i + 1 > 1 else "x domain",
             yref=f"y{i + 1} domain" if i + 1 > 1 else "y domain",
             text=f"<b>\u0394 {shift:+.2f} SD</b>{tau_str}",
-            showarrow=False,
-            font=dict(size=11, color=ann_color),
-            bgcolor=BG_ELEVATED,
-            bordercolor=BORDER_SUBTLE,
-            borderwidth=1,
+            showarrow=False, font=dict(size=11, color=ann_color),
+            bgcolor=BG_ELEVATED, bordercolor=BORDER_SUBTLE, borderwidth=1,
             borderpad=4,
         )
 
@@ -1975,21 +1716,17 @@ def create_drug_response_figure(
 
     fig.add_trace(
         go.Bar(
-            x=names_short,
-            y=shifts,
-            marker_color=bar_colors,
-            showlegend=False,
-            text=[f"{s:+.2f}" for s in shifts],
-            textposition="outside",
+            x=names_short, y=shifts,
+            marker_color=bar_colors, showlegend=False,
+            text=[f"{s:+.2f}" for s in shifts], textposition="outside",
             hovertemplate="<b>%{x}</b><br>Shift: %{y:+.3f} SD<extra></extra>",
         ),
-        row=2,
-        col=3,
+        row=2, col=3,
     )
     fig.update_yaxes(title_text="Shift (SD)", row=2, col=3, zeroline=False)
 
     fig.update_layout(
-        height=780,
+        height=780, width=1200,
         margin=dict(l=64, r=34, t=118, b=66),
         font=dict(size=12),
         legend=dict(orientation="h", yanchor="top", y=-0.12),
@@ -2001,27 +1738,20 @@ def create_drug_response_figure(
     for r_i in range(1, 3):
         for c_i in range(1, 4):
             fig.update_xaxes(
-                gridcolor="rgba(255,255,255,0.05)",
-                griddash="dot",
-                row=r_i,
-                col=c_i,
+                gridcolor="rgba(255,255,255,0.05)", griddash="dot",
+                row=r_i, col=c_i,
             )
             fig.update_yaxes(
-                gridcolor="rgba(255,255,255,0.05)",
-                griddash="dot",
+                gridcolor="rgba(255,255,255,0.05)", griddash="dot",
                 zeroline=False,
-                row=r_i,
-                col=c_i,
+                row=r_i, col=c_i,
             )
     # Crosshair spikes on time-series panels
     for r_i, c_i in row_col_map:
         fig.update_xaxes(
-            spikemode="across",
-            spikethickness=1,
-            spikecolor=TEXT_TERTIARY,
-            spikedash="dot",
-            row=r_i,
-            col=c_i,
+            spikemode="across", spikethickness=1,
+            spikecolor=TEXT_TERTIARY, spikedash="dot",
+            row=r_i, col=c_i,
         )
 
     return fig
@@ -2035,35 +1765,23 @@ def create_sensor_fusion_figure(
     """Sensor fusion quality visualization."""
     log("VIZ", "Creating sensor fusion figure...")
 
-    obs_cols = [
-        "mean_rmssd",
-        "mean_hr",
-        "spo2_average",
-        "temperature_deviation",
-        "sleep_efficiency",
-    ]
+    obs_cols = ["mean_rmssd", "mean_hr", "spo2_average",
+                "temperature_deviation", "sleep_efficiency"]
     obs_labels = ["HRV", "Heart Rate", "SpO2", "Temp Dev.", "Sleep Eff."]
 
     fig = make_subplots(
-        rows=2,
-        cols=2,
+        rows=2, cols=2,
         subplot_titles=[
             "Information Content per Sensor (%)",
             "Kalman Gain Contribution (%)",
             "Data Availability Timeline",
             "Residual Diagnostics",
         ],
-        vertical_spacing=0.15,
-        horizontal_spacing=0.10,
+        vertical_spacing=0.15, horizontal_spacing=0.10,
     )
 
-    sensor_colors = [
-        COLORS["hrv"],
-        COLORS["hr"],
-        COLORS["spo2"],
-        COLORS["temp"],
-        COLORS["sleep"],
-    ]
+    sensor_colors = [COLORS["hrv"], COLORS["hr"], COLORS["spo2"],
+                     COLORS["temp"], COLORS["sleep"]]
 
     # --- Bar 1: Information content ---
     info = fusion_results["sensor_info"]
@@ -2071,16 +1789,12 @@ def create_sensor_fusion_figure(
     info_pct = [info[c] / info_total * 100 if info_total > 0 else 0 for c in obs_cols]
     fig.add_trace(
         go.Bar(
-            x=obs_labels,
-            y=info_pct,
-            marker_color=sensor_colors,
-            showlegend=False,
-            text=[f"{v:.1f}%" for v in info_pct],
-            textposition="outside",
+            x=obs_labels, y=info_pct,
+            marker_color=sensor_colors, showlegend=False,
+            text=[f"{v:.1f}%" for v in info_pct], textposition="outside",
             hovertemplate="<b>%{x}</b><br>Information: %{y:.1f}%<extra></extra>",
         ),
-        row=1,
-        col=1,
+        row=1, col=1,
     )
 
     # --- Bar 2: Kalman gain contribution ---
@@ -2088,26 +1802,19 @@ def create_sensor_fusion_figure(
     gain_vals = [gain[c] for c in obs_cols]
     fig.add_trace(
         go.Bar(
-            x=obs_labels,
-            y=gain_vals,
-            marker_color=sensor_colors,
-            showlegend=False,
-            text=[f"{v:.1f}%" for v in gain_vals],
-            textposition="outside",
+            x=obs_labels, y=gain_vals,
+            marker_color=sensor_colors, showlegend=False,
+            text=[f"{v:.1f}%" for v in gain_vals], textposition="outside",
             hovertemplate="<b>%{x}</b><br>Kalman Gain: %{y:.1f}%<extra></extra>",
         ),
-        row=1,
-        col=2,
+        row=1, col=2,
     )
 
     # --- Data availability heatmap-like timeline ---
     dates = daily.index
     for j, (col, label) in enumerate(zip(obs_cols, obs_labels)):
         sensor_data = obs_masked[:, j]
-        if hasattr(sensor_data, "mask") and sensor_data.mask is not np.bool_(False):
-            available = (~sensor_data.mask).astype(float)
-        else:
-            available = (~np.isnan(np.array(sensor_data))).astype(float)
+        available = (~np.ma.getmaskarray(sensor_data)).astype(float)
 
         fig.add_trace(
             go.Scatter(
@@ -2118,26 +1825,22 @@ def create_sensor_fusion_figure(
                     size=5,
                     color=available,
                     colorscale=[[0, TEXT_TERTIARY], [1, sensor_colors[j]]],
-                    cmin=0,
-                    cmax=1,
+                    cmin=0, cmax=1,
                     symbol=["circle" if a else "x" for a in available],
                 ),
-                name=label,
-                showlegend=False,
+                name=label, showlegend=False,
                 hovertemplate=[
                     f"<b>%{{x|%Y-%m-%d}}</b><br>{label}: {'Available' if a else 'Missing'}<extra></extra>"
                     for a in available
                 ],
             ),
-            row=2,
-            col=1,
+            row=2, col=1,
         )
 
     fig.update_yaxes(
         tickvals=list(range(len(obs_labels))),
         ticktext=obs_labels,
-        row=2,
-        col=1,
+        row=2, col=1,
     )
 
     # --- Residual diagnostics bar chart ---
@@ -2149,42 +1852,32 @@ def create_sensor_fusion_figure(
         if col in residuals:
             r = residuals[col]
             res_labels.append(col.replace("mean_", "").replace("_", " ").title())
-            p = r.get("ljung_box_p_value", 0)
+            p = r.get("ljung_box_p", 0)
             res_lb_p.append(p)
-            res_colors.append(
-                COLORS["hrv"] if r.get("white_noise", False) else COLORS["post"]
-            )
+            res_colors.append(COLORS["hrv"] if r.get("white_noise", False) else COLORS["post"])
 
     if res_labels:
         fig.add_trace(
             go.Bar(
-                x=res_labels,
-                y=res_lb_p,
-                marker_color=res_colors,
-                showlegend=False,
-                text=[f"p={p:.3f}" for p in res_lb_p],
-                textposition="outside",
+                x=res_labels, y=res_lb_p,
+                marker_color=res_colors, showlegend=False,
+                text=[f"p={p:.3f}" for p in res_lb_p], textposition="outside",
                 hovertemplate="<b>%{x}</b><br>Ljung-Box p: %{y:.4f}<br>%{text}<extra></extra>",
             ),
-            row=2,
-            col=2,
+            row=2, col=2,
         )
         # Significance line
-        fig.add_hline(
-            y=0.05,
-            row=2,
-            col=2,
-            line=dict(color=ACCENT_RED, dash="dash", width=1),
-            annotation_text="p=0.05",
-            annotation_font_size=11,
-            annotation_font_color=ACCENT_RED,
-        )
+        fig.add_hline(y=0.05, row=2, col=2,
+                       line=dict(color=ACCENT_RED, dash="dash", width=1),
+                       annotation_text="p = 0.05",
+                       annotation_font_size=11,
+                       annotation_font_color=ACCENT_RED)
     fig.update_yaxes(title_text="Ljung-Box p-value", row=2, col=2, zeroline=False)
     fig.update_yaxes(title_text="Contribution (%)", row=1, col=1, zeroline=False)
     fig.update_yaxes(title_text="Contribution (%)", row=1, col=2, zeroline=False)
 
     fig.update_layout(
-        height=920,
+        height=920, width=1200,
         margin=dict(l=64, r=34, t=120, b=66),
         font=dict(size=12),
     )
@@ -2193,16 +1886,12 @@ def create_sensor_fusion_figure(
     for r_i in range(1, 3):
         for c_i in range(1, 3):
             fig.update_xaxes(
-                gridcolor="rgba(255,255,255,0.05)",
-                griddash="dot",
-                row=r_i,
-                col=c_i,
+                gridcolor="rgba(255,255,255,0.05)", griddash="dot",
+                row=r_i, col=c_i,
             )
             fig.update_yaxes(
-                gridcolor="rgba(255,255,255,0.05)",
-                griddash="dot",
-                row=r_i,
-                col=c_i,
+                gridcolor="rgba(255,255,255,0.05)", griddash="dot",
+                row=r_i, col=c_i,
             )
 
     return fig
@@ -2218,35 +1907,18 @@ def create_observation_overlay_figure(
     log("VIZ", "Creating observation overlay figure...")
 
     dates = daily.index
-    obs_cols = [
-        "mean_rmssd",
-        "mean_hr",
-        "spo2_average",
-        "temperature_deviation",
-        "sleep_efficiency",
-    ]
-    obs_titles = [
-        "HRV (RMSSD, ms)",
-        "Heart Rate (bpm)",
-        "SpO2 (%)",
-        "Temperature Deviation (°C)",
-        "Sleep Efficiency (%)",
-    ]
-    obs_colors = [
-        COLORS["hrv"],
-        COLORS["hr"],
-        COLORS["spo2"],
-        COLORS["temp"],
-        COLORS["sleep"],
-    ]
+    obs_cols = ["mean_rmssd", "mean_hr", "spo2_average",
+                "temperature_deviation", "sleep_efficiency"]
+    obs_titles = ["HRV (RMSSD, ms)", "Heart Rate (bpm)", "SpO2 (%)",
+                  "Temperature Deviation (°C)", "Sleep Efficiency (%)"]
+    obs_colors = [COLORS["hrv"], COLORS["hr"], COLORS["spo2"],
+                  COLORS["temp"], COLORS["sleep"]]
 
     H = kf_results["observation_matrix"]
     smoothed = kf_results["smoothed_means"]
 
     fig = make_subplots(
-        rows=5,
-        cols=1,
-        shared_xaxes=True,
+        rows=5, cols=1, shared_xaxes=True,
         subplot_titles=obs_titles,
         vertical_spacing=0.08,
     )
@@ -2260,47 +1932,40 @@ def create_observation_overlay_figure(
 
         # Raw observations (de-standardized) - small muted scatter
         raw = obs_masked[:, j]
-        if hasattr(raw, "mask") and raw.mask is not np.bool_(False):
-            valid = ~raw.mask
-        else:
-            valid = ~np.isnan(np.array(raw))
+        valid = ~np.ma.getmaskarray(raw)
 
         if valid.any():
             raw_orig = np.array(raw[valid], dtype=float) * sigma + mu
             fig.add_trace(
                 go.Scatter(
-                    x=dates[valid],
-                    y=raw_orig,
+                    x=dates[valid], y=raw_orig,
                     mode="markers",
-                    marker=dict(size=3.5, color=color, opacity=0.35, symbol="circle"),
+                    marker=dict(size=3.5, color=color, opacity=0.35,
+                                symbol="circle"),
                     name="Observed" if j == 0 else f"{col} raw",
                     legendgroup="observed",
                     showlegend=(j == 0),
                     hovertemplate=f"<b>%{{x|%Y-%m-%d}}</b><br>Observed: %{{y:.1f}} {unit}<extra></extra>",
                 ),
-                row=row,
-                col=1,
+                row=row, col=1,
             )
 
         # Model estimate: H[j,:] @ smoothed_state for each time step
         model_est = (H[j, :] @ smoothed.T) * sigma + mu
         fig.add_trace(
             go.Scatter(
-                x=dates,
-                y=model_est,
-                mode="lines",
-                line=dict(color=color, width=2.5),
+                x=dates, y=model_est,
+                mode="lines", line=dict(color=color, width=2.5),
                 name="Model Estimate" if j == 0 else f"{col} model",
                 legendgroup="model",
                 showlegend=(j == 0),
                 hovertemplate=f"<b>%{{x|%Y-%m-%d}}</b><br>Model: %{{y:.1f}} {unit}<extra></extra>",
             ),
-            row=row,
-            col=1,
+            row=row, col=1,
         )
 
     fig.update_layout(
-        height=1520,
+        height=1520, width=1200,
         margin=dict(l=64, r=34, t=132, b=68),
         font=dict(size=12),
         hovermode="x unified",
@@ -2314,23 +1979,17 @@ def create_observation_overlay_figure(
         ax_num = i + 1
         yax = f"yaxis{ax_num}" if ax_num > 1 else "yaxis"
         xax = f"xaxis{ax_num}" if ax_num > 1 else "xaxis"
-        fig.update_layout(
-            **{
-                yax: dict(
-                    gridcolor="rgba(255,255,255,0.05)",
-                    griddash="dot",
-                    zeroline=False,
-                ),
-                xax: dict(
-                    gridcolor="rgba(255,255,255,0.05)",
-                    griddash="dot",
-                    spikemode="across",
-                    spikethickness=1,
-                    spikecolor=TEXT_TERTIARY,
-                    spikedash="dot",
-                ),
-            }
-        )
+        fig.update_layout(**{
+            yax: dict(
+                gridcolor="rgba(255,255,255,0.05)", griddash="dot",
+                zeroline=False,
+            ),
+            xax: dict(
+                gridcolor="rgba(255,255,255,0.05)", griddash="dot",
+                spikemode="across", spikethickness=1,
+                spikecolor=TEXT_TERTIARY, spikedash="dot",
+            ),
+        })
 
     return fig
 
@@ -2348,21 +2007,13 @@ def create_kf_vs_ukf_figure(
     ukf_states = ukf_results["ukf_states"]
 
     fig = make_subplots(
-        rows=3,
-        cols=2,
-        subplot_titles=[f"{name}: KF vs UKF" for name in STATE_NAMES]
-        + ["State Difference (UKF - KF)"],
-        vertical_spacing=0.12,
-        horizontal_spacing=0.08,
+        rows=3, cols=2,
+        subplot_titles=[f"{name}: KF vs UKF" for name in STATE_NAMES] + ["State Difference (UKF - KF)"],
+        vertical_spacing=0.12, horizontal_spacing=0.08,
     )
 
-    state_colors = [
-        COLORS["hrv"],
-        COLORS["hr"],
-        COLORS["spo2"],
-        COLORS["temp"],
-        COLORS["sleep"],
-    ]
+    state_colors = [COLORS["hrv"], COLORS["hr"], COLORS["spo2"],
+                    COLORS["temp"], COLORS["sleep"]]
     positions = [(1, 1), (1, 2), (2, 1), (2, 2), (3, 1)]
 
     for i, name in enumerate(STATE_NAMES):
@@ -2371,8 +2022,7 @@ def create_kf_vs_ukf_figure(
         # KF smoothed - solid line, prominent
         fig.add_trace(
             go.Scatter(
-                x=dates,
-                y=smoothed[:, i],
+                x=dates, y=smoothed[:, i],
                 mode="lines",
                 line=dict(color=state_colors[i], width=2.5),
                 name="KF Smoothed" if i == 0 else f"KF {name}",
@@ -2380,24 +2030,20 @@ def create_kf_vs_ukf_figure(
                 showlegend=(i == 0),
                 hovertemplate=f"<b>%{{x|%Y-%m-%d}}</b><br>{name} (KF): %{{y:.3f}} SD<extra></extra>",
             ),
-            row=r,
-            col=c,
+            row=r, col=c,
         )
         # UKF filtered - dashed line, slightly thinner
         fig.add_trace(
             go.Scatter(
-                x=dates,
-                y=ukf_states[:, i],
+                x=dates, y=ukf_states[:, i],
                 mode="lines",
                 line=dict(color=state_colors[i], width=1.5, dash="dashdot"),
                 name="UKF Filtered" if i == 0 else f"UKF {name}",
                 legendgroup="ukf_comp",
-                showlegend=(i == 0),
-                opacity=0.7,
+                showlegend=(i == 0), opacity=0.7,
                 hovertemplate=f"<b>%{{x|%Y-%m-%d}}</b><br>{name} (UKF): %{{y:.3f}} SD<extra></extra>",
             ),
-            row=r,
-            col=c,
+            row=r, col=c,
         )
 
     # Difference panel
@@ -2405,24 +2051,19 @@ def create_kf_vs_ukf_figure(
         diff = ukf_states[:, i] - smoothed[:, i]
         fig.add_trace(
             go.Scatter(
-                x=dates,
-                y=diff,
-                mode="lines",
-                line=dict(color=state_colors[i], width=1.5),
-                name=name,
-                showlegend=False,
+                x=dates, y=diff,
+                mode="lines", line=dict(color=state_colors[i], width=1.5),
+                name=name, showlegend=False,
                 hovertemplate=f"<b>%{{x|%Y-%m-%d}}</b><br>{name} diff: %{{y:.4f}}<extra></extra>",
             ),
-            row=3,
-            col=2,
+            row=3, col=2,
         )
     # Zero reference on difference panel
-    fig.add_hline(
-        y=0, row=3, col=2, line=dict(color=TEXT_TERTIARY, width=0.5, dash="dash")
-    )
+    fig.add_hline(y=0, row=3, col=2,
+                  line=dict(color=TEXT_TERTIARY, width=0.5, dash="dash"))
 
     fig.update_layout(
-        height=1020,
+        height=1020, width=1200,
         margin=dict(l=64, r=34, t=128, b=66),
         font=dict(size=12),
         hovermode="x unified",
@@ -2435,21 +2076,15 @@ def create_kf_vs_ukf_figure(
     for r_i in range(1, 4):
         for c_i in range(1, 3):
             fig.update_xaxes(
-                gridcolor="rgba(255,255,255,0.05)",
-                griddash="dot",
-                spikemode="across",
-                spikethickness=1,
-                spikecolor=TEXT_TERTIARY,
-                spikedash="dot",
-                row=r_i,
-                col=c_i,
+                gridcolor="rgba(255,255,255,0.05)", griddash="dot",
+                spikemode="across", spikethickness=1,
+                spikecolor=TEXT_TERTIARY, spikedash="dot",
+                row=r_i, col=c_i,
             )
             fig.update_yaxes(
-                gridcolor="rgba(255,255,255,0.05)",
-                griddash="dot",
+                gridcolor="rgba(255,255,255,0.05)", griddash="dot",
                 zeroline=False,
-                row=r_i,
-                col=c_i,
+                row=r_i, col=c_i,
             )
 
     return fig
@@ -2496,7 +2131,7 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
         "mean_rmssd": "ms",
         "mean_hr": "bpm",
         "spo2_average": "%",
-        "temperature_deviation": "°C",
+        "temperature_deviation": "C",
         "sleep_efficiency": "%",
     }
 
@@ -2528,9 +2163,7 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
         for var, values in pred_vars.items()
         if values.get("r2") is not None and np.isfinite(float(values["r2"]))
     ]
-    sorted_predictions.sort(
-        key=lambda item: item[1].get("r2", float("-inf")), reverse=True
-    )
+    sorted_predictions.sort(key=lambda item: item[1].get("r2", float("-inf")), reverse=True)
     best_pred_var, best_pred_values = (
         sorted_predictions[0] if sorted_predictions else (None, {})
     )
@@ -2546,20 +2179,16 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
 
     lead_sensor, lead_sensor_pct = (
         max(sensor_weights.items(), key=lambda item: item[1])
-        if sensor_weights
-        else ("No dominant sensor", 0.0)
+        if sensor_weights else ("No dominant sensor", 0.0)
     )
-    lead_sensor_label = metric_labels.get(
-        lead_sensor, str(lead_sensor).replace("_", " ").title()
-    )
+    lead_sensor_label = metric_labels.get(lead_sensor, str(lead_sensor).replace("_", " ").title())
 
     avg_completeness_pct = (
         float(np.mean(list(completeness.values()))) * 100 if completeness else None
     )
     lowest_coverage_sensor, lowest_coverage_fraction = (
         min(completeness.items(), key=lambda item: item[1])
-        if completeness
-        else ("unknown", 0.0)
+        if completeness else ("unknown", 0.0)
     )
     lowest_coverage_label = metric_labels.get(
         lowest_coverage_sensor,
@@ -2573,8 +2202,7 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
     dominant_state_stats: dict[str, Any] = {}
     if resp_stats:
         non_stable_states = [
-            item
-            for item in resp_stats.items()
+            item for item in resp_stats.items()
             if str(item[1].get("direction", "stable")) != "stable"
         ]
         candidate_states = non_stable_states or list(resp_stats.items())
@@ -2584,7 +2212,7 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
         )
     dominant_shift = float(dominant_state_stats.get("shift_sd", 0) or 0)
     dominant_direction = str(dominant_state_stats.get("direction", "stable"))
-    dominant_p = dominant_state_stats.get("mann_whitney_p_value")
+    dominant_p = dominant_state_stats.get("mann_whitney_p")
 
     valid_tau = [
         (name, tau)
@@ -2593,36 +2221,27 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
     ]
     fastest_tau_name, fastest_tau = (
         min(valid_tau, key=lambda item: float(item[1]))
-        if valid_tau
-        else ("No fitted response", None)
+        if valid_tau else ("No fitted response", None)
     )
 
     recent_alert_status = (
-        "critical"
-        if recent_alert_count >= 3
-        else "warning"
-        if recent_alert_count > 0
+        "critical" if recent_alert_count >= 3
+        else "warning" if recent_alert_count > 0
         else "normal"
     )
     shift_tone = (
-        "good"
-        if dominant_direction == "improved"
-        else "critical"
-        if dominant_direction == "worsened"
+        "good" if dominant_direction == "improved"
+        else "critical" if dominant_direction == "worsened"
         else "neutral"
     )
     prediction_tone = (
-        "good"
-        if isinstance(best_pred_r2, (int, float, np.floating)) and best_pred_r2 >= 0.30
-        else "warning"
-        if isinstance(best_pred_r2, (int, float, np.floating)) and best_pred_r2 > 0
+        "good" if isinstance(best_pred_r2, (int, float, np.floating)) and best_pred_r2 >= 0.30
+        else "warning" if isinstance(best_pred_r2, (int, float, np.floating)) and best_pred_r2 > 0
         else "neutral"
     )
     residual_tone = (
-        "good"
-        if n_residual_total > 0 and n_residual_pass == n_residual_total
-        else "warning"
-        if n_residual_pass > 0
+        "good" if n_residual_total > 0 and n_residual_pass == n_residual_total
+        else "warning" if n_residual_pass > 0
         else "critical"
     )
     n_post = drug_resp.get("n_post_days", 0)
@@ -2634,8 +2253,7 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
             f"{dominant_shift:+.2f} SD" if dominant_state_stats else "N/A",
             (
                 f"{dominant_state_name} · {dominant_direction.title()} · {_fmt_p(dominant_p)} · exploratory"
-                if dominant_state_stats
-                else "Shift summary unavailable"
+                if dominant_state_stats else "Shift summary unavailable"
             ),
             shift_tone,
         ),
@@ -2643,13 +2261,11 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
             "Best short-term fit",
             (
                 f"R-sq {float(best_pred_r2):.3f}"
-                if isinstance(best_pred_r2, (int, float, np.floating))
-                else "N/A"
+                if isinstance(best_pred_r2, (int, float, np.floating)) else "N/A"
             ),
             (
                 f"{best_pred_label} · RMSE {_fmt_num(best_pred_rmse)} {metric_units.get(best_pred_var, '')}".strip()
-                if best_pred_var
-                else "Prediction summary unavailable"
+                if best_pred_var else "Prediction summary unavailable"
             ),
             prediction_tone,
         ),
@@ -2657,9 +2273,8 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
             "Residual checks",
             f"{n_residual_pass}/{n_residual_total}" if n_residual_total else "N/A",
             (
-                "Ljung-Box p>0.05 across modeled sensors"
-                if n_residual_total
-                else "Residual diagnostics unavailable"
+                "Ljung-Box p > 0.05 across modeled sensors"
+                if n_residual_total else "Residual diagnostics unavailable"
             ),
             residual_tone,
         ),
@@ -2676,7 +2291,7 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
         f'<div class="dt-hero-card-label">{label}</div>'
         f'<div class="dt-hero-card-value">{value}</div>'
         f'<div class="dt-hero-card-detail">{detail}</div>'
-        f"</div>"
+        f'</div>'
         for label, value, detail, tone in hero_cards
     )
 
@@ -2688,15 +2303,15 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
         '<div class="dt-hero-badge">Exploratory N=1 Physiological State-Space Model</div>'
         '<h1 class="dt-hero-title">Bayesian Cardiovascular Digital Twin</h1>'
         '<p class="dt-hero-subtitle">'
-        f"This page compresses {data_range.get('n_days', 0)} wearable days into five latent "
-        "physiological states, combining a Kalman smoother with UKF nonlinear dynamics to "
-        "track recovery, instability, and treatment response. Use it for relative trajectory "
-        "tracking and model diagnostics, not for diagnosis or causal proof."
-        "</p>"
+        f'This page compresses {data_range.get("n_days", 0)} wearable days into five latent '
+        'physiological states, combining a Kalman smoother with UKF nonlinear dynamics to '
+        'track recovery, instability, and treatment response. Use it for relative trajectory '
+        'tracking and model diagnostics, not for diagnosis or causal proof.'
+        '</p>'
         '<div class="dt-hero-meta">'
-        f"Generated {generated} · {data_range.get('start', '?')} to {data_range.get('end', '?')} "
-        f"· Post-drug window: {drug_resp.get('n_post_days', 0)} days"
-        "</div>"
+        f'Generated {generated} · {data_range.get("start", "?")} to {data_range.get("end", "?")} '
+        f'· Post-drug window: {drug_resp.get("n_post_days", 0)} days'
+        '</div>'
         '<div class="dt-hero-chip-row">'
         f'<span class="dt-hero-chip">{N_STATES} latent states</span>'
         f'<span class="dt-hero-chip">{N_OBS} wearable inputs</span>'
@@ -2704,36 +2319,27 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
         f'<span class="dt-hero-chip">Ruxolitinib {TREATMENT_START}</span>'
         f'<span class="dt-hero-chip">HEV Dx {HEV_DIAGNOSIS_DATE}</span>'
         f'<span class="dt-hero-chip">{PATIENT_LABEL}</span>'
-        "</div>"
+        '</div>'
         f'<div class="dt-hero-grid">{hero_cards_html}</div>'
-        "</div>"
-        "</section>"
+        '</div>'
+        '</section>'
     )
 
     kpi_row = make_kpi_row(
         make_kpi_card(
-            "Days Modeled",
-            data_range.get("n_days", 0),
-            "",
-            status="info",
-            decimals=0,
-            detail=f"{data_range.get('start', '?')} to {data_range.get('end', '?')}",
+            "Days Modeled", data_range.get("n_days", 0), "",
+            status="info", decimals=0,
+            detail=f'{data_range.get("start", "?")} to {data_range.get("end", "?")}',
         ),
         make_kpi_card(
-            "Post-Drug Days",
-            n_post,
-            "",
-            status="warning" if n_post < 14 else "normal",
-            decimals=0,
+            "Post-Drug Days", n_post, "",
+            status="warning" if n_post < 14 else "normal", decimals=0,
             detail=f"Since {TREATMENT_START}",
             status_label="Insufficient" if n_post < 14 else "",
         ),
         make_kpi_card(
-            "Innovation Alerts",
-            recent_alert_count,
-            "",
-            status=recent_alert_status,
-            decimals=0,
+            "Innovation Alerts", recent_alert_count, "",
+            status=recent_alert_status, decimals=0,
             detail=f"{n_alerts} total across the modeled window",
             status_label="Elevated" if recent_alert_status == "warning" else "",
         ),
@@ -2741,14 +2347,10 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
             "Avg Sensor Coverage",
             avg_completeness_pct if avg_completeness_pct is not None else "N/A",
             "%" if avg_completeness_pct is not None else "",
-            status="normal"
-            if avg_completeness_pct and avg_completeness_pct >= 85
-            else "warning",
+            status="normal" if avg_completeness_pct and avg_completeness_pct >= 85 else "warning",
             decimals=1 if avg_completeness_pct is not None else 0,
             detail=f"Lowest: {lowest_coverage_label} ({lowest_coverage_fraction * 100:.0f}%)",
-            status_label=""
-            if avg_completeness_pct and avg_completeness_pct >= 85
-            else "Low",
+            status_label="" if avg_completeness_pct and avg_completeness_pct >= 85 else "Low",
         ),
         make_kpi_card(
             "Residual Checks",
@@ -2757,12 +2359,9 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
             status=residual_tone if n_residual_total else "neutral",
             detail=(
                 "Ljung-Box p>0.05 across modeled sensors"
-                if n_residual_total
-                else "Residual diagnostics unavailable"
+                if n_residual_total else "Residual diagnostics unavailable"
             ),
-            status_label="Partial"
-            if residual_tone == "warning" and n_residual_total
-            else "",
+            status_label="Partial" if residual_tone == "warning" and n_residual_total else "",
         ),
     )
 
@@ -2771,28 +2370,28 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
         '<div class="dt-summary-card">'
         '<div class="dt-summary-title">What the model suggests</div>'
         '<ul class="dt-bullet-list">'
-        f"<li>Strongest modeled post-drug shift: <strong>{dominant_state_name}</strong> {dominant_shift:+.2f} SD ({_fmt_p(dominant_p)}, exploratory).</li>"
-        f"<li>Best one-step predictive stream: <strong>{best_fit_summary}</strong>.</li>"
-        f"<li>Recent instability is limited: <strong>{recent_alert_count}</strong> innovation alerts in the last 7 days ({n_alerts} total across the modeled window).</li>"
-        "</ul>"
-        "</div>"
+        f'<li>Strongest modeled post-drug shift: <strong>{dominant_state_name}</strong> {dominant_shift:+.2f} SD ({_fmt_p(dominant_p)}, exploratory).</li>'
+        f'<li>Best one-step predictive stream: <strong>{best_fit_summary}</strong>.</li>'
+        f'<li>Recent instability is limited: <strong>{recent_alert_count}</strong> innovation alerts in the last 7 days ({n_alerts} total across the modeled window).</li>'
+        '</ul>'
+        '</div>'
         '<div class="dt-summary-card">'
         '<div class="dt-summary-title">What supports the model</div>'
         '<ul class="dt-bullet-list">'
-        f"<li>Residual diagnostics pass for <strong>{n_residual_pass}/{n_residual_total}</strong> modeled sensors.</li>"
-        f"<li>Average sensor coverage is <strong>{_fmt_num(avg_completeness_pct, 1)}%</strong>; lowest coverage is <strong>{lowest_coverage_label}</strong> at {lowest_coverage_fraction * 100:.0f}%.</li>"
-        f"<li><strong>{lead_sensor_label}</strong> contributes the largest information share at {lead_sensor_pct:.1f}%.</li>"
-        "</ul>"
-        "</div>"
+        f'<li>Residual diagnostics pass for <strong>{n_residual_pass}/{n_residual_total}</strong> modeled sensors.</li>'
+        f'<li>Average sensor coverage is <strong>{_fmt_num(avg_completeness_pct, 1)}%</strong>; lowest coverage is <strong>{lowest_coverage_label}</strong> at {lowest_coverage_fraction * 100:.0f}%.</li>'
+        f'<li><strong>{lead_sensor_label}</strong> contributes the largest information share at {lead_sensor_pct:.1f}%.</li>'
+        '</ul>'
+        '</div>'
         '<div class="dt-summary-card dt-summary-card--warn">'
         '<div class="dt-summary-title">Why caution is still needed</div>'
         '<ul class="dt-bullet-list">'
-        "<li>This is a <strong>single-patient (N=1)</strong> exploratory model, not a validated clinical instrument.</li>"
-        f"<li>The post-drug window is only <strong>{n_post} days</strong>, which is too short for strong treatment claims.</li>"
-        f"<li><strong>HEV diagnosed {HEV_DIAGNOSIS_DATE}</strong> may confound late-March shifts after ruxolitinib started on {TREATMENT_START}.</li>"
-        "</ul>"
-        "</div>"
-        "</div>"
+        '<li>This is a <strong>single-patient (N=1)</strong> exploratory model, not a validated clinical instrument.</li>'
+        f'<li>The post-drug window is only <strong>{n_post} days</strong>, which is too short for strong treatment claims.</li>'
+        f'<li><strong>HEV diagnosed {HEV_DIAGNOSIS_DATE}</strong> may confound late-March shifts after ruxolitinib started on {TREATMENT_START}.</li>'
+        '</ul>'
+        '</div>'
+        '</div>'
     )
 
     # --- Build body from sections ---
@@ -2800,7 +2399,7 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
     body += make_section(
         "Read This First",
         '<div class="dt-section-intro">If someone opens only one part of this page, it should be this block. It summarizes the signal, the diagnostics that support the model, and the reasons the interpretation remains exploratory.</div>'
-        f"{summary_html}",
+        f'{summary_html}',
         section_id="read-this-first",
     )
 
@@ -2808,10 +2407,11 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
     body += make_section(
         "Latent State Trajectories",
         '<div class="dt-section-intro">The Kalman smoother estimates 5 latent physiological states from noisy, '
-        "intermittent sensor data. Solid lines show the smoothed posterior mean; "
-        "shaded bands show 95% credible intervals. "
-        "Dotted lines overlay the UKF estimates for comparison. Vertical markers indicate the Feb 9 acute event, "
-        "Mar 16 ruxolitinib start, and Mar 18 HEV diagnosis.</div>" + fig_divs[0],
+        'intermittent sensor data. Solid lines show the smoothed posterior mean; '
+        'shaded bands show 95% credible intervals. '
+        'Dotted lines overlay the UKF estimates for comparison. Vertical markers indicate the Feb 9 acute event, '
+        'Mar 16 ruxolitinib start, and Mar 18 HEV diagnosis.</div>'
+        + fig_divs[0],
         section_id="state-trajectories",
     )
 
@@ -2819,10 +2419,10 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
     drug_summary_html = (
         '<div class="dt-stat-band">'
         f'<div class="dt-band-item"><span>Largest shift</span><strong>{dominant_state_name}</strong>'
-        f"<small>{dominant_shift:+.2f} SD · {dominant_direction.title()} · {_fmt_p(dominant_p)}</small></div>"
+        f'<small>{dominant_shift:+.2f} SD · {dominant_direction.title()} · {_fmt_p(dominant_p)}</small></div>'
         f'<div class="dt-band-item"><span>Fastest fitted response</span><strong>{fastest_tau_name}</strong>'
-        f"<small>{_fmt_num(fastest_tau, 1)} days to reach modeled equilibrium</small></div>"
-        "</div>"
+        f'<small>{_fmt_num(fastest_tau, 1)} days to reach modeled equilibrium</small></div>'
+        '</div>'
     )
     state_interpretation = {
         "Autonomic Tone": "Higher = stronger vagal/recovery signal",
@@ -2831,18 +2431,18 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
         "Inflammation Level": "Higher = worse modeled inflammatory load",
         "Sleep Quality": "Higher = better modeled sleep/recovery signal",
     }
-    drug_table_rows = "".join(
-        f"<tr>"
-        f"<td>{name}</td>"
-        f"<td>{_fmt_num(resp_stats.get(name, {}).get('pre_mean'))}</td>"
-        f"<td>{_fmt_num(resp_stats.get(name, {}).get('post_mean'))}</td>"
-        f"<td>{float(resp_stats.get(name, {}).get('shift_sd', 0) or 0):+.3f}</td>"
-        f"<td>{state_interpretation.get(name, 'Interpret relative to model definition')}</td>"
+    drug_table_rows = ''.join(
+        f'<tr>'
+        f'<td>{name}</td>'
+        f'<td>{_fmt_num(resp_stats.get(name, {}).get("pre_mean"))}</td>'
+        f'<td>{_fmt_num(resp_stats.get(name, {}).get("post_mean"))}</td>'
+        f'<td>{float(resp_stats.get(name, {}).get("shift_sd", 0) or 0):+.3f}</td>'
+        f'<td>{state_interpretation.get(name, "Interpret relative to model definition")}</td>'
         f'<td><span class="tag tag-{resp_stats.get(name, {}).get("direction", "stable")}">'
-        f"{str(resp_stats.get(name, {}).get('direction', 'stable')).title()} (pre/post drug)</span></td>"
-        f"<td>{_fmt_p(resp_stats.get(name, {}).get('mann_whitney_p_value'))}</td>"
-        f"<td>{f'{_fmt_num(tau_list.get(name), 1)} days' if tau_list.get(name) else 'N/A'}</td>"
-        f"</tr>"
+        f'{str(resp_stats.get(name, {}).get("direction", "stable")).title()} (pre/post drug)</span></td>'
+        f'<td>{_fmt_p(resp_stats.get(name, {}).get("mann_whitney_p"))}</td>'
+        f'<td>{f"{_fmt_num(tau_list.get(name), 1)} days" if tau_list.get(name) else "N/A"}</td>'
+        f'</tr>'
         for name in STATE_NAMES
     )
 
@@ -2850,17 +2450,18 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
     body += make_section(
         f"Ruxolitinib Drug Response (started {TREATMENT_START})",
         '<div class="dt-section-intro">Latent-state shifts are standardized, so the pre/post comparison shows magnitude rather than raw clinical units. '
-        "Use this block to gauge which modeled subsystems moved most after treatment began. The post-drug window is short, and HEV diagnosed on "
-        f"{HEV_DIAGNOSIS_DATE} may confound late-March movement.</div>"
-        f"{drug_summary_html}"
+        'Use this block to gauge which modeled subsystems moved most after treatment began. The post-drug window is short, and HEV diagnosed on '
+        f'{HEV_DIAGNOSIS_DATE} may confound late-March movement.</div>'
+        f'{drug_summary_html}'
         '<div class="dt-table-shell"><div class="dt-table-caption">'
-        "Positive shifts indicate a higher modeled state load after treatment start; time constants estimate how quickly the post-drug response stabilized. "
-        "P-values here are unadjusted and should be treated as descriptive, not confirmatory."
-        "</div><table>"
-        f"<tr><th>State</th><th>Pre-drug Mean</th><th>Post-drug Mean</th>"
-        f"<th>Shift (SD)</th><th>How to read direction</th><th>Direction</th><th>p-value</th><th>Time Constant</th></tr>"
-        f"{drug_table_rows}"
-        f"</table></div>" + fig_divs[3],
+        'Positive shifts indicate a higher modeled state load after treatment start; time constants estimate how quickly the post-drug response stabilized. '
+        'P-values here are unadjusted and should be treated as descriptive, not confirmatory.'
+        '</div><table>'
+        f'<tr><th>State</th><th>Pre-drug Mean</th><th>Post-drug Mean</th>'
+        f'<th>Shift (SD)</th><th>How to read direction</th><th>Direction</th><th>p-value</th><th>Time Constant</th></tr>'
+        f'{drug_table_rows}'
+        f'</table></div>'
+        + fig_divs[3],
         section_id="drug-response",
     )
 
@@ -2868,8 +2469,8 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
     body += make_section(
         "Observations vs Model Estimates",
         '<div class="dt-section-intro">Raw sensor observations (dots) overlaid with the model\'s filtered '
-        "estimates (lines). Good model fit is indicated by the line tracking "
-        "the dots closely. Vertical markers indicate the Feb 9 acute event, Mar 16 ruxolitinib start, and Mar 18 HEV diagnosis.</div>"
+        'estimates (lines). Good model fit is indicated by the line tracking '
+        'the dots closely. Vertical markers indicate the Feb 9 acute event, Mar 16 ruxolitinib start, and Mar 18 HEV diagnosis.</div>'
         + fig_divs[1],
         section_id="obs-vs-model",
     )
@@ -2880,15 +2481,15 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
         f'<div class="dt-metric-label">{metric_labels.get(var, var)}</div>'
         f'<div class="dt-metric-value">R-sq {float(values["r2"]):.3f}</div>'
         f'<div class="dt-metric-detail">RMSE {_fmt_num(values.get("rmse_original_units"))} {metric_units.get(var, "")}</div>'
-        f"</div>"
+        f'</div>'
         for var, values in sorted_predictions
     )
     if not pred_cards_html:
         pred_cards_html = '<div class="dt-empty-state">Prediction diagnostics were not available for this run.</div>'
 
-    alert_html = "".join(
+    alert_html = ''.join(
         f'<div class="alert-box"><strong>{a["day"]}</strong>: '
-        f"{a['variable']} deviation = {a['sigma_ratio']:.1f} sigma</div>"
+        f'{a["variable"]} deviation = {a["sigma_ratio"]:.1f} sigma</div>'
         for a in recent_alerts[:5]
     )
     if not alert_html:
@@ -2897,12 +2498,13 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
     body += make_section(
         "Prediction Performance",
         '<div class="dt-section-intro">One-step-ahead residuals show how quickly the model tracks changes in physiology. '
-        "Higher R-sq and lower RMSE indicate the latent-state model is anticipating the next observation well. "
-        "Vertical markers are shown on the time-series subplots for the acute event, treatment start, and HEV diagnosis.</div>"
+        'Higher R-sq and lower RMSE indicate the latent-state model is anticipating the next observation well. '
+        'Vertical markers are shown on the time-series subplots for the acute event, treatment start, and HEV diagnosis.</div>'
         '<div class="dt-mini-heading">Per-sensor forecast quality</div>'
         f'<div class="dt-metric-grid">{pred_cards_html}</div>'
         f'<div class="dt-mini-heading">Innovation alerts ({n_alerts} total, {len(recent_alerts)} in last 7 days)</div>'
-        f'<div class="dt-alert-stack">{alert_html}</div>' + fig_divs[2],
+        f'<div class="dt-alert-stack">{alert_html}</div>'
+        + fig_divs[2],
         section_id="prediction",
     )
 
@@ -2910,8 +2512,8 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
     body += make_section(
         "KF vs UKF Comparison",
         '<div class="dt-section-intro">The Unscented Kalman Filter uses nonlinear circadian dynamics and '
-        "exponential autonomic decay with sigma-point propagation (no Jacobian needed). "
-        "Large differences from the linear KF suggest significant nonlinear dynamics.</div>"
+        'exponential autonomic decay with sigma-point propagation (no Jacobian needed). '
+        'Large differences from the linear KF suggest significant nonlinear dynamics.</div>'
         + fig_divs[4],
         section_id="kf-vs-ukf",
     )
@@ -2922,7 +2524,7 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
         f'<div class="dt-sensor-label">{metric_labels.get(sensor, sensor.replace("_", " ").title())}</div>'
         f'<div class="dt-sensor-value">{pct:.1f}%</div>'
         f'<div class="dt-sensor-detail">share of the fused state-estimation signal</div>'
-        f"</div>"
+        f'</div>'
         for sensor, pct in sorted(sensor_weights.items(), key=lambda item: -item[1])
     )
     if not sensor_cards_html:
@@ -2934,23 +2536,24 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
         f'<div class="dt-mini-heading">Sensor contribution to state estimation</div>'
         f'<div class="dt-sensor-grid">{sensor_cards_html}</div>'
         f'<div class="dt-mini-heading">Residual diagnostics</div>'
-        f'<p class="dt-note">White noise residuals (Ljung-Box p>0.05) indicate the model '
-        f"captures temporal structure well. Significant autocorrelation suggests "
-        f"model misspecification for that sensor.</p>" + fig_divs[5],
+        f'<p class="dt-note">White noise residuals (Ljung-Box p > 0.05) indicate the model '
+        f'captures temporal structure well. Significant autocorrelation suggests '
+        f'model misspecification for that sensor.</p>'
+        + fig_divs[5],
         section_id="sensor-fusion",
     )
 
     # Disclaimer
     body += (
         '<div class="disclaimer">'
-        "<strong>Disclaimer:</strong> This is a computational model for research "
-        "and self-monitoring purposes only. It is NOT a medical device and should "
-        "NOT be used for clinical decision-making. The Oura Ring is a consumer "
-        "wearable; its measurements have known limitations in accuracy. "
-        "All state estimates are model-dependent and should be interpreted with "
-        "appropriate uncertainty. Consult qualified healthcare professionals for "
-        "medical decisions."
-        "</div>"
+        '<strong>Disclaimer:</strong> This is a computational model for research '
+        'and self-monitoring purposes only. It is NOT a medical device and should '
+        'NOT be used for clinical decision-making. The Oura Ring is a consumer '
+        'wearable; its measurements have known limitations in accuracy. '
+        'All state estimates are model-dependent and should be interpreted with '
+        'appropriate uncertainty. Consult qualified healthcare professionals for '
+        'medical decisions.'
+        '</div>'
     )
 
     # Extra CSS for tags, alerts, and disclaimer adapted to dark theme
@@ -3385,9 +2988,6 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
         report_id="digital_twin",
         subtitle="5-state Kalman filter/smoother with UKF nonlinear dynamics",
         extra_css=extra_css,
-        data_start=data_range.get("start"),
-        data_end=data_range.get("end"),
-        post_days=n_post,
     )
 
 
@@ -3410,21 +3010,16 @@ def main() -> None:
 
     # --- Empty data guard ---
     if len(daily) < MIN_DAYS_FOR_UKF:
-        log(
-            "MAIN",
-            f"INSUFFICIENT DATA: {len(daily)} days < {MIN_DAYS_FOR_UKF} minimum. "
-            "Skipping Kalman/UKF analysis.",
-        )
-        metrics["error"] = (
-            f"Only {len(daily)} days of data (need >= {MIN_DAYS_FOR_UKF})"
-        )
+        log("MAIN", f"INSUFFICIENT DATA: {len(daily)} days < {MIN_DAYS_FOR_UKF} minimum. "
+            "Skipping Kalman/UKF analysis.")
+        metrics["error"] = f"Only {len(daily)} days of data (need >= {MIN_DAYS_FOR_UKF})"
         # Generate minimal report with warning using theme
         warn_body = make_section(
             "Insufficient Data",
-            f"<p>Only <strong>{len(daily)} days</strong> of Oura Ring data available. "
-            f"The UKF and Kalman filter analyses require at least "
-            f"<strong>{MIN_DAYS_FOR_UKF} days</strong>.</p>"
-            f"<p>Continue collecting data and re-run the analysis.</p>",
+            f'<p>Only <strong>{len(daily)} days</strong> of Oura Ring data available. '
+            f'The UKF and Kalman filter analyses require at least '
+            f'<strong>{MIN_DAYS_FOR_UKF} days</strong>.</p>'
+            f'<p>Continue collecting data and re-run the analysis.</p>',
         )
         html = wrap_html(
             title="Digital Twin - Insufficient Data",
@@ -3509,14 +3104,12 @@ def main() -> None:
     print(f"  Data: {metrics['data_range'].get('n_days', 0)} days")
     print(f"  Log-likelihood: {metrics['kalman'].get('log_likelihood', 'N/A')}")
     print(f"  Prediction alerts: {metrics['prediction'].get('n_alerts', 0)}")
-    n_post = metrics["drug_response"].get("n_post_days", 0)
+    n_post = metrics['drug_response'].get('n_post_days', 0)
     print(f"  Post-drug days: {n_post}")
     if n_post > 0:
         for name in STATE_NAMES:
-            s = metrics["drug_response"].get("response_stats", {}).get(name, {})
-            print(
-                f"    {name}: {s.get('shift_sd', 0):+.3f} SD ({s.get('direction', 'N/A')})"
-            )
+            s = metrics['drug_response'].get('response_stats', {}).get(name, {})
+            print(f"    {name}: {s.get('shift_sd', 0):+.3f} SD ({s.get('direction', 'N/A')})")
     print(f"\n  Report: {HTML_OUTPUT}")
     print(f"  Metrics: {JSON_OUTPUT}")
     print("=" * 70)

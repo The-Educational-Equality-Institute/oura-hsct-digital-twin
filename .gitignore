@@ -42,17 +42,12 @@ reports/*.png
 reports/screenshots/
 reports/send_bundle/
 
-# Local automation (contains hardcoded paths)
-scripts/
-
-# Local MCP config
-.mcp.json
-
-# Internal report docs (audit logs, fix logs, review docs)
-reports/*.md
-!reports/DATA_METHODOLOGY.md
+# Local automation (keep daily_pipeline.sh tracked)
+scripts/*
+!scripts/daily_pipeline.sh
+!scripts/install_full_stack.sh
 
 # Build / deploy artifacts
 test-results/
 .wrangler/
-.codegraph/
+index.html
