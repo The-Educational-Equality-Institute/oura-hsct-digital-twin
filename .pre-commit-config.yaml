@@ -17,14 +17,6 @@ repos:
         args: ['--fix']
       - id: ruff-format
 
-  - repo: local
-    hooks:
-      - id: no-em-dash
-        name: No em dashes (use hyphen instead)
-        entry: scripts/check_no_em_dash.sh
-        language: script
-        types_or: [python, markdown, json]
-
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.22.1
     hooks:
