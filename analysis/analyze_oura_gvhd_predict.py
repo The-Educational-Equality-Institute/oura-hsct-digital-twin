@@ -108,6 +108,9 @@ DATA_END: str = ""  # set by _resolve_data_end() before first use
 def _resolve_data_end() -> str:
     """Query database for the latest available date across key tables."""
     import sqlite3 as _sql
+    if not Path(DATABASE_PATH).exists():
+        print("No data found. Run: python api/import_oura.py --days 90")
+        sys.exit(0)
     with _sql.connect(str(DATABASE_PATH)) as conn:
         row = conn.execute(
             "SELECT MAX(d) FROM ("
@@ -118,7 +121,8 @@ def _resolve_data_end() -> str:
         ).fetchone()
     if row and row[0]:
         return row[0]
-    raise RuntimeError("Unable to determine latest available Oura date from the database")
+    print("No data found. Run: python api/import_oura.py --days 90")
+    sys.exit(0)
 
 # BOS risk score — loaded at runtime from SpO2/BOS analysis output
 SPO2_BOS_METRICS_PATH = REPORTS_DIR / "spo2_bos_metrics.json"
