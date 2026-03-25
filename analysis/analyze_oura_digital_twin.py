@@ -1532,10 +1532,7 @@ def create_prediction_figure(
     n_hist = 14
     hist_dates = dates[-n_hist:]
     hist_hrv = obs_masked[-n_hist:, 0]
-    if hasattr(hist_hrv, 'mask') and hist_hrv.mask is not np.bool_(False):
-        hist_valid = ~hist_hrv.mask
-    else:
-        hist_valid = ~np.isnan(np.array(hist_hrv))
+    hist_valid = ~np.ma.getmaskarray(hist_hrv)
 
     if hist_valid.any():
         h = np.array(hist_hrv[hist_valid], dtype=float) * sigma_hrv + mu_hrv
