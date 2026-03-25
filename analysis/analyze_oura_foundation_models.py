@@ -26,7 +26,7 @@ import io
 import gc
 import enum
 import json
-import logging
+import shutil
 import os
 import sqlite3
 import sys
@@ -35,7 +35,7 @@ import traceback
 import types
 import warnings
 from contextlib import redirect_stderr, redirect_stdout
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from importlib.machinery import ModuleSpec
 from pathlib import Path
 from typing import Any, Optional
@@ -45,8 +45,6 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
 from plotly.subplots import make_subplots
-from scipy import stats as scipy_stats
-from statsmodels.stats.multitest import multipletests
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -54,7 +52,6 @@ warnings.filterwarnings("ignore", message=".*torch_dtype.*")
 warnings.filterwarnings("ignore", message=".*ConvergenceWarning.*")
 try:
     from statsmodels.tools.sm_exceptions import ConvergenceWarning
-
     warnings.filterwarnings("ignore", category=ConvergenceWarning)
 except ImportError:
     pass
@@ -65,32 +62,17 @@ except ImportError:
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from config import (
-    DATABASE_PATH,
-    REPORTS_DIR,
-    KNOWN_EVENT_DATE,
+    DATABASE_PATH, REPORTS_DIR, KNOWN_EVENT_DATE, TREATMENT_START,
     TREATMENT_START_STR,
     FONT_FAMILY,
 )
-
-# Config dates are datetime.date objects; this script uses string keys throughout
-KNOWN_EVENT_DATE = str(KNOWN_EVENT_DATE)
 from _theme import (
-    wrap_html,
-    make_kpi_card,
-    make_kpi_row,
-    make_section,
-    BG_ELEVATED,
-    BORDER_SUBTLE,
-    TEXT_PRIMARY,
-    TEXT_SECONDARY,
-    ACCENT_BLUE,
-    ACCENT_GREEN,
-    ACCENT_RED,
-    ACCENT_AMBER,
-    C_PRE_TX,
-    C_POST_TX,
-    C_FORECAST,
-    C_RUX_LINE,
+    wrap_html, make_kpi_card, make_kpi_row, make_section,
+    COLORWAY, STATUS_COLORS, BG_PRIMARY, BG_SURFACE, BG_ELEVATED,
+    BORDER_SUBTLE, TEXT_PRIMARY, TEXT_SECONDARY,
+    ACCENT_BLUE, ACCENT_GREEN, ACCENT_RED, ACCENT_AMBER,
+    ACCENT_PURPLE, ACCENT_CYAN,
+    C_PRE_TX, C_POST_TX, C_FORECAST, C_RUX_LINE,
 )
 
 pio.templates.default = "clinical_dark"
@@ -102,6 +84,7 @@ JSON_OUTPUT = REPORTS_DIR / "foundation_model_metrics.json"
 # Clinical context
 # ---------------------------------------------------------------------------
 RUXOLITINIB_START = TREATMENT_START_STR  # string form for date comparisons
+KNOWN_EVENT_DATE_STR = str(KNOWN_EVENT_DATE)  # string form for date comparisons
 FORECAST_HORIZON = 14  # days
 CONTEXT_LENGTH = 55  # nights for training context
 
@@ -110,7 +93,7 @@ CHRONOS_MODEL = "amazon/chronos-bolt-base"  # Bolt variant (faster, native quant
 CHRONOS_FALLBACK = "amazon/chronos-t5-base"  # Original T5 fallback
 QUANTILE_LEVELS = [0.1, 0.25, 0.5, 0.75, 0.9]
 
-# Visualization - from theme, with dark-theme-aware band colors
+# Visualization — from theme, with dark-theme-aware band colors
 COLOR_PRE = C_PRE_TX
 COLOR_POST = C_POST_TX
 COLOR_RUX_LINE = C_RUX_LINE
@@ -118,7 +101,6 @@ COLOR_FORECAST = C_FORECAST
 COLOR_ANOMALY = ACCENT_RED
 COLOR_BAND_OUTER = "rgba(59, 130, 246, 0.12)"
 COLOR_BAND_INNER = "rgba(59, 130, 246, 0.25)"
-TORCH_SEED = 42
 
 
 def _install_torchvision_compat_stub() -> None:
@@ -184,9 +166,7 @@ def _resolve_local_hf_snapshot(repo_id: str) -> Optional[Path]:
         if snapshot in seen:
             continue
         seen.add(snapshot)
-        if (snapshot / "config.json").exists() and (
-            snapshot / "model.safetensors"
-        ).exists():
+        if (snapshot / "config.json").exists() and (snapshot / "model.safetensors").exists():
             return snapshot
 
     return None
@@ -201,9 +181,7 @@ def _import_base_chronos_pipeline():
         with redirect_stdout(stdout_buffer), redirect_stderr(stderr_buffer):
             from chronos import BaseChronosPipeline
     finally:
-        noisy_fragment = (
-            "Skipping import of cpp extensions due to incompatible torch version"
-        )
+        noisy_fragment = "Skipping import of cpp extensions due to incompatible torch version"
         for line in stdout_buffer.getvalue().splitlines():
             if noisy_fragment not in line:
                 print(line)
@@ -218,14 +196,14 @@ def _import_base_chronos_pipeline():
 # DATA LOADING
 # ===========================================================================
 
-
 def load_data() -> dict[str, pd.DataFrame]:
     """Load all Oura tables into DataFrames."""
     print("[DATA] Loading biometric data from database...")
     db_path = Path(DATABASE_PATH).resolve()
     if not db_path.exists():
         raise FileNotFoundError(f"Database not found: {db_path}")
-    with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as conn:
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    try:
         # HRV epochs (5-min intervals)
         hrv = pd.read_sql_query(
             "SELECT timestamp, rmssd FROM oura_hrv ORDER BY timestamp", conn
@@ -271,6 +249,8 @@ def load_data() -> dict[str, pd.DataFrame]:
         readiness["temperature_deviation"] = pd.to_numeric(
             readiness["temperature_deviation"], errors="coerce"
         )
+    finally:
+        conn.close()
 
     data = {
         "hrv": hrv,
@@ -281,10 +261,8 @@ def load_data() -> dict[str, pd.DataFrame]:
     }
 
     for name, df in data.items():
-        print(
-            f"  {name}: {len(df)} rows, date range: "
-            f"{df['date'].min()} to {df['date'].max()}"
-        )
+        print(f"  {name}: {len(df)} rows, date range: "
+              f"{df['date'].min()} to {df['date'].max()}")
 
     return data
 
@@ -323,37 +301,25 @@ def build_nightly_series(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
 
     # Sleep periods - already per-night
     sp = data["sleep_periods"].copy()
-    sp.rename(
-        columns={
-            "average_hrv": "sleep_avg_hrv",
-            "average_heart_rate": "sleep_avg_hr",
-            "average_breath": "sleep_avg_breath",
-        },
-        inplace=True,
-    )
+    sp.rename(columns={
+        "average_hrv": "sleep_avg_hrv",
+        "average_heart_rate": "sleep_avg_hr",
+        "average_breath": "sleep_avg_breath",
+    }, inplace=True)
     sp["total_hours"] = sp["total_sleep_duration"] / 3600
     sp["rem_pct"] = (
-        sp["rem_sleep_duration"] / sp["total_sleep_duration"].replace(0, np.nan) * 100
+        sp["rem_sleep_duration"]
+        / sp["total_sleep_duration"].replace(0, np.nan)
+        * 100
     )
 
     # Merge all nightly data
     nightly = hrv_daily.copy()
     nightly = nightly.merge(hr_daily, on="date", how="outer")
     nightly = nightly.merge(
-        sp[
-            [
-                "date",
-                "sleep_avg_hrv",
-                "sleep_avg_hr",
-                "sleep_avg_breath",
-                "efficiency",
-                "lowest_heart_rate",
-                "total_hours",
-                "rem_pct",
-            ]
-        ],
-        on="date",
-        how="outer",
+        sp[["date", "sleep_avg_hrv", "sleep_avg_hr", "sleep_avg_breath",
+            "efficiency", "lowest_heart_rate", "total_hours", "rem_pct"]],
+        on="date", how="outer",
     )
     nightly = nightly.merge(data["spo2"], on="date", how="left")
     nightly = nightly.merge(data["readiness"], on="date", how="left")
@@ -361,10 +327,8 @@ def build_nightly_series(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     nightly.sort_values("date", inplace=True)
     nightly.reset_index(drop=True, inplace=True)
 
-    print(
-        f"  Nightly series: {len(nightly)} nights, "
-        f"{nightly['date'].min()} to {nightly['date'].max()}"
-    )
+    print(f"  Nightly series: {len(nightly)} nights, "
+          f"{nightly['date'].min()} to {nightly['date'].max()}")
 
     return nightly
 
@@ -387,7 +351,6 @@ def build_hourly_hr(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
 # CHRONOS FOUNDATION MODEL
 # ===========================================================================
 
-
 def load_chronos_pipeline():
     """Load the Chronos-2 foundation model pipeline."""
     os.environ.setdefault("USE_TF", "0")
@@ -396,14 +359,7 @@ def load_chronos_pipeline():
     _install_torchvision_compat_stub()
 
     import torch
-
     BaseChronosPipeline = _import_base_chronos_pipeline()
-    torch.manual_seed(TORCH_SEED)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(TORCH_SEED)
-        if hasattr(torch.backends, "cudnn"):
-            torch.backends.cudnn.deterministic = True
-            torch.backends.cudnn.benchmark = False
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"[CHRONOS] Loading model on {device}...")
@@ -488,7 +444,7 @@ def chronos_forecast_with_quantiles(
     result = {"mean": m}
     qmap = {0.1: "q10", 0.25: "q25", 0.5: "median", 0.75: "q75", 0.9: "q90"}
     for i, ql in enumerate(quantile_levels):
-        key = qmap.get(ql, f"q{int(ql * 100)}")
+        key = qmap.get(ql, f"q{int(ql*100)}")
         result[key] = q[:, i]
 
     return result
@@ -497,7 +453,6 @@ def chronos_forecast_with_quantiles(
 # ===========================================================================
 # ANALYSIS 1: CHRONOS ON NIGHTLY RMSSD AND HR
 # ===========================================================================
-
 
 def run_chronos_nightly(
     pipeline,
@@ -516,10 +471,7 @@ def run_chronos_nightly(
 
     results = {}
 
-    for series_name, col in [
-        ("rmssd", "nightly_rmssd_mean"),
-        ("hr", "nightly_hr_mean"),
-    ]:
+    for series_name, col in [("rmssd", "nightly_rmssd_mean"), ("hr", "nightly_hr_mean")]:
         print(f"\n[CHRONOS] Forecasting nightly {series_name.upper()}...")
 
         # Extract series, drop NaN
@@ -528,28 +480,24 @@ def run_chronos_nightly(
         n = len(s)
 
         if n < CONTEXT_LENGTH + 5:
-            print(
-                f"  WARNING: Only {n} valid nights, need {CONTEXT_LENGTH + 5}. Skipping."
-            )
+            print(f"  WARNING: Only {n} valid nights, need {CONTEXT_LENGTH + 5}. Skipping.")
             continue
 
         context_end = min(CONTEXT_LENGTH, n - FORECAST_HORIZON)
         actual_horizon = min(FORECAST_HORIZON, n - context_end)
 
         context = s[col].values[:context_end]
-        actual = s[col].values[context_end : context_end + actual_horizon]
+        actual = s[col].values[context_end:context_end + actual_horizon]
         context_dates = s["date"].values[:context_end]
-        forecast_dates = s["date"].values[context_end : context_end + actual_horizon]
+        forecast_dates = s["date"].values[context_end:context_end + actual_horizon]
 
-        print(
-            f"  Context: {context_end} nights ({context_dates[0]} to {context_dates[-1]})"
-        )
-        print(
-            f"  Forecast: {actual_horizon} nights ({forecast_dates[0]} to {forecast_dates[-1]})"
-        )
+        print(f"  Context: {context_end} nights ({context_dates[0]} to {context_dates[-1]})")
+        print(f"  Forecast: {actual_horizon} nights ({forecast_dates[0]} to {forecast_dates[-1]})")
 
         t0 = time.time()
-        forecast = chronos_forecast_with_quantiles(pipeline, context, actual_horizon)
+        forecast = chronos_forecast_with_quantiles(
+            pipeline, context, actual_horizon
+        )
         elapsed = time.time() - t0
         print(f"  Inference time: {elapsed:.2f}s")
 
@@ -557,37 +505,21 @@ def run_chronos_nightly(
         median_forecast = forecast["median"]
         mae = np.mean(np.abs(actual - median_forecast))
         rmse = np.sqrt(np.mean((actual - median_forecast) ** 2))
-        mape = (
-            np.mean(
-                np.abs((actual - median_forecast) / np.where(actual == 0, 1, actual))
-            )
-            * 100
-        )
+        mape = np.mean(np.abs((actual - median_forecast) / np.where(actual == 0, 1, actual))) * 100
 
         # Coverage: % of actuals within 90% PI
-        in_90pi = (
-            np.sum((actual >= forecast["q10"]) & (actual <= forecast["q90"]))
-            / len(actual)
-            * 100
-        )
+        in_90pi = np.sum(
+            (actual >= forecast["q10"]) & (actual <= forecast["q90"])
+        ) / len(actual) * 100
         # 50% PI coverage
-        in_50pi = (
-            np.sum((actual >= forecast["q25"]) & (actual <= forecast["q75"]))
-            / len(actual)
-            * 100
-        )
+        in_50pi = np.sum(
+            (actual >= forecast["q25"]) & (actual <= forecast["q75"])
+        ) / len(actual) * 100
 
         # Anomaly detection: points outside 90% PI
         outside_90pi = (actual < forecast["q10"]) | (actual > forecast["q90"])
         anomaly_dates = forecast_dates[outside_90pi]
         anomaly_residuals = actual[outside_90pi] - median_forecast[outside_90pi]
-
-        # Per-point exceedance p-values (Gaussian approx from quantiles)
-        # Estimate sigma from 90% PI width: q90-q10 spans ~2*1.645*sigma
-        pi_spread = forecast["q90"] - forecast["q10"]
-        sigma_est = np.where(pi_spread > 0, pi_spread / (2 * 1.645), 1e-6)
-        z_scores = (actual - median_forecast) / sigma_est
-        raw_pvals = 2 * scipy_stats.norm.sf(np.abs(z_scores))  # two-tailed
 
         # Width of prediction interval
         pi_width_90 = np.mean(forecast["q90"] - forecast["q10"])
@@ -618,9 +550,7 @@ def run_chronos_nightly(
         if len(anomaly_dates) > 0:
             for d, r in zip(anomaly_dates, anomaly_residuals):
                 direction = "above" if r > 0 else "below"
-                print(
-                    f"    {d}: {abs(r):.1f} {series_name} {direction} median forecast"
-                )
+                print(f"    {d}: {abs(r):.1f} {series_name} {direction} median forecast")
 
         results[series_name] = {
             "context": context,
@@ -630,47 +560,9 @@ def run_chronos_nightly(
             "forecast_dates": forecast_dates,
             "metrics": series_metrics,
             "outside_90pi": outside_90pi,
-            "raw_pvals": raw_pvals,
         }
 
         metrics[f"chronos_nightly_{series_name}"] = series_metrics
-
-    # --- FDR correction across all forecast points and series ---
-    all_pvals = []
-    pval_labels = []
-    for sname, r in results.items():
-        for i, (d, p) in enumerate(zip(r["forecast_dates"], r["raw_pvals"])):
-            all_pvals.append(p)
-            pval_labels.append((sname, str(d), i))
-
-    if len(all_pvals) >= 2:
-        reject, fdr_pvals, _, _ = multipletests(all_pvals, method="fdr_bh")
-        print(
-            f"\n  [FDR] Benjamini-Hochberg correction across {len(all_pvals)} forecast points:"
-        )
-
-        # Distribute FDR-corrected p-values back to each series
-        idx = 0
-        for sname, r in results.items():
-            n_pts = len(r["raw_pvals"])
-            fdr_slice = fdr_pvals[idx : idx + n_pts]
-            reject_slice = reject[idx : idx + n_pts]
-            r["fdr_pvals"] = fdr_slice
-            r["outside_90pi_fdr"] = reject_slice
-
-            n_raw = int(np.sum(r["outside_90pi"]))
-            n_fdr = int(np.sum(reject_slice))
-            r["metrics"]["n_anomalies_fdr_corrected"] = n_fdr
-            r["metrics"]["anomaly_dates_fdr"] = [
-                str(d) for d, rej in zip(r["forecast_dates"], reject_slice) if rej
-            ]
-            metrics[f"chronos_nightly_{sname}"]["n_anomalies_fdr_corrected"] = n_fdr
-            metrics[f"chronos_nightly_{sname}"]["anomaly_dates_fdr"] = r["metrics"][
-                "anomaly_dates_fdr"
-            ]
-
-            print(f"    {sname.upper()}: {n_raw} raw anomalies -> {n_fdr} after FDR")
-            idx += n_pts
 
     # Clear GPU memory
     torch.cuda.empty_cache()
@@ -682,7 +574,6 @@ def run_chronos_nightly(
 # ===========================================================================
 # ANALYSIS 2: CHRONOS ON CONTINUOUS HOURLY HR
 # ===========================================================================
-
 
 def run_chronos_hourly_hr(
     pipeline,
@@ -702,9 +593,7 @@ def run_chronos_hourly_hr(
 
     # Use 80% as context, forecast remaining 20%
     context_len = int(n * 0.8)
-    MAX_FORECAST_HORIZON = 64  # Chronos model maximum prediction horizon
     forecast_len = min(48, n - context_len)  # Cap at 48 hours
-    forecast_len = min(forecast_len, MAX_FORECAST_HORIZON)
 
     # Limit context to model's max context window
     max_ctx = pipeline.model_context_length or 512
@@ -715,13 +604,9 @@ def run_chronos_hourly_hr(
     else:
         context_start = 0
 
-    context = hr_series[context_start : context_start + context_len]
-    actual = hr_series[
-        context_start + context_len : context_start + context_len + forecast_len
-    ]
-    forecast_times = hr_times[
-        context_start + context_len : context_start + context_len + forecast_len
-    ]
+    context = hr_series[context_start:context_start + context_len]
+    actual = hr_series[context_start + context_len:context_start + context_len + forecast_len]
+    forecast_times = hr_times[context_start + context_len:context_start + context_len + forecast_len]
 
     print(f"  Total hourly readings: {n}")
     print(f"  Context: {context_len} hours")
@@ -743,11 +628,9 @@ def run_chronos_hourly_hr(
     n_anomalous = int(np.sum(anomalous_mask))
 
     # Coverage
-    in_90pi = (
-        np.sum((actual >= forecast["q10"]) & (actual <= forecast["q90"]))
-        / len(actual)
-        * 100
-    )
+    in_90pi = np.sum(
+        (actual >= forecast["q10"]) & (actual <= forecast["q90"])
+    ) / len(actual) * 100
 
     # Also run sliding window anomaly detection over full series
     # Use a rolling context window approach
@@ -761,18 +644,12 @@ def run_chronos_hourly_hr(
     # Only do sliding window if we have enough data
     n_windows = (n - window_size - predict_ahead) // step_size
     if n_windows > 0:
-        print(
-            f"  Windows: {n_windows} (size={window_size}h, step={step_size}h, predict={predict_ahead}h)"
-        )
+        print(f"  Windows: {n_windows} (size={window_size}h, step={step_size}h, predict={predict_ahead}h)")
         for i in range(0, min(n_windows, 30), 1):  # Cap at 30 windows to limit compute
             start = i * step_size
-            ctx_slice = hr_series[start : start + window_size]
-            act_slice = hr_series[
-                start + window_size : start + window_size + predict_ahead
-            ]
-            time_slice = hr_times[
-                start + window_size : start + window_size + predict_ahead
-            ]
+            ctx_slice = hr_series[start:start + window_size]
+            act_slice = hr_series[start + window_size:start + window_size + predict_ahead]
+            time_slice = hr_times[start + window_size:start + window_size + predict_ahead]
 
             if len(act_slice) < predict_ahead:
                 break
@@ -782,22 +659,16 @@ def run_chronos_hourly_hr(
                     pipeline, ctx_slice, predict_ahead
                 )
                 sw_residuals = act_slice - sw_forecast["median"]
-                sw_outside = (act_slice < sw_forecast["q10"]) | (
-                    act_slice > sw_forecast["q90"]
-                )
+                sw_outside = (act_slice < sw_forecast["q10"]) | (act_slice > sw_forecast["q90"])
 
-                for j, (is_out, ts, res) in enumerate(
-                    zip(sw_outside, time_slice, sw_residuals)
-                ):
+                for j, (is_out, ts, res) in enumerate(zip(sw_outside, time_slice, sw_residuals)):
                     if is_out:
-                        sliding_anomalies.append(
-                            {
-                                "datetime": str(ts),
-                                "residual": float(res),
-                                "actual": float(act_slice[j]),
-                                "forecast_median": float(sw_forecast["median"][j]),
-                            }
-                        )
+                        sliding_anomalies.append({
+                            "datetime": str(ts),
+                            "residual": float(res),
+                            "actual": float(act_slice[j]),
+                            "forecast_median": float(sw_forecast["median"][j]),
+                        })
             except Exception as e:
                 print(f"    Window {i} failed: {e}")
                 continue
@@ -807,7 +678,7 @@ def run_chronos_hourly_hr(
         print("  Insufficient data for sliding window analysis")
 
     # Check if any Feb 9 anomalies were found
-    feb9_anomalies = [a for a in sliding_anomalies if KNOWN_EVENT_DATE in a["datetime"]]
+    feb9_anomalies = [a for a in sliding_anomalies if KNOWN_EVENT_DATE_STR in a["datetime"]]
     if feb9_anomalies:
         print(f"  Feb 9 anomalies in hourly HR: {len(feb9_anomalies)}")
 
@@ -844,7 +715,6 @@ def run_chronos_hourly_hr(
 # ANALYSIS 3: STATISTICAL BASELINE (ARIMA/Prophet) + ENSEMBLE
 # ===========================================================================
 
-
 def run_statistical_baseline(
     nightly: pd.DataFrame,
     metrics: dict,
@@ -857,10 +727,7 @@ def run_statistical_baseline(
 
     results = {}
 
-    for series_name, col in [
-        ("rmssd", "nightly_rmssd_mean"),
-        ("hr", "nightly_hr_mean"),
-    ]:
+    for series_name, col in [("rmssd", "nightly_rmssd_mean"), ("hr", "nightly_hr_mean")]:
         print(f"\n[ENSEMBLE] ARIMA baseline for nightly {series_name.upper()}...")
 
         s = nightly[["date", col]].dropna().copy()
@@ -875,8 +742,8 @@ def run_statistical_baseline(
         actual_horizon = min(FORECAST_HORIZON, n - context_end)
 
         context = s[col].values[:context_end]
-        actual = s[col].values[context_end : context_end + actual_horizon]
-        forecast_dates = s["date"].values[context_end : context_end + actual_horizon]
+        actual = s[col].values[context_end:context_end + actual_horizon]
+        forecast_dates = s["date"].values[context_end:context_end + actual_horizon]
 
         # Try ARIMA first, fall back to simple exponential smoothing
         forecast_median = None
@@ -935,9 +802,7 @@ def run_statistical_baseline(
                 print(f"  All statistical models failed: {e2}")
                 # Last resort: naive forecast (last value repeated)
                 forecast_median = np.full(actual_horizon, context[-1])
-                rolling_std = (
-                    np.std(context[-14:]) if len(context) >= 14 else np.std(context)
-                )
+                rolling_std = np.std(context[-14:]) if len(context) >= 14 else np.std(context)
                 forecast_lower = forecast_median - 1.645 * rolling_std
                 forecast_upper = forecast_median + 1.645 * rolling_std
                 model_used = "Naive"
@@ -947,11 +812,9 @@ def run_statistical_baseline(
         mae = np.mean(np.abs(actual - forecast_median))
         rmse = np.sqrt(np.mean((actual - forecast_median) ** 2))
 
-        in_90ci = (
-            np.sum((actual >= forecast_lower) & (actual <= forecast_upper))
-            / len(actual)
-            * 100
-        )
+        in_90ci = np.sum(
+            (actual >= forecast_lower) & (actual <= forecast_upper)
+        ) / len(actual) * 100
 
         # Anomalies: outside 90% CI
         outside = (actual < forecast_lower) | (actual > forecast_upper)
@@ -1031,20 +894,18 @@ def compute_ensemble_consensus(
             chrono_median = float(cr["forecast"]["median"][c_idx])
             stat_median = float(sr["forecast_median"][s_idx])
 
-            rows.append(
-                {
-                    "date": d,
-                    "series": series_name,
-                    "actual": actual_val,
-                    "chronos_median": chrono_median,
-                    "stat_median": stat_median,
-                    "chronos_anomaly": c_anomaly,
-                    "stat_anomaly": s_anomaly,
-                    "consensus": confidence,
-                    "chronos_residual": actual_val - chrono_median,
-                    "stat_residual": actual_val - stat_median,
-                }
-            )
+            rows.append({
+                "date": d,
+                "series": series_name,
+                "actual": actual_val,
+                "chronos_median": chrono_median,
+                "stat_median": stat_median,
+                "chronos_anomaly": c_anomaly,
+                "stat_anomaly": s_anomaly,
+                "consensus": confidence,
+                "chronos_residual": actual_val - chrono_median,
+                "stat_residual": actual_val - stat_median,
+            })
 
     ensemble_df = pd.DataFrame(rows)
 
@@ -1055,26 +916,20 @@ def compute_ensemble_consensus(
             print(f"  {level}: {cnt} date-series pairs")
 
         # Check Feb 9 alignment
-        feb9 = ensemble_df[ensemble_df["date"] == KNOWN_EVENT_DATE]
+        feb9 = ensemble_df[ensemble_df["date"] == KNOWN_EVENT_DATE_STR]
         if len(feb9) > 0:
             print("\n  Feb 9 event consensus:")
             for _, row in feb9.iterrows():
-                print(
-                    f"    {row['series']}: {row['consensus']} "
-                    f"(Chronos: {'ANOMALY' if row['chronos_anomaly'] else 'normal'}, "
-                    f"Stat: {'ANOMALY' if row['stat_anomaly'] else 'normal'})"
-                )
+                print(f"    {row['series']}: {row['consensus']} "
+                      f"(Chronos: {'ANOMALY' if row['chronos_anomaly'] else 'normal'}, "
+                      f"Stat: {'ANOMALY' if row['stat_anomaly'] else 'normal'})")
 
-        high_dates = sorted(
-            ensemble_df[ensemble_df["consensus"] == "HIGH"]["date"].unique()
-        )
+        high_dates = sorted(ensemble_df[ensemble_df["consensus"] == "HIGH"]["date"].unique())
         metrics["ensemble_consensus"] = {
             "high_confidence_anomaly_dates": high_dates,
-            "medium_confidence_count": int(
-                len(ensemble_df[ensemble_df["consensus"] == "MEDIUM"])
-            ),
+            "medium_confidence_count": int(len(ensemble_df[ensemble_df["consensus"] == "MEDIUM"])),
             "normal_count": int(len(ensemble_df[ensemble_df["consensus"] == "NORMAL"])),
-            "feb9_detected": KNOWN_EVENT_DATE in high_dates,
+            "feb9_detected": KNOWN_EVENT_DATE_STR in high_dates,
         }
     else:
         metrics["ensemble_consensus"] = {"error": "no overlapping forecasts"}
@@ -1085,7 +940,6 @@ def compute_ensemble_consensus(
 # ===========================================================================
 # ANALYSIS 4: FEB 9 EVENT RETROSPECTIVE VALIDATION
 # ===========================================================================
-
 
 def run_feb9_retrospective(
     pipeline,
@@ -1100,15 +954,11 @@ def run_feb9_retrospective(
     print("=" * 70)
 
     # Derive the day before the known event date
-    _event_dt = datetime.strptime(KNOWN_EVENT_DATE, "%Y-%m-%d")
-    _pre_event_date = (_event_dt - timedelta(days=1)).strftime("%Y-%m-%d")
+    _pre_event_date = str(KNOWN_EVENT_DATE - timedelta(days=1))
 
     results = {}
 
-    for series_name, col in [
-        ("rmssd", "nightly_rmssd_mean"),
-        ("hr", "nightly_hr_mean"),
-    ]:
+    for series_name, col in [("rmssd", "nightly_rmssd_mean"), ("hr", "nightly_hr_mean")]:
         print(f"\n[VALIDATION] {series_name.upper()} retrospective...")
 
         s = nightly[["date", col]].dropna().copy()
@@ -1139,12 +989,12 @@ def run_feb9_retrospective(
             context = context[-max_ctx:]
 
         print(f"  Context: {len(context)} nights up to {context_dates[-1]}")
-        print(
-            f"  Forecasting: {len(actual)} nights ({actual_dates[0]} to {actual_dates[-1]})"
-        )
+        print(f"  Forecasting: {len(actual)} nights ({actual_dates[0]} to {actual_dates[-1]})")
 
         t0 = time.time()
-        forecast = chronos_forecast_with_quantiles(pipeline, context, len(actual))
+        forecast = chronos_forecast_with_quantiles(
+            pipeline, context, len(actual)
+        )
         elapsed = time.time() - t0
 
         median_f = forecast["median"]
@@ -1153,7 +1003,7 @@ def run_feb9_retrospective(
         # Check if Feb 9 specifically is anomalous
         feb9_idx = None
         for i, d in enumerate(actual_dates):
-            if str(d) == KNOWN_EVENT_DATE:
+            if str(d) == KNOWN_EVENT_DATE_STR:
                 feb9_idx = i
                 break
 
@@ -1175,9 +1025,7 @@ def run_feb9_retrospective(
             print(f"  Median forecast: {feb9_median:.1f}")
             print(f"  90% PI: [{feb9_q10:.1f}, {feb9_q90:.1f}]")
             print(f"  Residual: {feb9_residual:+.1f} ({feb9_direction})")
-            print(
-                f"  Outside 90% PI: {'YES - ANOMALY DETECTED' if feb9_detected else 'No'}"
-            )
+            print(f"  Outside 90% PI: {'YES - ANOMALY DETECTED' if feb9_detected else 'No'}")
 
         # Compute overall rate of observations outside 90% PI
         outside_90 = (actual < forecast["q10"]) | (actual > forecast["q90"])
@@ -1189,16 +1037,10 @@ def run_feb9_retrospective(
             "forecast_nights": int(len(actual)),
             "forecast_dates": [str(d) for d in actual_dates],
             "feb9_detected": feb9_detected,
-            "feb9_residual": round(float(feb9_residual), 2)
-            if feb9_residual is not None
-            else None,
+            "feb9_residual": round(float(feb9_residual), 2) if feb9_residual is not None else None,
             "feb9_direction": feb9_direction,
-            "feb9_actual": round(float(actual[feb9_idx]), 2)
-            if feb9_idx is not None
-            else None,
-            "feb9_median_forecast": round(float(median_f[feb9_idx]), 2)
-            if feb9_idx is not None
-            else None,
+            "feb9_actual": round(float(actual[feb9_idx]), 2) if feb9_idx is not None else None,
+            "feb9_median_forecast": round(float(median_f[feb9_idx]), 2) if feb9_idx is not None else None,
             "n_anomalies_in_window": int(np.sum(outside_90)),
             "detection_rate_pct": round(float(detection_rate), 1),
             "inference_time_s": round(elapsed, 2),
@@ -1227,7 +1069,6 @@ def run_feb9_retrospective(
 # ANALYSIS 5: PRE vs POST RUXOLITINIB
 # ===========================================================================
 
-
 def run_ruxolitinib_analysis(
     pipeline,
     nightly: pd.DataFrame,
@@ -1242,10 +1083,7 @@ def run_ruxolitinib_analysis(
 
     results = {}
 
-    for series_name, col in [
-        ("rmssd", "nightly_rmssd_mean"),
-        ("hr", "nightly_hr_mean"),
-    ]:
+    for series_name, col in [("rmssd", "nightly_rmssd_mean"), ("hr", "nightly_hr_mean")]:
         print(f"\n[CHRONOS] Ruxolitinib analysis: {series_name.upper()}...")
 
         s = nightly[["date", col]].dropna().copy()
@@ -1259,9 +1097,7 @@ def run_ruxolitinib_analysis(
         post_data = s[post_mask]
 
         if len(pre_data) < 10:
-            print(
-                f"  Insufficient pre-ruxolitinib data ({len(pre_data)} nights). Skipping."
-            )
+            print(f"  Insufficient pre-ruxolitinib data ({len(pre_data)} nights). Skipping.")
             continue
 
         context = pre_data[col].values
@@ -1271,31 +1107,21 @@ def run_ruxolitinib_analysis(
 
         # Forecast into post-period (or up to 14 days if post data is limited)
         n_post = len(post_data)
-        MAX_FORECAST_HORIZON = 64  # Chronos model maximum prediction horizon
-        forecast_len = max(
-            n_post, 7
-        )  # At least 7 days forecast even if no post data yet
-        forecast_len = min(forecast_len, MAX_FORECAST_HORIZON)
+        forecast_len = max(n_post, 7)  # At least 7 days forecast even if no post data yet
 
         print(f"  Pre-period: {len(pre_data)} nights (context: {len(context)})")
         print(f"  Post-period actual: {n_post} nights")
         print(f"  Forecast length: {forecast_len} nights")
 
         t0 = time.time()
-        forecast = chronos_forecast_with_quantiles(pipeline, context, forecast_len)
+        forecast = chronos_forecast_with_quantiles(
+            pipeline, context, forecast_len
+        )
         elapsed = time.time() - t0
 
         # Pre-period forecast uncertainty (use last 14 days of pre-period)
-        pre_last14_ctx = (
-            pre_data[col].values[:-14]
-            if len(pre_data) > 14
-            else pre_data[col].values[: len(pre_data) // 2]
-        )
-        pre_last14_actual = (
-            pre_data[col].values[-14:]
-            if len(pre_data) > 14
-            else pre_data[col].values[len(pre_data) // 2 :]
-        )
+        pre_last14_ctx = pre_data[col].values[:-14] if len(pre_data) > 14 else pre_data[col].values[:len(pre_data)//2]
+        pre_last14_actual = pre_data[col].values[-14:] if len(pre_data) > 14 else pre_data[col].values[len(pre_data)//2:]
 
         if len(pre_last14_ctx) > 5 and len(pre_last14_actual) > 0:
             pre_forecast = chronos_forecast_with_quantiles(
@@ -1306,12 +1132,10 @@ def run_ruxolitinib_analysis(
             pre_pi_width = None
 
         # Post-period PI width
-        post_pi_width = np.mean(
-            forecast["q90"][:forecast_len] - forecast["q10"][:forecast_len]
-        )
+        post_pi_width = np.mean(forecast["q90"][:forecast_len] - forecast["q10"][:forecast_len])
 
         # Compare pre vs post uncertainty
-        if pre_pi_width is not None and pre_pi_width > 0:
+        if pre_pi_width is not None:
             uncertainty_change = ((post_pi_width - pre_pi_width) / pre_pi_width) * 100
             print(f"  Pre-period 90% PI width: {pre_pi_width:.2f}")
             print(f"  Post-period 90% PI width: {post_pi_width:.2f}")
@@ -1338,28 +1162,12 @@ def run_ruxolitinib_analysis(
             elif series_name == "hr" and mean_shift < 0:
                 print("  -> HR decreased: possible autonomic improvement")
 
-            # Mann-Whitney U test: pre-period tail vs post-period
-            pre_tail = pre_data[col].values[-min(n_post, 14) :]
-            if len(pre_tail) >= 3 and len(post_actual) >= 3:
-                u_stat, u_p = scipy_stats.mannwhitneyu(
-                    pre_tail, post_actual, alternative="two-sided"
-                )
-                print(f"  Mann-Whitney U: U={u_stat:.0f}, p={u_p:.4f}")
-            else:
-                u_stat, u_p = float("nan"), float("nan")
-
             post_comparison = {
                 "n_post_nights": n_post,
                 "mean_shift": round(float(mean_shift), 2),
-                "mann_whitney_U": round(float(u_stat), 1)
-                if not np.isnan(u_stat)
-                else None,
-                "mann_whitney_p": round(float(u_p), 6) if not np.isnan(u_p) else None,
                 "post_dates": [str(d) for d in post_data["date"].values],
                 "post_actual": [round(float(v), 2) for v in post_actual],
-                "post_forecast_median": [
-                    round(float(v), 2) for v in post_forecast_slice
-                ],
+                "post_forecast_median": [round(float(v), 2) for v in post_forecast_slice],
             }
 
         rux_metrics = {
@@ -1367,9 +1175,7 @@ def run_ruxolitinib_analysis(
             "post_period_nights": n_post,
             "pre_pi_width_90": round(float(pre_pi_width), 2) if pre_pi_width else None,
             "post_pi_width_90": round(float(post_pi_width), 2),
-            "uncertainty_change_pct": round(float(uncertainty_change), 1)
-            if uncertainty_change is not None
-            else None,
+            "uncertainty_change_pct": round(float(uncertainty_change), 1) if uncertainty_change is not None else None,
             "inference_time_s": round(elapsed, 2),
         }
         if post_comparison:
@@ -1388,36 +1194,6 @@ def run_ruxolitinib_analysis(
 
         metrics[f"ruxolitinib_{series_name}"] = rux_metrics
 
-    # --- FDR correction across series for Mann-Whitney p-values ---
-    raw_pvals = []
-    pval_keys = []
-    for sname in ["rmssd", "hr"]:
-        if sname in results:
-            m = results[sname]["metrics"]
-            pc = m.get("post_comparison")
-            if pc and pc.get("mann_whitney_p") is not None:
-                raw_pvals.append(pc["mann_whitney_p"])
-                pval_keys.append(sname)
-
-    if len(raw_pvals) >= 2:
-        reject, fdr_pvals, _, _ = multipletests(raw_pvals, method="fdr_bh")
-        print("\n  [FDR] Benjamini-Hochberg correction across ruxolitinib series:")
-        for sname, raw_p, adj_p, rej in zip(pval_keys, raw_pvals, fdr_pvals, reject):
-            results[sname]["metrics"]["post_comparison"]["mann_whitney_p_fdr"] = round(
-                float(adj_p), 6
-            )
-            results[sname]["metrics"]["post_comparison"]["fdr_significant"] = bool(rej)
-            metrics[f"ruxolitinib_{sname}"]["post_comparison"]["mann_whitney_p_fdr"] = (
-                round(float(adj_p), 6)
-            )
-            metrics[f"ruxolitinib_{sname}"]["post_comparison"]["fdr_significant"] = (
-                bool(rej)
-            )
-            print(
-                f"    {sname.upper()}: raw p={raw_p:.4f}, FDR-adjusted p={adj_p:.4f}"
-                f" {'(significant)' if rej else '(not significant)'}"
-            )
-
     torch.cuda.empty_cache()
     gc.collect()
 
@@ -1428,7 +1204,6 @@ def run_ruxolitinib_analysis(
 # VISUALIZATION
 # ===========================================================================
 
-
 def create_forecast_figure(
     title: str,
     context_dates,
@@ -1438,7 +1213,7 @@ def create_forecast_figure(
     forecast: dict,
     series_label: str,
     unit: str,
-    known_event_date: str = KNOWN_EVENT_DATE,
+    known_event_date: str = KNOWN_EVENT_DATE_STR,
     rux_date: str = RUXOLITINIB_START,
     outside_90pi=None,
 ) -> go.Figure:
@@ -1452,138 +1227,110 @@ def create_forecast_figure(
     # --- Context / forecast boundary ---
     boundary_dt = ctx_dt[-1] if len(ctx_dt) > 0 else fc_dt[0]
     fig.add_shape(
-        type="line",
-        x0=boundary_dt,
-        x1=boundary_dt,
-        y0=0,
-        y1=1,
-        yref="paper",
+        type="line", x0=boundary_dt, x1=boundary_dt,
+        y0=0, y1=1, yref="paper",
         line=dict(color="rgba(255,255,255,0.25)", dash="dot", width=1),
     )
 
     # --- Bands first (behind lines) ---
 
-    # 90% PI band - very subtle
-    fig.add_trace(
-        go.Scatter(
-            x=np.concatenate([fc_dt, fc_dt[::-1]]),
-            y=np.concatenate([forecast["q90"], forecast["q10"][::-1]]),
-            fill="toself",
-            fillcolor="rgba(59, 130, 246, 0.08)",
-            line=dict(width=0),
-            name="90% PI",
-            hoverinfo="skip",
-        )
-    )
+    # 90% PI band — very subtle
+    fig.add_trace(go.Scatter(
+        x=np.concatenate([fc_dt, fc_dt[::-1]]),
+        y=np.concatenate([forecast["q90"], forecast["q10"][::-1]]),
+        fill="toself",
+        fillcolor="rgba(59, 130, 246, 0.08)",
+        line=dict(width=0),
+        name="90% PI",
+        hoverinfo="skip",
+    ))
 
-    # 50% PI band - slightly more visible
-    fig.add_trace(
-        go.Scatter(
-            x=np.concatenate([fc_dt, fc_dt[::-1]]),
-            y=np.concatenate([forecast["q75"], forecast["q25"][::-1]]),
-            fill="toself",
-            fillcolor="rgba(59, 130, 246, 0.18)",
-            line=dict(width=0),
-            name="50% PI",
-            hoverinfo="skip",
-        )
-    )
+    # 50% PI band — slightly more visible
+    fig.add_trace(go.Scatter(
+        x=np.concatenate([fc_dt, fc_dt[::-1]]),
+        y=np.concatenate([forecast["q75"], forecast["q25"][::-1]]),
+        fill="toself",
+        fillcolor="rgba(59, 130, 246, 0.18)",
+        line=dict(width=0),
+        name="50% PI",
+        hoverinfo="skip",
+    ))
 
     # --- Lines on top of bands ---
 
-    # Context (historical) - bold solid
-    fig.add_trace(
-        go.Scatter(
-            x=ctx_dt,
-            y=context_values,
-            mode="lines+markers",
-            name=f"Context ({series_label})",
-            line=dict(color=COLOR_PRE, width=2.5),
-            marker=dict(size=3),
-            hovertemplate=(
-                "<b>%{x|%b %d, %Y}</b><br>"
-                + f"{series_label}: %{{y:.1f}} {unit}"
-                + "<extra></extra>"
-            ),
-        )
-    )
+    # Context (historical) — bold solid
+    fig.add_trace(go.Scatter(
+        x=ctx_dt, y=context_values,
+        mode="lines+markers",
+        name=f"Context ({series_label})",
+        line=dict(color=COLOR_PRE, width=2.5),
+        marker=dict(size=3),
+        hovertemplate=(
+            "<b>%{x|%b %d, %Y}</b><br>"
+            + f"{series_label}: %{{y:.1f}} {unit}"
+            + "<extra></extra>"
+        ),
+    ))
 
-    # Actual forecast period - bold solid
-    fig.add_trace(
-        go.Scatter(
-            x=fc_dt,
-            y=actual_values,
-            mode="lines+markers",
-            name="Actual",
-            line=dict(color=COLOR_POST, width=2.5),
-            marker=dict(size=5),
-            hovertemplate=(
-                "<b>%{x|%b %d, %Y}</b><br>"
-                + f"Actual: %{{y:.1f}} {unit}"
-                + "<extra></extra>"
-            ),
-        )
-    )
+    # Actual forecast period — bold solid
+    fig.add_trace(go.Scatter(
+        x=fc_dt, y=actual_values,
+        mode="lines+markers",
+        name="Actual",
+        line=dict(color=COLOR_POST, width=2.5),
+        marker=dict(size=5),
+        hovertemplate=(
+            "<b>%{x|%b %d, %Y}</b><br>"
+            + f"Actual: %{{y:.1f}} {unit}"
+            + "<extra></extra>"
+        ),
+    ))
 
-    # Median forecast - dashed to distinguish from actual
-    fig.add_trace(
-        go.Scatter(
-            x=fc_dt,
-            y=forecast["median"],
-            mode="lines",
-            name="Chronos Median",
-            line=dict(color=COLOR_FORECAST, width=2.5, dash="dash"),
-            hovertemplate=(
-                "<b>%{x|%b %d, %Y}</b><br>"
-                + f"Forecast: %{{y:.1f}} {unit}"
-                + "<extra></extra>"
-            ),
-        )
-    )
+    # Median forecast — dashed to distinguish from actual
+    fig.add_trace(go.Scatter(
+        x=fc_dt, y=forecast["median"],
+        mode="lines",
+        name="Chronos Median",
+        line=dict(color=COLOR_FORECAST, width=2.5, dash="dash"),
+        hovertemplate=(
+            "<b>%{x|%b %d, %Y}</b><br>"
+            + f"Forecast: %{{y:.1f}} {unit}"
+            + "<extra></extra>"
+        ),
+    ))
 
     # --- Anomaly markers on top ---
     if outside_90pi is not None and np.any(outside_90pi):
         anomaly_idx = np.where(outside_90pi)[0]
-        fig.add_trace(
-            go.Scatter(
-                x=fc_dt[anomaly_idx],
-                y=actual_values[anomaly_idx],
-                mode="markers",
-                name="Anomaly (outside 90% PI)",
-                marker=dict(
-                    color=COLOR_ANOMALY,
-                    size=13,
-                    symbol="x-thin-open",
-                    line=dict(width=3, color=COLOR_ANOMALY),
-                ),
-                hovertemplate=(
-                    "<b>ANOMALY</b><br>"
-                    + "<b>%{x|%b %d, %Y}</b><br>"
-                    + f"Actual: %{{y:.1f}} {unit}"
-                    + "<extra></extra>"
-                ),
-            )
-        )
+        fig.add_trace(go.Scatter(
+            x=fc_dt[anomaly_idx],
+            y=actual_values[anomaly_idx],
+            mode="markers",
+            name="Anomaly (outside 90% PI)",
+            marker=dict(
+                color=COLOR_ANOMALY, size=13, symbol="x-thin-open",
+                line=dict(width=3, color=COLOR_ANOMALY),
+            ),
+            hovertemplate=(
+                "<b>ANOMALY</b><br>"
+                + "<b>%{x|%b %d, %Y}</b><br>"
+                + f"Actual: %{{y:.1f}} {unit}"
+                + "<extra></extra>"
+            ),
+        ))
 
     # Known event line
     event_dt = pd.Timestamp(known_event_date)
 
     fig.add_shape(
-        type="line",
-        x0=event_dt,
-        x1=event_dt,
-        y0=0,
-        y1=1,
-        yref="paper",
+        type="line", x0=event_dt, x1=event_dt,
+        y0=0, y1=1, yref="paper",
         line=dict(color=ACCENT_RED, dash="dot", width=2),
     )
     fig.add_annotation(
-        x=event_dt,
-        y=1,
-        yref="paper",
+        x=event_dt, y=1, yref="paper",
         text="<b>Feb 9 akutt hendelse</b>",
-        showarrow=False,
-        yanchor="bottom",
+        showarrow=False, yanchor="bottom",
         font=dict(size=10, color=ACCENT_RED),
         bgcolor="rgba(15, 17, 23, 0.7)",
     )
@@ -1592,48 +1339,35 @@ def create_forecast_figure(
     rux_dt = pd.Timestamp(rux_date)
     if rux_dt <= fc_dt.max():
         fig.add_shape(
-            type="line",
-            x0=rux_dt,
-            x1=rux_dt,
-            y0=0,
-            y1=1,
-            yref="paper",
+            type="line", x0=rux_dt, x1=rux_dt,
+            y0=0, y1=1, yref="paper",
             line=dict(color=COLOR_RUX_LINE, dash="dashdot", width=2),
         )
         fig.add_annotation(
-            x=rux_dt,
-            y=1,
-            yref="paper",
+            x=rux_dt, y=1, yref="paper",
             text="<b>Ruxolitinib start</b>",
-            showarrow=False,
-            yanchor="bottom",
+            showarrow=False, yanchor="bottom",
             font=dict(size=10, color=COLOR_RUX_LINE),
             bgcolor="rgba(15, 17, 23, 0.7)",
         )
 
     fig.update_layout(
         margin=dict(l=50, r=30, t=50, b=40),
-        xaxis_title="Date",
+        xaxis_title="Dato",
         yaxis_title=f"{series_label} ({unit})",
         height=450,
         hovermode="x unified",
         xaxis=dict(
-            spikemode="across",
-            spikethickness=1,
-            spikecolor="rgba(255,255,255,0.15)",
-            spikesnap="cursor",
-            spikedash="dot",
-            showspikes=True,
+            spikemode="across", spikethickness=1,
+            spikecolor="rgba(255,255,255,0.15)", spikesnap="cursor",
+            spikedash="dot", showspikes=True,
             gridcolor="rgba(255,255,255,0.05)",
         ),
         yaxis=dict(
             gridcolor="rgba(255,255,255,0.05)",
-            showspikes=True,
-            spikemode="across",
-            spikethickness=1,
-            spikecolor="rgba(255,255,255,0.15)",
-            spikedash="dot",
-            spikesnap="cursor",
+            showspikes=True, spikemode="across",
+            spikethickness=1, spikecolor="rgba(255,255,255,0.15)",
+            spikedash="dot", spikesnap="cursor",
         ),
     )
 
@@ -1646,8 +1380,7 @@ def create_ensemble_heatmap(ensemble_df: pd.DataFrame) -> go.Figure:
         return go.Figure().add_annotation(text="No ensemble data", showarrow=False)
 
     fig = make_subplots(
-        rows=2,
-        cols=1,
+        rows=2, cols=1,
         shared_xaxes=True,
         vertical_spacing=0.1,
         subplot_titles=("RMSSD Ensemble Consensus", "HR Ensemble Consensus"),
@@ -1672,43 +1405,31 @@ def create_ensemble_heatmap(ensemble_df: pd.DataFrame) -> go.Figure:
         edges = [edge_map.get(c, "rgba(255,255,255,0.1)") for c in sdf["consensus"]]
 
         # Residual bars with refined hover and edge lines
-        fig.add_trace(
-            go.Bar(
-                x=dates,
-                y=sdf["chronos_residual"],
-                marker=dict(
-                    color=colors,
-                    line=dict(width=1, color=edges),
-                ),
-                name=f"Chronos residual ({sname.upper()})",
-                hovertemplate=(
-                    "<b>%{x|%b %d, %Y}</b><br>"
-                    "Residual: %{y:.2f}<br>"
-                    "Level: <b>%{text}</b>"
-                    "<extra></extra>"
-                ),
-                text=sdf["consensus"],
-                showlegend=False,
+        fig.add_trace(go.Bar(
+            x=dates,
+            y=sdf["chronos_residual"],
+            marker=dict(
+                color=colors,
+                line=dict(width=1, color=edges),
             ),
-            row=i,
-            col=1,
-        )
+            name=f"Chronos residual ({sname.upper()})",
+            hovertemplate=(
+                "<b>%{x|%b %d, %Y}</b><br>"
+                "Residual: %{y:.2f}<br>"
+                "Level: <b>%{text}</b>"
+                "<extra></extra>"
+            ),
+            text=sdf["consensus"],
+            showlegend=False,
+        ), row=i, col=1)
 
     # Add legend entries for consensus levels
-    for level, color in [
-        ("HIGH", ACCENT_RED),
-        ("MEDIUM", ACCENT_AMBER),
-        ("NORMAL", ACCENT_GREEN),
-    ]:
-        fig.add_trace(
-            go.Scatter(
-                x=[None],
-                y=[None],
-                mode="markers",
-                marker=dict(size=10, color=color, symbol="square"),
-                name=f"Consensus: {level}",
-            )
-        )
+    for level, color in [("HIGH", ACCENT_RED), ("MEDIUM", ACCENT_AMBER), ("NORMAL", ACCENT_GREEN)]:
+        fig.add_trace(go.Scatter(
+            x=[None], y=[None], mode="markers",
+            marker=dict(size=10, color=color, symbol="square"),
+            name=f"Consensus: {level}",
+        ))
 
     fig.update_layout(
         margin=dict(l=50, r=30, t=100, b=40),
@@ -1719,22 +1440,17 @@ def create_ensemble_heatmap(ensemble_df: pd.DataFrame) -> go.Figure:
 
     # Crosshair spikes and subtle gridlines on both panels
     for ax_suffix in ["", "2"]:
-        fig.update_layout(
-            **{
-                f"xaxis{ax_suffix}": dict(
-                    spikemode="across",
-                    spikethickness=1,
-                    spikecolor="rgba(255,255,255,0.15)",
-                    spikesnap="cursor",
-                    spikedash="dot",
-                    showspikes=True,
-                    gridcolor="rgba(255,255,255,0.05)",
-                ),
-                f"yaxis{ax_suffix}": dict(
-                    gridcolor="rgba(255,255,255,0.05)",
-                ),
-            }
-        )
+        fig.update_layout(**{
+            f"xaxis{ax_suffix}": dict(
+                spikemode="across", spikethickness=1,
+                spikecolor="rgba(255,255,255,0.15)", spikesnap="cursor",
+                spikedash="dot", showspikes=True,
+                gridcolor="rgba(255,255,255,0.05)",
+            ),
+            f"yaxis{ax_suffix}": dict(
+                gridcolor="rgba(255,255,255,0.05)",
+            ),
+        })
 
     return fig
 
@@ -1747,9 +1463,7 @@ def create_ruxolitinib_figure(
 ) -> go.Figure:
     """Create figure comparing pre and post ruxolitinib forecasts."""
     if series_name not in rux_results:
-        return go.Figure().add_annotation(
-            text=f"No {series_name} data", showarrow=False
-        )
+        return go.Figure().add_annotation(text=f"No {series_name} data", showarrow=False)
 
     r = rux_results[series_name]
     fig = go.Figure()
@@ -1760,9 +1474,7 @@ def create_ruxolitinib_figure(
 
     # Generate forecast dates starting from day after last pre-period date
     last_pre_date = pre_dates[-1]
-    fc_dates = pd.date_range(
-        start=last_pre_date + pd.Timedelta(days=1), periods=forecast_len
-    )
+    fc_dates = pd.date_range(start=last_pre_date + pd.Timedelta(days=1), periods=forecast_len)
 
     rux_dt = pd.Timestamp(RUXOLITINIB_START)
 
@@ -1771,34 +1483,26 @@ def create_ruxolitinib_figure(
     x_min = min(all_dates) - pd.Timedelta(days=1)
     x_max = max(all_dates) + pd.Timedelta(days=1)
     fig.add_vrect(
-        x0=x_min,
-        x1=rux_dt,
-        fillcolor="rgba(239, 68, 68, 0.04)",
-        line_width=0,
+        x0=x_min, x1=rux_dt,
+        fillcolor="rgba(239, 68, 68, 0.04)", line_width=0,
         layer="below",
     )
     fig.add_vrect(
-        x0=rux_dt,
-        x1=x_max,
-        fillcolor="rgba(16, 185, 129, 0.04)",
-        line_width=0,
+        x0=rux_dt, x1=x_max,
+        fillcolor="rgba(16, 185, 129, 0.04)", line_width=0,
         layer="below",
     )
 
     # --- Band first (behind lines) ---
-    fig.add_trace(
-        go.Scatter(
-            x=np.concatenate([fc_dates, fc_dates[::-1]]),
-            y=np.concatenate(
-                [forecast["q90"][:forecast_len], forecast["q10"][:forecast_len][::-1]]
-            ),
-            fill="toself",
-            fillcolor="rgba(59, 130, 246, 0.08)",
-            line=dict(width=0),
-            name="90% PI",
-            hoverinfo="skip",
-        )
-    )
+    fig.add_trace(go.Scatter(
+        x=np.concatenate([fc_dates, fc_dates[::-1]]),
+        y=np.concatenate([forecast["q90"][:forecast_len], forecast["q10"][:forecast_len][::-1]]),
+        fill="toself",
+        fillcolor="rgba(59, 130, 246, 0.08)",
+        line=dict(width=0),
+        name="90% PI",
+        hoverinfo="skip",
+    ))
 
     # --- Lines on top ---
 
@@ -1806,21 +1510,19 @@ def create_ruxolitinib_figure(
     pre_values = r["pre_context"]
     # Show last 30 days of pre-period for visual clarity
     show_n = min(30, len(pre_values))
-    fig.add_trace(
-        go.Scatter(
-            x=pre_dates[-show_n:],
-            y=pre_values[-show_n:],
-            mode="lines+markers",
-            name="Pre-ruxolitinib actual",
-            line=dict(color=COLOR_PRE, width=2.5),
-            marker=dict(size=3),
-            hovertemplate=(
-                "<b>%{x|%b %d, %Y}</b><br>"
-                + f"Pre: %{{y:.1f}} {unit}"
-                + "<extra></extra>"
-            ),
-        )
-    )
+    fig.add_trace(go.Scatter(
+        x=pre_dates[-show_n:],
+        y=pre_values[-show_n:],
+        mode="lines+markers",
+        name="Pre-ruxolitinib actual",
+        line=dict(color=COLOR_PRE, width=2.5),
+        marker=dict(size=3),
+        hovertemplate=(
+            "<b>%{x|%b %d, %Y}</b><br>"
+            + f"Pre: %{{y:.1f}} {unit}"
+            + "<extra></extra>"
+        ),
+    ))
 
     # Post-period actual (if available)
     post_data = r["post_data"]
@@ -1832,100 +1534,74 @@ def create_ruxolitinib_figure(
         else:
             post_vals = post_data["nightly_hr_mean"].values
 
-        fig.add_trace(
-            go.Scatter(
-                x=post_dates,
-                y=post_vals,
-                mode="lines+markers",
-                name="Post-ruxolitinib actual",
-                line=dict(color=COLOR_POST, width=2.5),
-                marker=dict(size=5),
-                hovertemplate=(
-                    "<b>%{x|%b %d, %Y}</b><br>"
-                    + f"Post: %{{y:.1f}} {unit}"
-                    + "<extra></extra>"
-                ),
-            )
-        )
-
-    # Forecast line
-    fig.add_trace(
-        go.Scatter(
-            x=fc_dates,
-            y=forecast["median"],
-            mode="lines",
-            name="Chronos forecast (median)",
-            line=dict(color=COLOR_FORECAST, width=2.5, dash="dash"),
+        fig.add_trace(go.Scatter(
+            x=post_dates,
+            y=post_vals,
+            mode="lines+markers",
+            name="Post-ruxolitinib actual",
+            line=dict(color=COLOR_POST, width=2.5),
+            marker=dict(size=5),
             hovertemplate=(
                 "<b>%{x|%b %d, %Y}</b><br>"
-                + f"Forecast: %{{y:.1f}} {unit}"
+                + f"Post: %{{y:.1f}} {unit}"
                 + "<extra></extra>"
             ),
-        )
-    )
+        ))
+
+    # Forecast line
+    fig.add_trace(go.Scatter(
+        x=fc_dates, y=forecast["median"],
+        mode="lines",
+        name="Chronos forecast (median)",
+        line=dict(color=COLOR_FORECAST, width=2.5, dash="dash"),
+        hovertemplate=(
+            "<b>%{x|%b %d, %Y}</b><br>"
+            + f"Forecast: %{{y:.1f}} {unit}"
+            + "<extra></extra>"
+        ),
+    ))
 
     # Ruxolitinib intervention line
     fig.add_shape(
-        type="line",
-        x0=rux_dt,
-        x1=rux_dt,
-        y0=0,
-        y1=1,
-        yref="paper",
+        type="line", x0=rux_dt, x1=rux_dt,
+        y0=0, y1=1, yref="paper",
         line=dict(color=COLOR_RUX_LINE, dash="dashdot", width=2),
     )
     fig.add_annotation(
-        x=rux_dt,
-        y=1,
-        yref="paper",
+        x=rux_dt, y=1, yref="paper",
         text="<b>Ruxolitinib 10mg BID</b>",
-        showarrow=False,
-        yanchor="bottom",
+        showarrow=False, yanchor="bottom",
         font=dict(size=11, color=COLOR_RUX_LINE, family=FONT_FAMILY),
         bgcolor="rgba(15, 17, 23, 0.7)",
     )
 
     # PI width annotation
-    pi_text = f"Pre PI width: {r['pre_pi_width']:.1f}" if r["pre_pi_width"] else ""
+    pi_text = f"Pre PI width: {r['pre_pi_width']:.1f}" if r['pre_pi_width'] else ""
     pi_text += f"<br>Post PI width: {r['post_pi_width']:.1f}"
     fig.add_annotation(
-        x=0.02,
-        y=0.98,
-        xref="paper",
-        yref="paper",
-        text=pi_text,
-        showarrow=False,
-        xanchor="left",
-        yanchor="top",
+        x=0.02, y=0.98, xref="paper", yref="paper",
+        text=pi_text, showarrow=False, xanchor="left", yanchor="top",
         font=dict(size=11, family=FONT_FAMILY),
-        bgcolor=BG_ELEVATED,
-        bordercolor=BORDER_SUBTLE,
-        borderwidth=1,
+        bgcolor=BG_ELEVATED, bordercolor=BORDER_SUBTLE, borderwidth=1,
     )
 
     fig.update_layout(
         margin=dict(l=50, r=30, t=50, b=40),
-        xaxis_title="Date",
+        xaxis_title="Dato",
         yaxis_title=f"{col_label} ({unit})",
         height=450,
         hovermode="x unified",
         xaxis=dict(
-            spikemode="across",
-            spikethickness=1,
-            spikecolor="rgba(255,255,255,0.15)",
-            spikesnap="cursor",
-            spikedash="dot",
-            showspikes=True,
+            spikemode="across", spikethickness=1,
+            spikecolor="rgba(255,255,255,0.15)", spikesnap="cursor",
+            spikedash="dot", showspikes=True,
             gridcolor="rgba(255,255,255,0.05)",
         ),
         yaxis=dict(
             gridcolor="rgba(255,255,255,0.05)",
-            showspikes=True,
-            spikemode="across",
-            spikethickness=1,
-            spikecolor="rgba(255,255,255,0.15)",
-            spikedash="dot",
-            spikesnap="cursor",
+            showspikes=True, spikemode="across",
+            spikethickness=1, spikecolor="rgba(255,255,255,0.15)",
+            spikedash="dot", spikesnap="cursor",
         ),
     )
 
@@ -1941,72 +1617,66 @@ def create_hourly_hr_figure(hourly_results: dict) -> go.Figure:
     forecast = hourly_results["forecast"]
     anomalous = hourly_results["anomalous_mask"]
 
-    # --- Band first (behind lines) - very subtle ---
-    fig.add_trace(
-        go.Scatter(
-            x=np.concatenate([forecast_times, forecast_times[::-1]]),
-            y=np.concatenate([forecast["q90"], forecast["q10"][::-1]]),
-            fill="toself",
-            fillcolor="rgba(59, 130, 246, 0.08)",
-            line=dict(width=0),
-            name="90% PI",
-            hoverinfo="skip",
-        )
-    )
+    # --- Band first (behind lines) — very subtle ---
+    fig.add_trace(go.Scatter(
+        x=np.concatenate([forecast_times, forecast_times[::-1]]),
+        y=np.concatenate([forecast["q90"], forecast["q10"][::-1]]),
+        fill="toself",
+        fillcolor="rgba(59, 130, 246, 0.08)",
+        line=dict(width=0),
+        name="90% PI",
+        hoverinfo="skip",
+    ))
 
     # --- Lines on top ---
     # Actual HR: subtle fine-grained data (thinner, smaller markers)
-    fig.add_trace(
-        go.Scatter(
-            x=forecast_times,
-            y=actual,
-            mode="lines+markers",
-            name="Actual HR",
-            line=dict(color=COLOR_POST, width=1.2),
-            marker=dict(size=2),
-            opacity=0.7,
-            hovertemplate=(
-                "<b>%{x|%b %d %H:%M}</b><br>Actual: %{y:.0f} bpm<extra></extra>"
-            ),
-        )
-    )
+    fig.add_trace(go.Scatter(
+        x=forecast_times,
+        y=actual,
+        mode="lines+markers",
+        name="Actual HR",
+        line=dict(color=COLOR_POST, width=1.2),
+        marker=dict(size=2),
+        opacity=0.7,
+        hovertemplate=(
+            "<b>%{x|%b %d %H:%M}</b><br>"
+            "Actual: %{y:.0f} bpm"
+            "<extra></extra>"
+        ),
+    ))
 
     # Forecast: prominent (bolder, dashed)
-    fig.add_trace(
-        go.Scatter(
-            x=forecast_times,
-            y=forecast["median"],
-            mode="lines",
-            name="Chronos Median",
-            line=dict(color=COLOR_FORECAST, width=2.5, dash="dash"),
-            hovertemplate=(
-                "<b>%{x|%b %d %H:%M}</b><br>Forecast: %{y:.0f} bpm<extra></extra>"
-            ),
-        )
-    )
+    fig.add_trace(go.Scatter(
+        x=forecast_times,
+        y=forecast["median"],
+        mode="lines",
+        name="Chronos Median",
+        line=dict(color=COLOR_FORECAST, width=2.5, dash="dash"),
+        hovertemplate=(
+            "<b>%{x|%b %d %H:%M}</b><br>"
+            "Forecast: %{y:.0f} bpm"
+            "<extra></extra>"
+        ),
+    ))
 
-    # --- Anomaly markers on top - red with white outlines ---
+    # --- Anomaly markers on top — red with white outlines ---
     if np.any(anomalous):
-        fig.add_trace(
-            go.Scatter(
-                x=forecast_times[anomalous],
-                y=actual[anomalous],
-                mode="markers",
-                name="Anomalous (>2 SD)",
-                marker=dict(
-                    color=COLOR_ANOMALY,
-                    size=11,
-                    symbol="x-thin-open",
-                    line=dict(width=3, color=COLOR_ANOMALY),
-                ),
-                hovertemplate=(
-                    "<b>ANOMALY</b><br>"
-                    "<b>%{x|%b %d %H:%M}</b><br>"
-                    "Actual: %{y:.0f} bpm"
-                    "<extra></extra>"
-                ),
-            )
-        )
+        fig.add_trace(go.Scatter(
+            x=forecast_times[anomalous],
+            y=actual[anomalous],
+            mode="markers",
+            name="Anomalous (>2 SD)",
+            marker=dict(
+                color=COLOR_ANOMALY, size=11, symbol="x-thin-open",
+                line=dict(width=3, color=COLOR_ANOMALY),
+            ),
+            hovertemplate=(
+                "<b>ANOMALY</b><br>"
+                "<b>%{x|%b %d %H:%M}</b><br>"
+                "Actual: %{y:.0f} bpm"
+                "<extra></extra>"
+            ),
+        ))
 
     fig.update_layout(
         margin=dict(l=50, r=30, t=50, b=40),
@@ -2015,22 +1685,16 @@ def create_hourly_hr_figure(hourly_results: dict) -> go.Figure:
         height=450,
         hovermode="x unified",
         xaxis=dict(
-            spikemode="across",
-            spikethickness=1,
-            spikecolor="rgba(255,255,255,0.15)",
-            spikesnap="cursor",
-            spikedash="dot",
-            showspikes=True,
+            spikemode="across", spikethickness=1,
+            spikecolor="rgba(255,255,255,0.15)", spikesnap="cursor",
+            spikedash="dot", showspikes=True,
             gridcolor="rgba(255,255,255,0.05)",
         ),
         yaxis=dict(
             gridcolor="rgba(255,255,255,0.05)",
-            showspikes=True,
-            spikemode="across",
-            spikethickness=1,
-            spikecolor="rgba(255,255,255,0.15)",
-            spikedash="dot",
-            spikesnap="cursor",
+            showspikes=True, spikemode="across",
+            spikethickness=1, spikecolor="rgba(255,255,255,0.15)",
+            spikedash="dot", spikesnap="cursor",
         ),
     )
 
@@ -2040,7 +1704,6 @@ def create_hourly_hr_figure(hourly_results: dict) -> go.Figure:
 # ===========================================================================
 # HTML REPORT GENERATION
 # ===========================================================================
-
 
 def generate_simple_html_report(
     figures: list[tuple[str, go.Figure]],
@@ -2071,9 +1734,7 @@ def generate_simple_html_report(
         for key in ("feb9_retro_rmssd", "feb9_retro_hr")
         if metrics.get(key, {}).get("feb9_detected", False)
     )
-    feb9_retro_total = sum(
-        1 for key in ("feb9_retro_rmssd", "feb9_retro_hr") if key in metrics
-    )
+    feb9_retro_total = sum(1 for key in ("feb9_retro_rmssd", "feb9_retro_hr") if key in metrics)
     if not chronos_available or feb9_retro_total == 0:
         feb9_retro_value = "Not run"
         feb9_retro_status = "warning" if not chronos_available else "info"
@@ -2081,11 +1742,9 @@ def generate_simple_html_report(
     else:
         feb9_retro_value = f"{feb9_retro_hits}/{feb9_retro_total}"
         feb9_retro_status = (
-            "normal"
-            if feb9_retro_hits == feb9_retro_total
-            else "warning"
-            if feb9_retro_hits > 0
-            else "critical"
+            "normal" if feb9_retro_hits == feb9_retro_total else
+            "warning" if feb9_retro_hits > 0 else
+            "critical"
         )
         feb9_retro_detail = "Chronos retrospective holdout detected Feb 9"
 
@@ -2102,14 +1761,14 @@ def generate_simple_html_report(
             rmssd_m.get("mae", "N/A"),
             unit="ms",
             status="normal" if rmssd_m.get("mae", 99) < 5 else "warning",
-            detail=f"90% PI coverage: {rmssd_m.get('coverage_90pi', 'N/A')}%",
+            detail=f'90% PI coverage: {rmssd_m.get("coverage_90pi", "N/A")}%',
         ),
         make_kpi_card(
             "HR MAE",
             hr_m.get("mae", "N/A"),
             unit="bpm",
             status="normal" if hr_m.get("mae", 99) < 3 else "warning",
-            detail=f"90% PI coverage: {hr_m.get('coverage_90pi', 'N/A')}%",
+            detail=f'90% PI coverage: {hr_m.get("coverage_90pi", "N/A")}%',
         ),
         make_kpi_card(
             "Feb 9 Chronos Holdout",
@@ -2120,16 +1779,16 @@ def generate_simple_html_report(
         ),
         make_kpi_card(
             "Ruxolitinib Start",
-            RUXOLITINIB_START,
+            TREATMENT_START.strftime("%-d. %b %Y").lower(),
             status="info",
             decimals=0,
         ),
         make_kpi_card(
-            f"{metrics.get('data_month', 'Recent')} Ensemble",
+            "March Ensemble",
             "Chronos + ARIMA" if chronos_available else "ARIMA only",
             status="neutral",
             decimals=0,
-            detail=f"{len(high_dates)} HIGH confidence anomalies in {metrics.get('data_month', 'recent')} window",
+            detail=f'{len(high_dates)} HIGH confidence anomalies | Feb 9 {"detected" if feb9_ens else "not detected"}',
         ),
     ]
     body = make_kpi_row(*kpi_cards)
@@ -2137,35 +1796,10 @@ def generate_simple_html_report(
     # --- Section 1: Nightly RMSSD and HR ---
     if chronos_available:
         sec1_title = "1. Nightly RMSSD and HR - Chronos-2 Probabilistic Forecast"
-        # Summarize FDR anomaly counts
-        rmssd_fdr_n = metrics.get("chronos_nightly_rmssd", {}).get(
-            "n_anomalies_fdr_corrected"
-        )
-        hr_fdr_n = metrics.get("chronos_nightly_hr", {}).get(
-            "n_anomalies_fdr_corrected"
-        )
-        rmssd_raw_n = metrics.get("chronos_nightly_rmssd", {}).get(
-            "n_anomalies_outside_90pi"
-        )
-        hr_raw_n = metrics.get("chronos_nightly_hr", {}).get("n_anomalies_outside_90pi")
-        fdr_note = ""
-        if rmssd_fdr_n is not None or hr_fdr_n is not None:
-            parts = []
-            if rmssd_raw_n is not None and rmssd_fdr_n is not None:
-                parts.append(f"RMSSD: {rmssd_raw_n} raw, {rmssd_fdr_n} FDR-corrected")
-            if hr_raw_n is not None and hr_fdr_n is not None:
-                parts.append(f"HR: {hr_raw_n} raw, {hr_fdr_n} FDR-corrected")
-            fdr_note = (
-                "<br><strong>Anomalies (Benjamini-Hochberg FDR):</strong> "
-                + "; ".join(parts)
-                + "."
-            )
         sec1_desc = (
             f"<p>{CONTEXT_LENGTH} nights context, {FORECAST_HORIZON} nights forecast. "
             f"Shaded bands: 90% (light) and 50% (dark) prediction intervals. "
-            f"Cross = anomaly outside 90% PI. Per-point exceedance p-values are "
-            f"FDR-corrected (Benjamini-Hochberg) across all forecast points and series."
-            f"{fdr_note}</p>"
+            f"Cross = anomaly outside 90% PI.</p>"
         )
     else:
         sec1_title = "1. Nightly RMSSD and HR - Chronos unavailable"
@@ -2182,16 +1816,14 @@ def generate_simple_html_report(
 
     # --- Section 2: Continuous Hourly HR ---
     sec2_desc = (
-        f"<p>{metrics.get('n_raw_hr_readings', 0):,} HR readings downsampled to hourly means. "
+        "<p>21K+ HR readings downsampled to hourly means. "
         "Sliding window detection identifies anomalous segments.</p>"
         if chronos_available
         else "<p>Hourly Chronos analysis was skipped because the Chronos pipeline was unavailable.</p>"
     )
     sec2_chart = chart_divs.get("hourly_hr", "")
     body += make_section(
-        "2. Continuous HR - Hourly Resolution Forecast"
-        if chronos_available
-        else "2. Continuous HR - Chronos unavailable",
+        "2. Continuous HR - Hourly Resolution Forecast" if chronos_available else "2. Continuous HR - Chronos unavailable",
         sec2_desc + sec2_chart,
         section_id="hourly-hr",
     )
@@ -2206,8 +1838,8 @@ def generate_simple_html_report(
     sec3_chart = chart_divs.get("ensemble", "")
     body += make_section(
         "3. Ensemble Consensus - Foundation Model + ARIMA Baseline"
-        if chronos_available
-        else "3. Statistical Baseline - ARIMA",
+        if chronos_available else
+        "3. Statistical Baseline - ARIMA",
         sec3_desc + sec3_chart,
         section_id="ensemble",
     )
@@ -2223,10 +1855,10 @@ def generate_simple_html_report(
             residual = m.get("feb9_residual", "N/A")
             det_color = ACCENT_RED if detected else TEXT_SECONDARY
             feb9_rows += (
-                f"<tr><td>Chronos Retrospective</td><td>{sname.upper()}</td>"
+                f'<tr><td>Chronos Retrospective</td><td>{sname.upper()}</td>'
                 f'<td style="color:{det_color};font-weight:700">'
-                f"{'YES' if detected else 'No'}</td>"
-                f"<td>{residual}</td></tr>"
+                f'{"YES" if detected else "No"}</td>'
+                f'<td>{residual}</td></tr>'
             )
 
     summary_box = f"""
@@ -2237,19 +1869,19 @@ def generate_simple_html_report(
             {feb9_rows if feb9_rows else '<tr><td colspan="4">Chronos retrospective not available in this run.</td></tr>'}
         </table>
         <p style="margin-top: 8px;">
-            Prospective {metrics.get("data_month", "recent")} ensemble HIGH-confidence anomalies:
-            <strong>{", ".join(high_dates) if high_dates else "None detected"}</strong><br>
-            Feb 9 in {metrics.get("data_month", "recent")} ensemble consensus:
+            Prospective March ensemble HIGH-confidence anomalies:
+            <strong>{', '.join(high_dates) if high_dates else 'None detected'}</strong><br>
+            Feb 9 in March ensemble consensus:
             <strong style="color:{ACCENT_RED if feb9_ens else TEXT_SECONDARY}">
-            {"YES" if feb9_ens else "No"}</strong>
+            {'YES' if feb9_ens else 'No'}</strong>
         </p>
     </div>"""
 
     sec4_desc = (
         "<p>Model trained on all data through February 8, forecast for February 9-15. "
         "Tests whether the foundation model would have flagged the acute event prospectively.</p>"
-        if chronos_available
-        else "<p>Retrospective Chronos validation was skipped because the foundation model was unavailable.</p>"
+        if chronos_available else
+        "<p>Retrospective Chronos validation was skipped because the foundation model was unavailable.</p>"
     )
     sec4_charts = chart_divs.get("feb9_rmssd", "") + chart_divs.get("feb9_hr", "")
     body += make_section(
@@ -2259,35 +1891,12 @@ def generate_simple_html_report(
     )
 
     # --- Section 5: Pre vs Post Ruxolitinib ---
-    # Build ruxolitinib p-value summary
-    rux_pval_parts = []
-    for sname in ["rmssd", "hr"]:
-        rux_m = metrics.get(f"ruxolitinib_{sname}", {}).get("post_comparison", {})
-        raw_p = rux_m.get("mann_whitney_p")
-        fdr_p = rux_m.get("mann_whitney_p_fdr")
-        fdr_sig = rux_m.get("fdr_significant")
-        if raw_p is not None:
-            sig_label = "significant" if fdr_sig else "not significant"
-            p_str = f"{sname.upper()}: raw p={raw_p:.4f}"
-            if fdr_p is not None:
-                p_str += f", FDR-adjusted p={fdr_p:.4f} ({sig_label})"
-            rux_pval_parts.append(p_str)
-    rux_pval_note = ""
-    if rux_pval_parts:
-        rux_pval_note = (
-            "<br><strong>Mann-Whitney U (BH FDR-corrected):</strong> "
-            + "; ".join(rux_pval_parts)
-            + "."
-        )
-
     sec5_desc = (
         "<p>Model trained on pre-ruxolitinib period and forecasts into treatment period. "
         "Narrower prediction intervals indicate stabilization, "
-        "systematic shift indicates treatment effect. "
-        "Pre vs post Mann-Whitney U p-values are FDR-corrected (Benjamini-Hochberg) "
-        f"across series.{rux_pval_note}</p>"
-        if chronos_available
-        else "<p>Pre/post-ruxolitinib Chronos regime analysis was skipped because the foundation model was unavailable.</p>"
+        "systematic shift indicates treatment effect.</p>"
+        if chronos_available else
+        "<p>Pre/post-ruxolitinib Chronos regime analysis was skipped because the foundation model was unavailable.</p>"
     )
     sec5_charts = chart_divs.get("rux_rmssd", "") + chart_divs.get("rux_hr", "")
     body += make_section(
@@ -2319,7 +1928,7 @@ def generate_simple_html_report(
                 metrics_rows += f"<tr><td></td><td>{k}</td><td>{display}</td></tr>\n"
 
     metrics_table = (
-        "<table><tr><th>Section</th><th>Metric</th><th>Value</th></tr>\n"
+        '<table><tr><th>Section</th><th>Metric</th><th>Value</th></tr>\n'
         + metrics_rows
         + "</table>"
     )
@@ -2328,13 +1937,13 @@ def generate_simple_html_report(
     # --- N=1 disclaimer ---
     disclaimer = (
         '<div style="margin:16px 0;padding:12px 16px;border-left:3px solid '
-        f"{ACCENT_AMBER};background:rgba(245,158,11,0.06);border-radius:4px;"
+        f'{ACCENT_AMBER};background:rgba(245,158,11,0.06);border-radius:4px;'
         f'font-size:0.85rem;color:{TEXT_SECONDARY}">'
-        "<strong>N=1 retrospective case study.</strong> "
-        "All detection metrics are descriptive, not inferential. "
-        "The model was trained and evaluated on a single patient's data. "
-        "Validation requires an external multi-patient cohort."
-        "</div>"
+        '<strong>N=1 retrospective case study.</strong> '
+        'All detection metrics are descriptive, not inferential. '
+        'The model was trained and evaluated on a single patient\'s data. '
+        'Validation requires an external multi-patient cohort.'
+        '</div>'
     )
     body += disclaimer
 
@@ -2373,15 +1982,12 @@ def generate_simple_html_report(
         report_id="foundation",
         subtitle="Amazon Chronos-2 + ARIMA Statistical Baseline - Oura Ring Biometrics, Post-HSCT",
         extra_css=extra_css,
-        data_start=metrics.get("data_range", {}).get("start"),
-        data_end=metrics.get("data_range", {}).get("end"),
     )
 
 
 # ===========================================================================
 # MAIN
 # ===========================================================================
-
 
 def main() -> int:
     """Run all foundation model analyses and generate report."""
@@ -2398,7 +2004,7 @@ def main() -> int:
         "generated_at": generated_at,
         "run_timestamp": generated_at,
         "model": CHRONOS_MODEL,
-        "known_event": KNOWN_EVENT_DATE,
+        "known_event": KNOWN_EVENT_DATE_STR,
         "ruxolitinib_start": RUXOLITINIB_START,
     }
 
@@ -2413,13 +2019,6 @@ def main() -> int:
                 "end": str(nightly["date"].max()),
                 "n_nights": int(len(nightly)),
             }
-        # Store raw HR count and data month for dynamic report labels
-        metrics["n_raw_hr_readings"] = int(len(data["hr"])) if "hr" in data else 0
-        metrics["data_month"] = (
-            pd.to_datetime(nightly["date"]).iloc[-1].strftime("%B")
-            if not nightly.empty
-            else "Unknown"
-        )
     except Exception as e:
         print(f"[ERROR] Data loading failed: {e}")
         traceback.print_exc()
@@ -2447,10 +2046,7 @@ def main() -> int:
     else:
         try:
             chronos_nightly = run_chronos_nightly(pipeline, nightly, metrics)
-            for sname, label, unit in [
-                ("rmssd", "RMSSD", "ms"),
-                ("hr", "Heart Rate", "bpm"),
-            ]:
+            for sname, label, unit in [("rmssd", "RMSSD", "ms"), ("hr", "Heart Rate", "bpm")]:
                 if sname in chronos_nightly:
                     r = chronos_nightly[sname]
                     fig = create_forecast_figure(
@@ -2473,9 +2069,7 @@ def main() -> int:
     # --- Analysis 2: Hourly HR ---
     hourly_hr_results = {}
     if pipeline is None:
-        print(
-            "[WARN] Skipping hourly HR Chronos analysis: Chronos pipeline unavailable"
-        )
+        print("[WARN] Skipping hourly HR Chronos analysis: Chronos pipeline unavailable")
     else:
         try:
             hourly_hr_results = run_chronos_hourly_hr(pipeline, hourly, metrics)
@@ -2502,16 +2096,11 @@ def main() -> int:
     # --- Analysis 4: Feb 9 retrospective ---
     feb9_results = {}
     if pipeline is None:
-        print(
-            "[WARN] Skipping Feb 9 Chronos retrospective: Chronos pipeline unavailable"
-        )
+        print("[WARN] Skipping Feb 9 Chronos retrospective: Chronos pipeline unavailable")
     else:
         try:
             feb9_results = run_feb9_retrospective(pipeline, nightly, metrics)
-            for sname, label, unit in [
-                ("rmssd", "RMSSD", "ms"),
-                ("hr", "Heart Rate", "bpm"),
-            ]:
+            for sname, label, unit in [("rmssd", "RMSSD", "ms"), ("hr", "Heart Rate", "bpm")]:
                 if sname in feb9_results:
                     r = feb9_results[sname]
                     fig = create_forecast_figure(
@@ -2531,17 +2120,13 @@ def main() -> int:
                         end=pd.Timestamp(r["actual_dates"][0]) - pd.Timedelta(days=1),
                         periods=len(ctx_tail),
                     )
-                    fig.add_trace(
-                        go.Scatter(
-                            x=ctx_dates,
-                            y=ctx_tail,
-                            mode="lines+markers",
-                            name="Context (last 14 nights)",
-                            line=dict(color=COLOR_PRE, width=2),
-                            marker=dict(size=3),
-                            opacity=0.6,
-                        )
-                    )
+                    fig.add_trace(go.Scatter(
+                        x=ctx_dates, y=ctx_tail,
+                        mode="lines+markers",
+                        name="Context (last 14 nights)",
+                        line=dict(color=COLOR_PRE, width=2),
+                        marker=dict(size=3), opacity=0.6,
+                    ))
                     figures.append((f"feb9_{sname}", fig))
         except Exception as e:
             print(f"[ERROR] Feb 9 retrospective failed: {e}")
@@ -2550,16 +2135,11 @@ def main() -> int:
     # --- Analysis 5: Ruxolitinib ---
     rux_results = {}
     if pipeline is None:
-        print(
-            "[WARN] Skipping ruxolitinib Chronos analysis: Chronos pipeline unavailable"
-        )
+        print("[WARN] Skipping ruxolitinib Chronos analysis: Chronos pipeline unavailable")
     else:
         try:
             rux_results = run_ruxolitinib_analysis(pipeline, nightly, metrics)
-            for sname, label, unit in [
-                ("rmssd", "RMSSD", "ms"),
-                ("hr", "Heart Rate", "bpm"),
-            ]:
+            for sname, label, unit in [("rmssd", "RMSSD", "ms"), ("hr", "Heart Rate", "bpm")]:
                 fig_rux = create_ruxolitinib_figure(rux_results, sname, label, unit)
                 figures.append((f"rux_{sname}", fig_rux))
         except Exception as e:
@@ -2579,9 +2159,9 @@ def main() -> int:
         HTML_OUTPUT.write_text(html, encoding="utf-8")
         print(f"[REPORT] HTML report saved: {HTML_OUTPUT}")
     except Exception as e:
-        logging.error("Failed to write HTML report: %s", e)
+        print(f"[ERROR] HTML generation failed: {e}")
         traceback.print_exc()
-        raise
+        raise SystemExit(1) from e
 
     # Save JSON metrics
     try:
@@ -2595,7 +2175,7 @@ def main() -> int:
                 return obj.tolist()
             if isinstance(obj, (np.bool_,)):
                 return bool(obj)
-            if isinstance(obj, pd.Timestamp):
+            if isinstance(obj, (pd.Timestamp, datetime, date)):
                 return str(obj)
             return obj
 
@@ -2606,9 +2186,9 @@ def main() -> int:
         )
         print(f"[REPORT] JSON metrics saved: {JSON_OUTPUT}")
     except Exception as e:
-        logging.error("Failed to write JSON metrics: %s", e)
+        print(f"[ERROR] JSON save failed: {e}")
         traceback.print_exc()
-        raise
+        raise SystemExit(1) from e
 
     # Summary
     print("\n" + "=" * 70)
@@ -2624,15 +2204,11 @@ def main() -> int:
         if key in metrics:
             m = metrics[key]
             status = "DETECTED" if m.get("feb9_detected") else "not detected"
-            print(
-                f"  Feb 9 ({sname.upper()}): {status} (residual: {m.get('feb9_residual', 'N/A')})"
-            )
+            print(f"  Feb 9 ({sname.upper()}): {status} (residual: {m.get('feb9_residual', 'N/A')})")
 
     ens = metrics.get("ensemble_consensus", {})
     if "high_confidence_anomaly_dates" in ens:
-        print(
-            f"  HIGH confidence anomaly dates: {ens['high_confidence_anomaly_dates']}"
-        )
+        print(f"  HIGH confidence anomaly dates: {ens['high_confidence_anomaly_dates']}")
 
     print("=" * 70)
 

@@ -3,8 +3,6 @@
 Re-exports from the top-level config.py for backwards compatibility.
 New scripts should import from config directly.
 """
-
-import logging
 import os
 import sys
 from pathlib import Path
@@ -13,7 +11,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent  # oura-digital-twin/
 
 sys.path.insert(0, str(REPO_ROOT))
-from config import DATABASE_PATH  # noqa: E402
+from config import DATABASE_PATH, REPORTS_DIR, validate_config  # noqa: E402
 
 # Backwards-compatible aliases
 BIOMETRICS_DB = DATABASE_PATH
@@ -27,7 +25,10 @@ def _resolve_symlink(p: Path) -> Path | None:
         if target.exists() and os.access(str(target), os.R_OK):
             return target
         # Dangling symlink
-        logging.warning("Symlink exists but target is missing: %s -> %s", p, target)
+        print(
+            f"WARNING: Symlink exists but target is missing: "
+            f"{p} -> {target}"
+        )
         return None
     if p.exists():
         return p.resolve()
@@ -37,10 +38,9 @@ def _resolve_symlink(p: Path) -> Path | None:
 # Verify DATABASE_PATH symlink target actually exists
 _db_resolved = _resolve_symlink(DATABASE_PATH)
 if _db_resolved is None and DATABASE_PATH.is_symlink():
-    logging.warning(
-        "DATABASE_PATH symlink is dangling: %s -> %s",
-        DATABASE_PATH,
-        DATABASE_PATH.resolve(),
+    print(
+        f"WARNING: DATABASE_PATH symlink is dangling: {DATABASE_PATH} "
+        f"-> {DATABASE_PATH.resolve()}"
     )
 
 # Investigation DB (used by analyze_oura_full.py)
@@ -57,8 +57,8 @@ else:
         INVESTIGATION_DB = _parent_inv
 
 if INVESTIGATION_DB is None:
-    logging.info(
-        "Investigation DB not found - timeline features will be "
+    print(
+        "INFO: Investigation DB not found — timeline features will be "
         "disabled. Looked in data/investigation.db and "
         "../database/investigation.db"
     )

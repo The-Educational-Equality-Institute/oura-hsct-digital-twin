@@ -48,7 +48,6 @@ warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 try:
     from statsmodels.tools.sm_exceptions import ValueWarning
-
     warnings.filterwarnings("ignore", category=ValueWarning)
 except ImportError:
     pass
@@ -58,7 +57,6 @@ except ImportError:
 # ---------------------------------------------------------------------------
 try:
     from causalimpact import CausalImpact
-
     CAUSALIMPACT_AVAILABLE = True
 except ImportError:
     CAUSALIMPACT_AVAILABLE = False
@@ -66,7 +64,6 @@ except ImportError:
 
 try:
     from statsmodels.stats.multitest import multipletests
-
     MULTIPLETESTS_AVAILABLE = True
 except ImportError:
     MULTIPLETESTS_AVAILABLE = False
@@ -77,14 +74,14 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Hardening constants
 # ---------------------------------------------------------------------------
-MIN_PRE_DAYS = 14  # Minimum pre-intervention data points
-MIN_POST_DAYS = 3  # Minimum post-intervention data points
+MIN_PRE_DAYS = 14      # Minimum pre-intervention data points
+MIN_POST_DAYS = 3      # Minimum post-intervention data points
 MAX_NAN_FRACTION = 0.30  # Maximum fraction of NaN values allowed
 CI_WIDTH_WARN_RATIO = 2.0  # Flag low confidence when CI width > 200% of point estimate
-PLACEBO_MIN_PRE = 7  # Minimum pre-days for placebo tests
-PLACEBO_MIN_POST = 5  # Minimum post-days for placebo tests
+PLACEBO_MIN_PRE = 7    # Minimum pre-days for placebo tests
+PLACEBO_MIN_POST = 5   # Minimum post-days for placebo tests
 SAFE_LOG_MIN = 1e-300  # Floor for log operations
-SAFE_DIV_EPS = 1e-15  # Epsilon for safe division
+SAFE_DIV_EPS = 1e-15   # Epsilon for safe division
 
 # ---------------------------------------------------------------------------
 # Path resolution & patient config
@@ -93,45 +90,30 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from config import (
     DATABASE_PATH,
     REPORTS_DIR,
+    TRANSPLANT_DATE,
     TREATMENT_START,
+    PATIENT_AGE,
     PATIENT_LABEL,
     DATA_START,
-    HEV_DIAGNOSIS_DATE,
+    ESC_RMSSD_DEFICIENCY,
+    NOCTURNAL_HR_ELEVATED,
+    POPULATION_RMSSD_MEDIAN,
 )
 
 from _theme import (
-    wrap_html,
-    make_kpi_card,
-    make_kpi_row,
-    make_section,
-    format_p_value,
-    COLORWAY,
-    BG_PRIMARY,
-    BG_SURFACE,
-    BG_ELEVATED,
-    BORDER_SUBTLE,
-    BORDER_DEFAULT,
-    TEXT_PRIMARY,
-    TEXT_SECONDARY,
-    TEXT_TERTIARY,
-    ACCENT_BLUE,
-    ACCENT_GREEN,
-    ACCENT_RED,
-    ACCENT_AMBER,
-    C_PRE_TX,
-    C_POST_TX,
-    C_RUX_LINE,
-    C_EFFECT,
-    C_COUNTERFACTUAL,
+    wrap_html, make_kpi_card, make_kpi_row, make_section, format_p_value,
+    COLORWAY, STATUS_COLORS, BG_PRIMARY, BG_SURFACE, BG_ELEVATED,
+    BORDER_SUBTLE, BORDER_DEFAULT, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_TERTIARY,
+    ACCENT_BLUE, ACCENT_GREEN, ACCENT_RED, ACCENT_AMBER,
+    C_PRE_TX, C_POST_TX, C_RUX_LINE, C_EFFECT, C_COUNTERFACTUAL,
 )
-
 pio.templates.default = "clinical_dark"
 
 HTML_OUTPUT = REPORTS_DIR / "causal_inference_report.html"
 JSON_OUTPUT = REPORTS_DIR / "causal_inference_metrics.json"
 TS_JSON_OUTPUT = REPORTS_DIR / "causal_timeseries.json"
 
-# Color palette - uses dark theme from _theme
+# Color palette — uses dark theme from _theme
 COLOR_PRE = C_PRE_TX
 COLOR_POST = C_POST_TX
 COLOR_RUX_LINE = C_RUX_LINE
@@ -139,13 +121,13 @@ COLOR_COUNTERFACTUAL = C_COUNTERFACTUAL
 COLOR_CI_BAND = "rgba(147, 197, 253, 0.12)"
 COLOR_EFFECT = C_EFFECT
 
-# Plotly layout defaults - template handles most styling; t=60 since
+# Plotly layout defaults — template handles most styling; t=60 since
 # make_section already provides an h2 header (no redundant Plotly title)
 LAYOUT_DEFAULTS = dict(
     margin=dict(l=70, r=30, t=60, b=40),
 )
 
-# Clinical reference values - imported from config.py
+# Clinical reference values — imported from config.py
 
 # PCMCI parameters
 PCMCI_TAU_MAX = 7
@@ -163,7 +145,6 @@ BOOTSTRAP_CI = 95
 # ---------------------------------------------------------------------------
 # Numerical safety helpers
 # ---------------------------------------------------------------------------
-
 
 def _safe_div(numerator: float, denominator: float, default: float = 0.0) -> float:
     """Division guarded against zero / near-zero denominators."""
@@ -198,7 +179,7 @@ def _relative_effect_is_meaningful(
 def _format_relative_effect_html(value: float | None) -> str:
     """Render relative effects conservatively in HTML tables."""
     if value is None or not np.isfinite(value):
-        return "-"
+        return "&mdash;"
     return f"{value:+.1f}%"
 
 
@@ -278,7 +259,6 @@ def _check_convergence(
 # DATA LOADING
 # ===========================================================================
 
-
 def load_data() -> dict[str, pd.DataFrame]:
     """Load all Oura tables into DataFrames."""
     print("[DATA] Loading biometric data from database...")
@@ -287,63 +267,65 @@ def load_data() -> dict[str, pd.DataFrame]:
         print(f"  ERROR: Database not found: {DATABASE_PATH}", file=sys.stderr)
         sys.exit(1)
 
-    with sqlite3.connect(f"file:{DATABASE_PATH}?mode=ro", uri=True) as conn:
-        # HRV epochs (5-min intervals)
-        hrv = pd.read_sql_query(
-            "SELECT timestamp, rmssd FROM oura_hrv ORDER BY timestamp", conn
-        )
-        hrv["date"] = pd.to_datetime(hrv["timestamp"]).dt.date.astype(str)
-        hrv["rmssd"] = pd.to_numeric(hrv["rmssd"], errors="coerce")
-        hrv = hrv[hrv["rmssd"].notna() & (hrv["rmssd"] > 0)]
+    conn = sqlite3.connect(f"file:{DATABASE_PATH}?mode=ro", uri=True)
 
-        # Heart rate (continuous)
-        hr = pd.read_sql_query(
-            "SELECT timestamp, bpm FROM oura_heart_rate ORDER BY timestamp", conn
-        )
-        hr["date"] = pd.to_datetime(hr["timestamp"]).dt.date.astype(str)
-        hr["bpm"] = pd.to_numeric(hr["bpm"], errors="coerce")
+    # HRV epochs (5-min intervals)
+    hrv = pd.read_sql_query(
+        "SELECT timestamp, rmssd FROM oura_hrv ORDER BY timestamp", conn
+    )
+    hrv["date"] = pd.to_datetime(hrv["timestamp"]).dt.date.astype(str)
+    hrv["rmssd"] = pd.to_numeric(hrv["rmssd"], errors="coerce")
 
-        # Sleep periods (per-night aggregates)
-        sleep_periods = pd.read_sql_query(
-            """SELECT day as date, average_hrv, average_heart_rate, average_breath,
-                      total_sleep_duration, rem_sleep_duration, deep_sleep_duration,
-                      light_sleep_duration, awake_time, efficiency, lowest_heart_rate
-               FROM oura_sleep_periods
-               WHERE type = 'long_sleep'
-               ORDER BY day""",
-            conn,
-        )
-        for col in sleep_periods.columns:
-            if col != "date":
-                sleep_periods[col] = pd.to_numeric(sleep_periods[col], errors="coerce")
+    # Heart rate (continuous)
+    hr = pd.read_sql_query(
+        "SELECT timestamp, bpm FROM oura_heart_rate ORDER BY timestamp", conn
+    )
+    hr["date"] = pd.to_datetime(hr["timestamp"]).dt.date.astype(str)
+    hr["bpm"] = pd.to_numeric(hr["bpm"], errors="coerce")
 
-        # SpO2
-        spo2 = pd.read_sql_query(
-            "SELECT date, spo2_average FROM oura_spo2 WHERE spo2_average > 0 ORDER BY date",
-            conn,
-        )
-        spo2["spo2_average"] = pd.to_numeric(spo2["spo2_average"], errors="coerce")
+    # Sleep periods (per-night aggregates)
+    sleep_periods = pd.read_sql_query(
+        """SELECT day as date, average_hrv, average_heart_rate, average_breath,
+                  total_sleep_duration, rem_sleep_duration, deep_sleep_duration,
+                  light_sleep_duration, awake_time, efficiency, lowest_heart_rate
+           FROM oura_sleep_periods
+           WHERE type = 'long_sleep'
+           ORDER BY day""",
+        conn,
+    )
+    for col in sleep_periods.columns:
+        if col != "date":
+            sleep_periods[col] = pd.to_numeric(sleep_periods[col], errors="coerce")
 
-        # Readiness (NOTE: most fields are CONTRIBUTOR SCORES 0-100, NOT physiological
-        # values, EXCEPT temperature_deviation which IS a real temperature offset)
-        readiness = pd.read_sql_query(
-            """SELECT date, score as readiness_score, temperature_deviation,
-                      recovery_index, resting_heart_rate as rhr_score
-               FROM oura_readiness ORDER BY date""",
-            conn,
-        )
-        for col in readiness.columns:
-            if col != "date":
-                readiness[col] = pd.to_numeric(readiness[col], errors="coerce")
+    # SpO2
+    spo2 = pd.read_sql_query(
+        "SELECT date, spo2_average FROM oura_spo2 WHERE spo2_average > 0 ORDER BY date",
+        conn,
+    )
+    spo2["spo2_average"] = pd.to_numeric(spo2["spo2_average"], errors="coerce")
 
-        # Activity
-        activity = pd.read_sql_query(
-            "SELECT date, score as activity_score, active_calories, steps, daily_movement FROM oura_activity ORDER BY date",
-            conn,
-        )
-        for col in activity.columns:
-            if col != "date":
-                activity[col] = pd.to_numeric(activity[col], errors="coerce")
+    # Readiness (NOTE: most fields are CONTRIBUTOR SCORES 0-100, NOT physiological
+    # values, EXCEPT temperature_deviation which IS a real temperature offset)
+    readiness = pd.read_sql_query(
+        """SELECT date, score as readiness_score, temperature_deviation,
+                  recovery_index, resting_heart_rate as rhr_score
+           FROM oura_readiness ORDER BY date""",
+        conn,
+    )
+    for col in readiness.columns:
+        if col != "date":
+            readiness[col] = pd.to_numeric(readiness[col], errors="coerce")
+
+    # Activity
+    activity = pd.read_sql_query(
+        "SELECT date, score as activity_score, active_calories, steps, daily_movement FROM oura_activity ORDER BY date",
+        conn,
+    )
+    for col in activity.columns:
+        if col != "date":
+            activity[col] = pd.to_numeric(activity[col], errors="coerce")
+
+    conn.close()
 
     data = {
         "hrv": hrv,
@@ -355,9 +337,7 @@ def load_data() -> dict[str, pd.DataFrame]:
     }
 
     for name, df in data.items():
-        print(
-            f"  {name}: {len(df)} rows, date range: {df['date'].min()} to {df['date'].max()}"
-        )
+        print(f"  {name}: {len(df)} rows, date range: {df['date'].min()} to {df['date'].max()}")
 
     return data
 
@@ -373,12 +353,10 @@ def build_daily_matrix(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     hrv_daily = (
         data["hrv"]
         .groupby("date")
-        .agg(
-            mean_rmssd=("rmssd", "mean"),
-            max_rmssd=("rmssd", "max"),
-            std_rmssd=("rmssd", "std"),
-            median_rmssd=("rmssd", "median"),
-        )
+        .agg(mean_rmssd=("rmssd", "mean"),
+             max_rmssd=("rmssd", "max"),
+             std_rmssd=("rmssd", "std"),
+             median_rmssd=("rmssd", "median"))
         .reset_index()
     )
 
@@ -386,7 +364,9 @@ def build_daily_matrix(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     hr_daily = (
         data["hr"]
         .groupby("date")
-        .agg(mean_hr=("bpm", "mean"), std_hr=("bpm", "std"), min_hr=("bpm", "min"))
+        .agg(mean_hr=("bpm", "mean"),
+             std_hr=("bpm", "std"),
+             min_hr=("bpm", "min"))
         .reset_index()
     )
 
@@ -397,40 +377,27 @@ def build_daily_matrix(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     sp["deep_pct"] = sp["deep_sleep_duration"] / total_sec * 100
     sp["rem_pct"] = sp["rem_sleep_duration"] / total_sec * 100
     sp["total_hours"] = sp["total_sleep_duration"] / 3600
-    sp_features = sp[
-        [
-            "date",
-            "sleep_efficiency",
-            "deep_pct",
-            "rem_pct",
-            "total_hours",
-            "average_heart_rate",
-            "lowest_heart_rate",
-            "average_breath",
-            "rem_sleep_duration",
-            "deep_sleep_duration",
-        ]
-    ].copy()
+    sp_features = sp[["date", "sleep_efficiency", "deep_pct", "rem_pct",
+                       "total_hours", "average_heart_rate", "lowest_heart_rate",
+                       "average_breath", "rem_sleep_duration",
+                       "deep_sleep_duration"]].copy()
 
     # SpO2
     spo2 = data["spo2"][["date", "spo2_average"]].copy()
 
     # Readiness
-    readiness = data["readiness"][
-        ["date", "readiness_score", "temperature_deviation", "recovery_index"]
-    ].copy()
+    readiness = data["readiness"][["date", "readiness_score", "temperature_deviation",
+                                    "recovery_index"]].copy()
 
     # Activity
     activity = data["activity"][["date", "steps", "active_calories"]].copy()
 
     # Merge all on date
-    all_dates = sorted(
-        set(
-            hrv_daily["date"].tolist()
-            + hr_daily["date"].tolist()
-            + sp_features["date"].tolist()
-        )
-    )
+    all_dates = sorted(set(
+        hrv_daily["date"].tolist()
+        + hr_daily["date"].tolist()
+        + sp_features["date"].tolist()
+    ))
     daily = pd.DataFrame({"date": all_dates})
 
     daily = daily.merge(hrv_daily, on="date", how="left")
@@ -446,7 +413,9 @@ def build_daily_matrix(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
 
     # Add period labels
     rux_str = str(TREATMENT_START)
-    daily["period"] = daily["date"].apply(lambda d: "post" if d >= rux_str else "pre")
+    daily["period"] = daily["date"].apply(
+        lambda d: "post" if d >= rux_str else "pre"
+    )
 
     n_pre = (daily["period"] == "pre").sum()
     n_post = (daily["period"] == "post").sum()
@@ -472,52 +441,38 @@ def _add_rux_line(fig: go.Figure, row: int = 1, col: int = 1) -> None:
     for glow_color, glow_width in glow_layers:
         fig.add_shape(
             type="line",
-            x0=rux_dt,
-            x1=rux_dt,
-            y0=0,
-            y1=1,
-            yref=yref,
+            x0=rux_dt, x1=rux_dt,
+            y0=0, y1=1, yref=yref,
             line=dict(color=glow_color, width=glow_width),
-            row=row,
-            col=col,
+            row=row, col=col,
         )
 
-    # Core line - solid, bright
+    # Core line — solid, bright
     fig.add_shape(
         type="line",
-        x0=rux_dt,
-        x1=rux_dt,
-        y0=0,
-        y1=1,
-        yref=yref,
+        x0=rux_dt, x1=rux_dt,
+        y0=0, y1=1, yref=yref,
         line=dict(color=ACCENT_BLUE, width=2),
-        row=row,
-        col=col,
+        row=row, col=col,
     )
     fig.add_annotation(
-        x=rux_dt,
-        y=1,
-        yref=yref,
+        x=rux_dt, y=1, yref=yref,
         text="<b>Ruxolitinib start</b>",
-        showarrow=True,
-        arrowhead=2,
-        ax=60,
-        ay=-24,
+        showarrow=True, arrowhead=2,
+        ax=60, ay=-24,
         font=dict(color="#FFFFFF", size=11),
         arrowcolor=ACCENT_BLUE,
         bgcolor="rgba(59, 130, 246, 0.15)",
         bordercolor=ACCENT_BLUE,
         borderwidth=1,
         borderpad=4,
-        row=row,
-        col=col,
+        row=row, col=col,
     )
 
 
 # ===========================================================================
 # SECTION 1: CAUSALIMPACT (Bayesian Structural Time Series)
 # ===========================================================================
-
 
 def run_causal_impact(daily: pd.DataFrame) -> dict[str, Any]:
     """Run Google CausalImpact on each biometric stream.
@@ -537,68 +492,37 @@ def run_causal_impact(daily: pd.DataFrame) -> dict[str, Any]:
     }
 
     if not CAUSALIMPACT_AVAILABLE:
-        msg = (
-            "CausalImpact package not installed. "
-            "Install with: pip install pycausalimpact"
-        )
+        msg = ("CausalImpact package not installed. "
+               "Install with: pip install pycausalimpact")
         print(f"  WARNING: {msg}")
         results["error"] = msg
         results["runtime_s"] = round(time.perf_counter() - t0, 2)
         return results
 
-    # Define streams to analyze - all 11 metrics
+    # Define streams to analyze — all 11 metrics
     streams = {
-        "rem_sleep_duration": {
-            "label": "REM sleep duration (s)",
-            "unit": "s",
-            "higher_is_better": True,
-        },
-        "rem_pct": {
-            "label": "REM sleep fraction (%)",
-            "unit": "%",
-            "higher_is_better": True,
-        },
-        "total_hours": {
-            "label": "Total sleep (hours)",
-            "unit": "h",
-            "higher_is_better": True,
-        },
-        "deep_sleep_duration": {
-            "label": "Deep sleep duration (s)",
-            "unit": "s",
-            "higher_is_better": True,
-        },
-        "mean_rmssd": {
-            "label": "HRV mean RMSSD (ms)",
-            "unit": "ms",
-            "higher_is_better": True,
-        },
-        "max_rmssd": {
-            "label": "HRV max RMSSD (ms)",
-            "unit": "ms",
-            "higher_is_better": True,
-        },
-        "lowest_heart_rate": {
-            "label": "Lowest heart rate (bpm)",
-            "unit": "bpm",
-            "higher_is_better": False,
-        },
-        "mean_hr": {
-            "label": "Average heart rate (bpm)",
-            "unit": "bpm",
-            "higher_is_better": False,
-        },
-        "average_breath": {
-            "label": "Respiratory rate (breaths/min)",
-            "unit": "breaths/min",
-            "higher_is_better": False,
-        },
-        "spo2_average": {"label": "SpO2 (%)", "unit": "%", "higher_is_better": True},
-        "temperature_deviation": {
-            "label": "Temperature deviation (°C)",
-            "unit": "°C",
-            "higher_is_better": False,
-        },
+        "rem_sleep_duration": {"label": "REM sleep duration (s)", "unit": "s",
+                               "higher_is_better": True},
+        "rem_pct": {"label": "REM sleep fraction (%)", "unit": "%",
+                    "higher_is_better": True},
+        "total_hours": {"label": "Total sleep (hours)", "unit": "h",
+                        "higher_is_better": True},
+        "deep_sleep_duration": {"label": "Deep sleep duration (s)", "unit": "s",
+                                "higher_is_better": True},
+        "mean_rmssd": {"label": "HRV mean RMSSD (ms)", "unit": "ms",
+                       "higher_is_better": True},
+        "max_rmssd": {"label": "HRV max RMSSD (ms)", "unit": "ms",
+                      "higher_is_better": True},
+        "lowest_heart_rate": {"label": "Lowest heart rate (bpm)", "unit": "bpm",
+                              "higher_is_better": False},
+        "mean_hr": {"label": "Average heart rate (bpm)", "unit": "bpm",
+                    "higher_is_better": False},
+        "average_breath": {"label": "Respiratory rate (br/min)", "unit": "br/min",
+                           "higher_is_better": False},
+        "spo2_average": {"label": "SpO2 (%)", "unit": "%",
+                         "higher_is_better": True},
+        "temperature_deviation": {"label": "Temperature deviation (°C)", "unit": "°C",
+                                  "higher_is_better": False},
     }
 
     rux_str = str(TREATMENT_START)
@@ -633,15 +557,13 @@ def run_causal_impact(daily: pd.DataFrame) -> dict[str, Any]:
             reason = f"Only {n_pre} pre-period points (need >= {MIN_PRE_DAYS})"
             print(f"    Skipping - {reason}")
             results["streams"][stream_name] = _make_ci_failure_result(
-                meta, reason, n_pre=n_pre, n_post=n_post
-            )
+                meta, reason, n_pre=n_pre, n_post=n_post)
             continue
         if n_post < MIN_POST_DAYS:
             reason = f"Only {n_post} post-period points (need >= {MIN_POST_DAYS})"
             print(f"    Skipping - {reason}")
             results["streams"][stream_name] = _make_ci_failure_result(
-                meta, reason, n_pre=n_pre, n_post=n_post
-            )
+                meta, reason, n_pre=n_pre, n_post=n_post)
             continue
 
         # Build time series with DatetimeIndex and reindex to continuous daily range
@@ -659,9 +581,7 @@ def run_causal_impact(daily: pd.DataFrame) -> dict[str, Any]:
 
         if len(ts) < 10:
             print(f"    Skipping after reindex - only {len(ts)} points")
-            results["streams"][stream_name] = {
-                "error": f"Only {len(ts)} points after reindex"
-            }
+            results["streams"][stream_name] = {"error": f"Only {len(ts)} points after reindex"}
             continue
 
         # Define pre/post periods
@@ -676,9 +596,7 @@ def run_causal_impact(daily: pd.DataFrame) -> dict[str, Any]:
             post_dates = ts.index[ts.index >= pd.Timestamp(post_start)]
             if len(post_dates) == 0:
                 print("    Skipping - no post data in reindexed series")
-                results["streams"][stream_name] = {
-                    "error": "No post-period data after reindex"
-                }
+                results["streams"][stream_name] = {"error": "No post-period data after reindex"}
                 continue
             post_start = str(post_dates[0].date())
             print(f"    Adjusted post_start to {post_start}")
@@ -688,24 +606,19 @@ def run_causal_impact(daily: pd.DataFrame) -> dict[str, Any]:
 
         try:
             ci = CausalImpact(
-                ts,
-                [pre_start, pre_end],
-                [post_start, post_end],
-                niter=5000,
-                nseasons=[{"period": 7}],
+                ts, [pre_start, pre_end], [post_start, post_end],
+                niter=5000, nseasons=[{"period": 7}],
             )
 
             # Extract results
             inferences = ci.inferences
             try:
                 summary_text = ci.summary()
-            except Exception as e:
-                warnings.warn(f"CausalImpact summary generation failed: {e}")
+            except Exception:
                 summary_text = "(summary generation failed)"
             try:
                 report_text = ci.summary("report")
-            except Exception as e:
-                warnings.warn(f"CausalImpact report generation failed: {e}")
+            except Exception:
                 report_text = "(report generation failed)"
 
             # Compute effect metrics - use post_start (may have been adjusted)
@@ -756,24 +669,18 @@ def run_causal_impact(daily: pd.DataFrame) -> dict[str, Any]:
 
             # --- Convergence diagnostics ---
             low_confidence, convergence_note = _check_convergence(
-                actual_post,
-                pred_post,
-                pred_lower,
-                pred_upper,
-                avg_effect,
+                actual_post, pred_post, pred_lower, pred_upper, avg_effect,
             )
             if low_confidence:
                 print(f"    WARNING: Low confidence - {convergence_note}")
 
             ci_lower_val = (
                 round(float(np.nanmean(actual_post - pred_upper)), 3)
-                if len(pred_upper) > 0
-                else None
+                if len(pred_upper) > 0 else None
             )
             ci_upper_val = (
                 round(float(np.nanmean(actual_post - pred_lower)), 3)
-                if len(pred_lower) > 0
-                else None
+                if len(pred_lower) > 0 else None
             )
 
             stream_result = {
@@ -785,9 +692,7 @@ def run_causal_impact(daily: pd.DataFrame) -> dict[str, Any]:
                 "avg_actual_post": round(avg_actual, 3),
                 "avg_counterfactual_post": round(avg_predicted, 3),
                 "avg_effect": round(avg_effect, 3),
-                "relative_effect_pct": round(rel_effect, 2)
-                if rel_effect_meaningful
-                else None,
+                "relative_effect_pct": round(rel_effect, 2) if rel_effect_meaningful else None,
                 "p_value": round(float(p_value), 6),
                 "probability_of_effect": round((1 - float(p_value)) * 100, 2),
                 "ci_lower": ci_lower_val,
@@ -800,29 +705,18 @@ def run_causal_impact(daily: pd.DataFrame) -> dict[str, Any]:
                 # Inferences may have integer or datetime index; use positional
                 "ts_dates": [str(d.date()) for d in ts.index],
                 "ts_actual": ts[stream_name].tolist(),
-                "ts_predicted": (
-                    inferences["preds"].values.tolist()[: len(ts)]
-                    if inferences is not None
-                    else []
-                ),
-                "ts_pred_lower": (
-                    inferences["preds_lower"].values.tolist()[: len(ts)]
-                    if inferences is not None
-                    else []
-                ),
-                "ts_pred_upper": (
-                    inferences["preds_upper"].values.tolist()[: len(ts)]
-                    if inferences is not None
-                    else []
-                ),
+                "ts_predicted": (inferences["preds"].values.tolist()[:len(ts)]
+                                 if inferences is not None else []),
+                "ts_pred_lower": (inferences["preds_lower"].values.tolist()[:len(ts)]
+                                  if inferences is not None else []),
+                "ts_pred_upper": (inferences["preds_upper"].values.tolist()[:len(ts)]
+                                  if inferences is not None else []),
             }
 
             direction = "favorable" if stream_result["favorable"] else "unfavorable"
             conf_tag = " [LOW CONFIDENCE]" if low_confidence else ""
             rel_effect_str = f"{rel_effect:+.1f}%" if rel_effect_meaningful else "n/a"
-            print(
-                f"    Effect: {avg_effect:+.2f} {meta['unit']} ({rel_effect_str}), p={p_value:.4f} [{direction}]{conf_tag}"
-            )
+            print(f"    Effect: {avg_effect:+.2f} {meta['unit']} ({rel_effect_str}), p={p_value:.4f} [{direction}]{conf_tag}")
 
             results["streams"][stream_name] = stream_result
 
@@ -831,25 +725,18 @@ def run_causal_impact(daily: pd.DataFrame) -> dict[str, Any]:
             print(f"    ERROR: {error_msg}")
             traceback.print_exc()
             results["streams"][stream_name] = _make_ci_failure_result(
-                meta, error_msg, n_pre=n_pre, n_post=n_post
-            )
+                meta, error_msg, n_pre=n_pre, n_post=n_post)
 
     # ------------------------------------------------------------------
     # Benjamini-Hochberg FDR correction across all metrics
     # ------------------------------------------------------------------
-    valid_keys = [
-        k
-        for k, v in results["streams"].items()
-        if isinstance(v, dict) and "error" not in v and "p_value" in v
-    ]
+    valid_keys = [k for k, v in results["streams"].items()
+                  if isinstance(v, dict) and "error" not in v and "p_value" in v]
 
     # Guard: filter out NaN/1.0-only p-values before FDR
-    usable_keys = [
-        k
-        for k in valid_keys
-        if np.isfinite(results["streams"][k]["p_value"])
-        and results["streams"][k]["p_value"] < 1.0
-    ]
+    usable_keys = [k for k in valid_keys
+                   if np.isfinite(results["streams"][k]["p_value"])
+                   and results["streams"][k]["p_value"] < 1.0]
 
     if usable_keys and MULTIPLETESTS_AVAILABLE:
         raw_pvals = np.array([results["streams"][k]["p_value"] for k in usable_keys])
@@ -860,23 +747,17 @@ def run_causal_impact(daily: pd.DataFrame) -> dict[str, Any]:
                 results["streams"][k]["significant_fdr"] = bool(reject[i])
 
             n_sig_fdr = int(np.sum(reject))
-            print(
-                f"\n  FDR correction (Benjamini-Hochberg): {n_sig_fdr}/{len(usable_keys)} metrics significant at q < 0.05"
-            )
+            print(f"\n  FDR correction (Benjamini-Hochberg): {n_sig_fdr}/{len(usable_keys)} metrics significant at q < 0.05")
         except Exception as fdr_err:
             print(f"\n  WARNING: FDR correction failed: {fdr_err}")
             for k in usable_keys:
                 results["streams"][k]["q_value_bh"] = results["streams"][k]["p_value"]
-                results["streams"][k]["significant_fdr"] = (
-                    results["streams"][k]["p_value"] < 0.05
-                )
+                results["streams"][k]["significant_fdr"] = results["streams"][k]["p_value"] < 0.05
     elif not MULTIPLETESTS_AVAILABLE:
         print("\n  WARNING: statsmodels not available; skipping FDR correction")
         for k in valid_keys:
             results["streams"][k]["q_value_bh"] = results["streams"][k]["p_value"]
-            results["streams"][k]["significant_fdr"] = (
-                results["streams"][k]["p_value"] < 0.05
-            )
+            results["streams"][k]["significant_fdr"] = results["streams"][k]["p_value"] < 0.05
     elif not usable_keys:
         print("\n  WARNING: All p-values are NaN or 1.0; skipping FDR correction")
         for k in valid_keys:
@@ -885,18 +766,14 @@ def run_causal_impact(daily: pd.DataFrame) -> dict[str, Any]:
         for k in valid_keys:
             s = results["streams"][k]
             tag = "SIG" if s["significant_fdr"] else "ns"
-            print(
-                f"    {s['label']}: p={s['p_value']:.4f} -> q={s['q_value_bh']:.4f} [{tag}]"
-            )
+            print(f"    {s['label']}: p={s['p_value']:.4f} -> q={s['q_value_bh']:.4f} [{tag}]")
 
     results["runtime_s"] = round(time.perf_counter() - t0, 2)
     print(f"\n  CausalImpact complete in {results['runtime_s']}s")
     return results
 
 
-def run_placebo_tests(
-    daily: pd.DataFrame, ci_results: dict[str, Any]
-) -> dict[str, Any]:
+def run_placebo_tests(daily: pd.DataFrame, ci_results: dict[str, Any]) -> dict[str, Any]:
     """Run CausalImpact on 3 random placebo dates before March 16 to validate
     that the real intervention date is special.
 
@@ -926,11 +803,8 @@ def run_placebo_tests(
 
     # Pick top 3 metrics by significance (lowest q_value or p_value)
     streams = ci_results.get("streams", {})
-    valid = [
-        (k, v)
-        for k, v in streams.items()
-        if isinstance(v, dict) and "error" not in v and "p_value" in v
-    ]
+    valid = [(k, v) for k, v in streams.items()
+             if isinstance(v, dict) and "error" not in v and "p_value" in v]
     valid.sort(key=lambda x: x[1].get("q_value_bh", x[1].get("p_value", 1)))
     top3 = valid[:3]
 
@@ -951,9 +825,7 @@ def run_placebo_tests(
     pre_dates = sorted([d for d in daily["date"].unique() if d < rux_str])
 
     if len(pre_dates) < 21:
-        print(
-            f"  Not enough pre-period data ({len(pre_dates)} days) for placebo tests (need 21+)"
-        )
+        print(f"  Not enough pre-period data ({len(pre_dates)} days) for placebo tests (need 21+)")
         results["error"] = f"Insufficient pre-period ({len(pre_dates)} days)"
         return results
 
@@ -996,61 +868,50 @@ def run_placebo_tests(
             if pd.Timestamp(post_start_str) not in ts.index:
                 post_candidates = ts.index[ts.index >= pd.Timestamp(post_start_str)]
                 if len(post_candidates) == 0:
-                    results["tests"].append(
-                        {
-                            "placebo_date": placebo_date,
-                            "metric": metric_key,
-                            "error": "No post data",
-                        }
-                    )
+                    results["tests"].append({
+                        "placebo_date": placebo_date,
+                        "metric": metric_key,
+                        "error": "No post data",
+                    })
                     continue
                 post_start_str = str(post_candidates[0].date())
 
             if pd.Timestamp(post_end_str) not in ts.index:
                 pre_candidates = ts.index[ts.index <= pd.Timestamp(post_end_str)]
                 if len(pre_candidates) == 0:
-                    results["tests"].append(
-                        {
-                            "placebo_date": placebo_date,
-                            "metric": metric_key,
-                            "error": "No pre-end data",
-                        }
-                    )
+                    results["tests"].append({
+                        "placebo_date": placebo_date,
+                        "metric": metric_key,
+                        "error": "No pre-end data",
+                    })
                     continue
                 post_end_str = str(pre_candidates[-1].date())
 
             n_pre_pl = (ts.index < pd.Timestamp(post_start_str)).sum()
-            n_post_pl = (
-                (ts.index >= pd.Timestamp(post_start_str))
-                & (ts.index <= pd.Timestamp(post_end_str))
-            ).sum()
+            n_post_pl = ((ts.index >= pd.Timestamp(post_start_str)) &
+                         (ts.index <= pd.Timestamp(post_end_str))).sum()
 
             if n_pre_pl < PLACEBO_MIN_PRE or n_post_pl < PLACEBO_MIN_POST:
-                reason = (
-                    f"Insufficient data (pre={n_pre_pl} need>={PLACEBO_MIN_PRE}, "
-                    f"post={n_post_pl} need>={PLACEBO_MIN_POST})"
-                )
+                reason = (f"Insufficient data (pre={n_pre_pl} need>={PLACEBO_MIN_PRE}, "
+                          f"post={n_post_pl} need>={PLACEBO_MIN_POST})")
                 print(f"    Skipping - {reason}")
-                results["tests"].append(
-                    {
-                        "placebo_date": placebo_date,
-                        "metric": metric_key,
-                        "label": meta["label"],
-                        "error": reason,
-                    }
-                )
+                results["tests"].append({
+                    "placebo_date": placebo_date,
+                    "metric": metric_key,
+                    "label": meta["label"],
+                    "error": reason,
+                })
                 continue
 
             try:
                 # Trim series to end at post_end (exclude real post-intervention data)
-                ts_trimmed = ts.loc[: pd.Timestamp(post_end_str)].copy()
+                ts_trimmed = ts.loc[:pd.Timestamp(post_end_str)].copy()
 
                 ci = CausalImpact(
                     ts_trimmed,
                     [pre_start_str, pre_end_str],
                     [post_start_str, post_end_str],
-                    niter=5000,
-                    nseasons=[{"period": 7}],
+                    niter=5000, nseasons=[{"period": 7}],
                 )
 
                 p_value = getattr(ci, "p_value", None)
@@ -1066,11 +927,7 @@ def run_placebo_tests(
                 else:
                     pred_post = np.array([])
 
-                avg_effect = (
-                    float(np.nanmean(actual_post - pred_post))
-                    if len(pred_post) > 0
-                    else 0.0
-                )
+                avg_effect = float(np.nanmean(actual_post - pred_post)) if len(pred_post) > 0 else 0.0
                 # Guard against NaN effect
                 if not np.isfinite(avg_effect):
                     avg_effect = 0.0
@@ -1092,56 +949,21 @@ def run_placebo_tests(
             except Exception as e:
                 error_msg = f"{type(e).__name__}: {e}"
                 print(f"    ERROR: {error_msg}")
-                results["tests"].append(
-                    {
-                        "placebo_date": placebo_date,
-                        "metric": metric_key,
-                        "label": meta["label"],
-                        "error": error_msg,
-                    }
-                )
+                results["tests"].append({
+                    "placebo_date": placebo_date,
+                    "metric": metric_key,
+                    "label": meta["label"],
+                    "error": error_msg,
+                })
 
-    # ------------------------------------------------------------------
-    # Benjamini-Hochberg FDR correction across all placebo tests
-    # ------------------------------------------------------------------
+    # Summary
     valid_tests = [t for t in results["tests"] if "error" not in t]
-    if len(valid_tests) > 1 and MULTIPLETESTS_AVAILABLE:
-        raw_pvals = np.array([t["p_value"] for t in valid_tests])
-        try:
-            reject, qvals, _, _ = multipletests(raw_pvals, method="fdr_bh", alpha=0.05)
-            for i, t in enumerate(valid_tests):
-                t["q_value_bh"] = round(float(qvals[i]), 6)
-                t["significant_fdr"] = bool(reject[i])
-            # Use FDR-corrected significance for the validation verdict
-            n_sig_placebo_fdr = int(np.sum(reject))
-            print(
-                f"\n  FDR correction (Benjamini-Hochberg): {n_sig_placebo_fdr}/{len(valid_tests)} "
-                f"placebo tests significant at q < 0.05"
-            )
-        except Exception as fdr_err:
-            print(f"\n  WARNING: FDR correction failed for placebo: {fdr_err}")
-            for t in valid_tests:
-                t["q_value_bh"] = t["p_value"]
-                t["significant_fdr"] = t["significant"]
-    else:
-        for t in valid_tests:
-            t["q_value_bh"] = t.get("p_value", 1.0)
-            t["significant_fdr"] = t.get("significant", False)
-
-    # Summary - use raw significance for backward-compatible verdict
     n_sig_placebo = sum(1 for t in valid_tests if t.get("significant", False))
-    n_sig_placebo_fdr = sum(1 for t in valid_tests if t.get("significant_fdr", False))
     results["n_total_tests"] = len(valid_tests)
     results["n_significant_placebo"] = n_sig_placebo
-    results["n_significant_placebo_fdr"] = n_sig_placebo_fdr
-    results["placebo_validation"] = (
-        "PASS" if n_sig_placebo == 0 else "PARTIAL" if n_sig_placebo <= 1 else "FAIL"
-    )
+    results["placebo_validation"] = "PASS" if n_sig_placebo == 0 else "PARTIAL" if n_sig_placebo <= 1 else "FAIL"
 
-    print(
-        f"\n  Placebo summary: {n_sig_placebo}/{len(valid_tests)} tests significant (raw), "
-        f"{n_sig_placebo_fdr}/{len(valid_tests)} after FDR"
-    )
+    print(f"\n  Placebo summary: {n_sig_placebo}/{len(valid_tests)} tests significant")
     print(f"  Validation: {results['placebo_validation']}")
 
     results["runtime_s"] = round(time.perf_counter() - t0, 2)
@@ -1159,9 +981,8 @@ def plot_causal_impact(ci_results: dict[str, Any]) -> list[go.Figure]:
 
     streams = ci_results.get("streams", {})
     # Only plot streams that have time series data (skip failures with empty ts_dates)
-    valid_streams = {
-        k: v for k, v in streams.items() if "error" not in v and v.get("ts_dates")
-    }
+    valid_streams = {k: v for k, v in streams.items()
+                     if "error" not in v and v.get("ts_dates")}
 
     if not valid_streams:
         return figures
@@ -1178,8 +999,7 @@ def plot_causal_impact(ci_results: dict[str, Any]) -> list[go.Figure]:
         unit = s["unit"]
 
         fig = make_subplots(
-            rows=1,
-            cols=2,
+            rows=1, cols=2,
             shared_xaxes=False,
             horizontal_spacing=0.08,
             subplot_titles=[
@@ -1208,28 +1028,25 @@ def plot_causal_impact(ci_results: dict[str, Any]) -> list[go.Figure]:
                     legendgroup="ci",
                     hoverinfo="skip",
                 ),
-                row=1,
-                col=1,
+                row=1, col=1,
             )
 
         # Counterfactual line (dashed, muted)
         if predicted:
             fig.add_trace(
                 go.Scatter(
-                    x=dates,
-                    y=predicted,
+                    x=dates, y=predicted,
                     mode="lines",
                     name="Counterfactual",
                     line=dict(color=COLOR_COUNTERFACTUAL, width=1.5, dash="dash"),
                     legendgroup="counterfactual",
                     hovertemplate=(
-                        f"<b>%{{x|%d %b}}</b><br>"
+                        f"<b>%{{x|%b %d}}</b><br>"
                         f"{label}<br>"
                         f"Counterfactual: %{{y:.1f}} {unit}<extra></extra>"
                     ),
                 ),
-                row=1,
-                col=1,
+                row=1, col=1,
             )
 
         # Actual: pre-period (muted)
@@ -1238,20 +1055,18 @@ def plot_causal_impact(ci_results: dict[str, Any]) -> list[go.Figure]:
         if len(pre_dates) > 0:
             fig.add_trace(
                 go.Scatter(
-                    x=pre_dates,
-                    y=pre_actual,
+                    x=pre_dates, y=pre_actual,
                     mode="lines",
                     name="Actual (pre)",
                     line=dict(color=C_PRE_TX, width=1.5),
                     legendgroup="actual_pre",
                     hovertemplate=(
-                        f"<b>%{{x|%d %b}}</b><br>"
+                        f"<b>%{{x|%b %d}}</b><br>"
                         f"{label}<br>"
                         f"Actual: %{{y:.1f}} {unit}<extra></extra>"
                     ),
                 ),
-                row=1,
-                col=1,
+                row=1, col=1,
             )
 
         # Actual: post-period (vibrant + markers)
@@ -1260,23 +1075,20 @@ def plot_causal_impact(ci_results: dict[str, Any]) -> list[go.Figure]:
         if len(post_dates) > 0:
             fig.add_trace(
                 go.Scatter(
-                    x=post_dates,
-                    y=post_actual,
+                    x=post_dates, y=post_actual,
                     mode="lines+markers",
                     name="Actual (post)",
                     line=dict(color="#FFFFFF", width=2.5),
-                    marker=dict(
-                        size=5, color=ACCENT_BLUE, line=dict(width=1.5, color="#FFFFFF")
-                    ),
+                    marker=dict(size=5, color=ACCENT_BLUE,
+                                line=dict(width=1.5, color="#FFFFFF")),
                     legendgroup="actual_post",
                     hovertemplate=(
-                        f"<b>%{{x|%d %b}}</b><br>"
+                        f"<b>%{{x|%b %d}}</b><br>"
                         f"{label}<br>"
                         f"Actual: %{{y:.1f}} {unit}<extra></extra>"
                     ),
                 ),
-                row=1,
-                col=1,
+                row=1, col=1,
             )
 
         # --- Right column: point effects ---
@@ -1284,18 +1096,15 @@ def plot_causal_impact(ci_results: dict[str, Any]) -> list[go.Figure]:
             effects = [a - p for a, p in zip(actual, predicted)]
             hib = s["higher_is_better"]
             bar_colors = [
-                COLOR_EFFECT
-                if (e > 0 and hib) or (e < 0 and not hib)
-                else ACCENT_RED
-                if (e < 0 and hib) or (e > 0 and not hib)
+                COLOR_EFFECT if (e > 0 and hib) or (e < 0 and not hib)
+                else ACCENT_RED if (e < 0 and hib) or (e > 0 and not hib)
                 else TEXT_TERTIARY
                 for e in effects
             ]
 
             fig.add_trace(
                 go.Bar(
-                    x=dates,
-                    y=effects,
+                    x=dates, y=effects,
                     marker=dict(
                         color=bar_colors,
                         line=dict(width=0.5, color="rgba(255,255,255,0.15)"),
@@ -1303,24 +1112,20 @@ def plot_causal_impact(ci_results: dict[str, Any]) -> list[go.Figure]:
                     name="Point effect",
                     legendgroup="effect",
                     hovertemplate=(
-                        f"<b>%{{x|%d %b}}</b><br>"
+                        f"<b>%{{x|%b %d}}</b><br>"
                         f"{label}<br>"
                         f"Effect: %{{y:+.1f}} {unit}<extra></extra>"
                     ),
                 ),
-                row=1,
-                col=2,
+                row=1, col=2,
             )
             # Zero line
             fig.add_shape(
                 type="line",
-                x0=dates.min(),
-                x1=dates.max(),
-                y0=0,
-                y1=0,
+                x0=dates.min(), x1=dates.max(),
+                y0=0, y1=0,
                 line=dict(color=TEXT_TERTIARY, width=1, dash="dot"),
-                row=1,
-                col=2,
+                row=1, col=2,
             )
 
             # Mean effect annotation on bars
@@ -1331,17 +1136,14 @@ def plot_causal_impact(ci_results: dict[str, Any]) -> list[go.Figure]:
                     x=dates[post_mask].mean(),
                     y=mean_eff,
                     text=f"Mean: {mean_eff:+.1f}",
-                    showarrow=True,
-                    arrowhead=0,
-                    ax=0,
-                    ay=-30,
+                    showarrow=True, arrowhead=0,
+                    ax=0, ay=-30,
                     font=dict(color=ACCENT_BLUE, size=11, family="Inter"),
                     bgcolor="rgba(59, 130, 246, 0.12)",
                     bordercolor=ACCENT_BLUE,
                     borderwidth=1,
                     borderpad=3,
-                    row=1,
-                    col=2,
+                    row=1, col=2,
                 )
 
         # Add ruxolitinib lines (glow effect)
@@ -1352,22 +1154,16 @@ def plot_causal_impact(ci_results: dict[str, Any]) -> list[go.Figure]:
         fig.update_yaxes(title_text=unit, row=1, col=1)
         fig.update_yaxes(title_text=f"Delta ({unit})", row=1, col=2)
         fig.update_xaxes(
-            tickformat="%d %b",
-            spikemode="across",
-            spikethickness=1,
-            spikecolor=BORDER_DEFAULT,
-            spikedash="dot",
-            row=1,
-            col=1,
+            tickformat="%b %d",
+            spikemode="across", spikethickness=1,
+            spikecolor=BORDER_DEFAULT, spikedash="dot",
+            row=1, col=1,
         )
         fig.update_xaxes(
-            tickformat="%d %b",
-            spikemode="across",
-            spikethickness=1,
-            spikecolor=BORDER_DEFAULT,
-            spikedash="dot",
-            row=1,
-            col=2,
+            tickformat="%b %d",
+            spikemode="across", spikethickness=1,
+            spikecolor=BORDER_DEFAULT, spikedash="dot",
+            row=1, col=2,
         )
 
         # Significance badge in title
@@ -1391,7 +1187,6 @@ def plot_causal_impact(ci_results: dict[str, Any]) -> list[go.Figure]:
 # SECTION 2: GRANGER CAUSALITY NETWORK (tigramite PCMCI+)
 # ===========================================================================
 
-
 def run_pcmci(daily: pd.DataFrame) -> dict[str, Any]:
     """Run PCMCI+ Granger causality analysis on multivariate biometric streams.
 
@@ -1414,33 +1209,14 @@ def run_pcmci(daily: pd.DataFrame) -> dict[str, Any]:
         "runtime_s": 0,
     }
 
-    # Variables for analysis - all 11 metrics
-    var_cols = [
-        "rem_sleep_duration",
-        "rem_pct",
-        "total_hours",
-        "deep_sleep_duration",
-        "mean_rmssd",
-        "max_rmssd",
-        "lowest_heart_rate",
-        "mean_hr",
-        "average_breath",
-        "spo2_average",
-        "temperature_deviation",
-    ]
-    var_labels = [
-        "REMdur",
-        "REMpct",
-        "TotalSleep",
-        "DeepDur",
-        "RMSSD",
-        "RMSSDmax",
-        "LowestHR",
-        "AvgHR",
-        "RespRate",
-        "SpO2",
-        "TempDev",
-    ]
+    # Variables for analysis — all 11 metrics
+    var_cols = ["rem_sleep_duration", "rem_pct", "total_hours",
+                "deep_sleep_duration", "mean_rmssd", "max_rmssd",
+                "lowest_heart_rate", "mean_hr", "average_breath",
+                "spo2_average", "temperature_deviation"]
+    var_labels = ["REMdur", "REMpct", "TotalSleep", "DeepDur",
+                  "RMSSD", "RMSSDmax", "LowestHR", "AvgHR",
+                  "RespRate", "SpO2", "TempDev"]
 
     # Build clean matrix
     df = daily[["date", "period"] + var_cols].copy()
@@ -1463,9 +1239,7 @@ def run_pcmci(daily: pd.DataFrame) -> dict[str, Any]:
         n_obs = data_array.shape[0]
         tau_max = min(PCMCI_TAU_MAX, n_obs // 4)  # Adapt to data length
 
-        print(
-            f"\n  Running PCMCI+ on {label} ({n_obs} observations, tau_max={tau_max})..."
-        )
+        print(f"\n  Running PCMCI+ on {label} ({n_obs} observations, tau_max={tau_max})...")
 
         dataframe = pp.DataFrame(
             data_array,
@@ -1483,87 +1257,36 @@ def run_pcmci(daily: pd.DataFrame) -> dict[str, Any]:
         val_matrix = pcmci_results["val_matrix"]
         p_matrix = pcmci_results["p_matrix"]
 
-        # Collect ALL testable p-values for FDR correction
-        all_tests = []
+        # Extract significant links
+        sig_links = []
         n_vars = len(var_labels)
         for i in range(n_vars):
             for j in range(n_vars):
                 for tau in range(tau_max + 1):
                     if i == j and tau == 0:
                         continue  # skip contemporaneous self-links
-                    pval = float(p_matrix[i, j, tau])
-                    if np.isfinite(pval):
-                        all_tests.append(
-                            {
-                                "i": i,
-                                "j": j,
-                                "tau": tau,
-                                "p_value": pval,
-                                "correlation": float(val_matrix[i, j, tau]),
-                            }
-                        )
-
-        # Apply Benjamini-Hochberg FDR correction across all tested pairs
-        n_fdr_corrected = 0
-        if all_tests and MULTIPLETESTS_AVAILABLE:
-            raw_pvals = np.array([t["p_value"] for t in all_tests])
-            try:
-                reject, qvals, _, _ = multipletests(
-                    raw_pvals, method="fdr_bh", alpha=PCMCI_ALPHA
-                )
-                for idx_t, t in enumerate(all_tests):
-                    t["q_value_bh"] = float(qvals[idx_t])
-                    t["significant_fdr"] = bool(reject[idx_t])
-                n_fdr_corrected = int(np.sum(reject))
-            except Exception as fdr_err:
-                print(f"    WARNING: FDR correction failed: {fdr_err}")
-                for t in all_tests:
-                    t["q_value_bh"] = t["p_value"]
-                    t["significant_fdr"] = t["p_value"] < PCMCI_ALPHA
-        else:
-            for t in all_tests:
-                t["q_value_bh"] = t["p_value"]
-                t["significant_fdr"] = t["p_value"] < PCMCI_ALPHA
-
-        # Extract significant links (raw p < alpha, with FDR annotation)
-        sig_links = []
-        sig_links_fdr = []
-        for t in all_tests:
-            if t["p_value"] < PCMCI_ALPHA:
-                link = {
-                    "source": var_labels[t["i"]],
-                    "target": var_labels[t["j"]],
-                    "lag": int(t["tau"]),
-                    "correlation": round(t["correlation"], 4),
-                    "p_value": round(t["p_value"], 6),
-                    "q_value_bh": round(t["q_value_bh"], 6),
-                    "significant_fdr": t["significant_fdr"],
-                }
-                sig_links.append(link)
-                if t["significant_fdr"]:
-                    sig_links_fdr.append(link)
+                    if p_matrix[i, j, tau] < PCMCI_ALPHA:
+                        sig_links.append({
+                            "source": var_labels[i],
+                            "target": var_labels[j],
+                            "lag": int(tau),
+                            "val": round(float(val_matrix[i, j, tau]), 4),
+                            "p_value": round(float(p_matrix[i, j, tau]), 6),
+                        })
 
         # Sort by absolute correlation strength
-        sig_links.sort(key=lambda x: abs(x["correlation"]), reverse=True)
+        sig_links.sort(key=lambda x: abs(x["val"]), reverse=True)
 
-        print(
-            f"    Found {len(sig_links)} links at raw alpha={PCMCI_ALPHA}, "
-            f"{len(sig_links_fdr)} survive FDR correction (q < {PCMCI_ALPHA})"
-        )
+        print(f"    Found {len(sig_links)} significant causal links (alpha={PCMCI_ALPHA})")
         for link in sig_links[:5]:
-            direction = "+" if link["correlation"] > 0 else "-"
-            fdr_tag = "FDR-sig" if link["significant_fdr"] else "FDR-ns"
-            print(
-                f"      {link['source']} -> {link['target']} (lag={link['lag']}, "
-                f"r={link['correlation']:{direction}.3f}, p={link['p_value']:.4f}, q={link['q_value_bh']:.4f} [{fdr_tag}])"
-            )
+            direction = "+" if link["val"] > 0 else "-"
+            print(f"      {link['source']} -> {link['target']} (lag={link['lag']}, "
+                  f"r={link['val']:{direction}.3f}, p={link['p_value']:.4f})")
 
         return {
             "n_observations": int(n_obs),
             "tau_max": int(tau_max),
             "n_significant_links": len(sig_links),
-            "n_significant_links_fdr": len(sig_links_fdr),
-            "n_tests_total": len(all_tests),
             "significant_links": sig_links,
             "val_matrix": val_matrix.tolist(),
             "p_matrix": p_matrix.tolist(),
@@ -1581,9 +1304,7 @@ def run_pcmci(daily: pd.DataFrame) -> dict[str, Any]:
         results["pre_period"] = _run_pcmci_on_data(pre_data, "pre-ruxolitinib")
     else:
         print(f"  Skipping pre-period analysis: only {len(pre_df)} observations")
-        results["pre_period"] = {
-            "error": f"Insufficient pre-period data ({len(pre_df)} rows)"
-        }
+        results["pre_period"] = {"error": f"Insufficient pre-period data ({len(pre_df)} rows)"}
 
     # Compare networks: links unique to full vs pre
     full_links_set = set()
@@ -1609,9 +1330,7 @@ def run_pcmci(daily: pd.DataFrame) -> dict[str, Any]:
     }
 
     if new_links:
-        print(
-            f"\n  New causal links in full period (not in pre-period): {len(new_links)}"
-        )
+        print(f"\n  New causal links in full period (not in pre-period): {len(new_links)}")
         for s, t, l in new_links:
             print(f"    NEW: {s} -> {t} (lag={l})")
 
@@ -1629,10 +1348,8 @@ def plot_pcmci(pcmci_results: dict[str, Any]) -> list[go.Figure]:
     """
     figures = []
 
-    for period_key, period_label in [
-        ("full_period", "Full period"),
-        ("pre_period", "Pre-ruxolitinib"),
-    ]:
+    for period_key, period_label in [("full_period", "Full period"),
+                                      ("pre_period", "Pre-ruxolitinib")]:
         period_data = pcmci_results.get(period_key, {})
         if "error" in period_data or not period_data:
             continue
@@ -1670,16 +1387,14 @@ def plot_pcmci(pcmci_results: dict[str, Any]) -> list[go.Figure]:
         ring_opacities = [0.06, 0.04, 0.03, 0.02]
         for r_radius, r_opacity in zip(ring_radii, ring_opacities):
             theta_ring = np.linspace(0, 2 * np.pi, 60)
-            fig.add_trace(
-                go.Scatter(
-                    x=(r_radius * np.cos(theta_ring)).tolist(),
-                    y=(r_radius * np.sin(theta_ring)).tolist(),
-                    mode="lines",
-                    line=dict(color=f"rgba(59, 130, 246, {r_opacity})", width=1),
-                    hoverinfo="skip",
-                    showlegend=False,
-                )
-            )
+            fig.add_trace(go.Scatter(
+                x=(r_radius * np.cos(theta_ring)).tolist(),
+                y=(r_radius * np.sin(theta_ring)).tolist(),
+                mode="lines",
+                line=dict(color=f"rgba(59, 130, 246, {r_opacity})", width=1),
+                hoverinfo="skip",
+                showlegend=False,
+            ))
 
         # --- Node glow halos (drawn before edges, before nodes) ---
         node_colors = [COLORWAY[i % len(COLORWAY)] for i in range(n_vars)]
@@ -1691,20 +1406,17 @@ def plot_pcmci(pcmci_results: dict[str, Any]) -> list[go.Figure]:
                     glow_size = (22 + 10 * total_count[v]) * glow_mult
                     c = node_colors[idx]
                     # Extract hex -> rgba
-                    fig.add_trace(
-                        go.Scatter(
-                            x=[float(node_x[idx])],
-                            y=[float(node_y[idx])],
-                            mode="markers",
-                            marker=dict(
-                                size=glow_size,
-                                color=c,
-                                opacity=glow_alpha * importance,
-                            ),
-                            hoverinfo="skip",
-                            showlegend=False,
-                        )
-                    )
+                    fig.add_trace(go.Scatter(
+                        x=[float(node_x[idx])], y=[float(node_y[idx])],
+                        mode="markers",
+                        marker=dict(
+                            size=glow_size,
+                            color=c,
+                            opacity=glow_alpha * importance,
+                        ),
+                        hoverinfo="skip",
+                        showlegend=False,
+                    ))
 
         # --- Draw edges (causal links) ---
         for link in sig_links:
@@ -1712,14 +1424,14 @@ def plot_pcmci(pcmci_results: dict[str, Any]) -> list[go.Figure]:
             tgt_idx = var_labels.index(link["target"])
 
             # Color by sign: positive = blue/cyan, negative = red/pink
-            if link["correlation"] > 0:
+            if link["val"] > 0:
                 edge_color = ACCENT_BLUE
                 edge_glow = "rgba(59, 130, 246, 0.15)"
             else:
                 edge_color = ACCENT_RED
                 edge_glow = "rgba(239, 68, 68, 0.15)"
 
-            edge_width = max(1.5, min(7, abs(link["correlation"]) * 12))
+            edge_width = max(1.5, min(7, abs(link["val"]) * 12))
 
             # Offset for multiple lags
             offset = link["lag"] * 0.03
@@ -1728,140 +1440,102 @@ def plot_pcmci(pcmci_results: dict[str, Any]) -> list[go.Figure]:
             x1, y1 = float(node_x[tgt_idx]), float(node_y[tgt_idx])
 
             # Edge glow
-            fig.add_trace(
-                go.Scatter(
-                    x=[x0, x1],
-                    y=[y0, y1],
-                    mode="lines",
-                    line=dict(color=edge_glow, width=edge_width + 4),
-                    hoverinfo="skip",
-                    showlegend=False,
-                )
-            )
+            fig.add_trace(go.Scatter(
+                x=[x0, x1], y=[y0, y1],
+                mode="lines",
+                line=dict(color=edge_glow, width=edge_width + 4),
+                hoverinfo="skip",
+                showlegend=False,
+            ))
 
             # Edge core
-            fig.add_trace(
-                go.Scatter(
-                    x=[x0, x1],
-                    y=[y0, y1],
-                    mode="lines",
-                    line=dict(color=edge_color, width=edge_width),
-                    hoverinfo="text",
-                    hovertext=(
-                        f"<b>{link['source']} -> {link['target']}</b><br>"
-                        f"Lag: {link['lag']} day{'s' if link['lag'] != 1 else ''}<br>"
-                        f"r = {link['correlation']:+.3f}<br>"
-                        f"p = {link['p_value']:.4f}<br>"
-                        f"q(BH) = {link.get('q_value_bh', link['p_value']):.4f}"
-                        f"{' (FDR-sig)' if link.get('significant_fdr') else ''}"
-                    ),
-                    showlegend=False,
-                )
-            )
+            fig.add_trace(go.Scatter(
+                x=[x0, x1], y=[y0, y1],
+                mode="lines",
+                line=dict(color=edge_color, width=edge_width),
+                hoverinfo="text",
+                hovertext=(
+                    f"<b>{link['source']} -> {link['target']}</b><br>"
+                    f"Lag: {link['lag']} day{'s' if link['lag'] != 1 else ''}<br>"
+                    f"r = {link['val']:+.3f}<br>"
+                    f"p = {link['p_value']:.4f}"
+                ),
+                showlegend=False,
+            ))
 
             # Arrowhead (triangle marker near target)
             mid_x = 0.82 * x1 + 0.18 * x0
             mid_y = 0.82 * y1 + 0.18 * y0
             arrow_angle = float(np.degrees(np.arctan2(y1 - y0, x1 - x0)) - 90)
-            fig.add_trace(
-                go.Scatter(
-                    x=[mid_x],
-                    y=[mid_y],
-                    mode="markers",
-                    marker=dict(
-                        symbol="triangle-up",
-                        size=max(8, edge_width + 3),
-                        color=edge_color,
-                        angle=arrow_angle,
-                    ),
-                    hoverinfo="skip",
-                    showlegend=False,
-                )
-            )
+            fig.add_trace(go.Scatter(
+                x=[mid_x], y=[mid_y],
+                mode="markers",
+                marker=dict(
+                    symbol="triangle-up",
+                    size=max(8, edge_width + 3),
+                    color=edge_color,
+                    angle=arrow_angle,
+                ),
+                hoverinfo="skip",
+                showlegend=False,
+            ))
 
         # --- Draw nodes ---
         node_sizes = [22 + 10 * total_count[v] for v in var_labels]
 
-        fig.add_trace(
-            go.Scatter(
-                x=node_x.tolist(),
-                y=node_y.tolist(),
-                mode="markers+text",
-                marker=dict(
-                    size=node_sizes,
-                    color=node_colors,
-                    line=dict(width=2.5, color=BG_PRIMARY),
-                ),
-                text=var_labels,
-                textposition="top center",
-                textfont=dict(size=11, color=TEXT_PRIMARY, family="Inter"),
-                hoverinfo="text",
-                hovertext=[
-                    f"<b>{v}</b><br>"
-                    f"Incoming links: {in_count[v]}<br>"
-                    f"Outgoing links: {out_count[v]}<br>"
-                    f"Total connections: {total_count[v]}"
-                    for v in var_labels
-                ],
-                showlegend=False,
-            )
-        )
+        fig.add_trace(go.Scatter(
+            x=node_x.tolist(),
+            y=node_y.tolist(),
+            mode="markers+text",
+            marker=dict(
+                size=node_sizes,
+                color=node_colors,
+                line=dict(width=2.5, color=BG_PRIMARY),
+            ),
+            text=var_labels,
+            textposition="top center",
+            textfont=dict(size=11, color=TEXT_PRIMARY, family="Inter"),
+            hoverinfo="text",
+            hovertext=[
+                f"<b>{v}</b><br>"
+                f"Incoming links: {in_count[v]}<br>"
+                f"Outgoing links: {out_count[v]}<br>"
+                f"Total connections: {total_count[v]}"
+                for v in var_labels
+            ],
+            showlegend=False,
+        ))
 
         n_links = len(sig_links)
 
         # Legend traces for edge color semantics
-        fig.add_trace(
-            go.Scatter(
-                x=[None],
-                y=[None],
-                mode="lines",
-                line=dict(color=ACCENT_BLUE, width=3),
-                name="Positive correlation",
-            )
-        )
-        fig.add_trace(
-            go.Scatter(
-                x=[None],
-                y=[None],
-                mode="lines",
-                line=dict(color=ACCENT_RED, width=3),
-                name="Negative correlation",
-            )
-        )
+        fig.add_trace(go.Scatter(
+            x=[None], y=[None], mode="lines",
+            line=dict(color=ACCENT_BLUE, width=3),
+            name="Positive correlation",
+        ))
+        fig.add_trace(go.Scatter(
+            x=[None], y=[None], mode="lines",
+            line=dict(color=ACCENT_RED, width=3),
+            name="Negative correlation",
+        ))
 
         fig.update_layout(
             title="",
-            xaxis=dict(
-                showgrid=False,
-                zeroline=False,
-                showticklabels=False,
-                showline=False,
-                range=[-1.7, 1.7],
-            ),
-            yaxis=dict(
-                showgrid=False,
-                zeroline=False,
-                showticklabels=False,
-                showline=False,
-                range=[-1.7, 1.7],
-                scaleanchor="x",
-            ),
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False,
+                       showline=False, range=[-1.7, 1.7]),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False,
+                       showline=False, range=[-1.7, 1.7], scaleanchor="x"),
             height=650,
             showlegend=True,
-            legend=dict(
-                orientation="h", yanchor="bottom", y=-0.08, xanchor="center", x=0.5
-            ),
-            annotations=[
-                dict(
-                    text=f"<b>{period_label}</b> -- {n_links} significant links (alpha={PCMCI_ALPHA})",
-                    x=0.5,
-                    y=1.06,
-                    xref="paper",
-                    yref="paper",
-                    showarrow=False,
-                    font=dict(size=13, color=TEXT_SECONDARY),
-                )
-            ],
+            legend=dict(orientation="h", yanchor="bottom", y=-0.08,
+                        xanchor="center", x=0.5),
+            annotations=[dict(
+                text=f"<b>{period_label}</b> -- {n_links} significant links (alpha={PCMCI_ALPHA})",
+                x=0.5, y=1.06, xref="paper", yref="paper",
+                showarrow=False,
+                font=dict(size=13, color=TEXT_SECONDARY),
+            )],
             **LAYOUT_DEFAULTS,
         )
 
@@ -1874,26 +1548,24 @@ def plot_pcmci(pcmci_results: dict[str, Any]) -> list[go.Figure]:
 # SECTION 3: TRANSFER ENTROPY
 # ===========================================================================
 
-
 def _discretize(series: np.ndarray, n_bins: int = TE_N_BINS) -> np.ndarray:
     """Discretize a continuous series into n_bins equal-frequency bins."""
     # Use quantile-based binning
     try:
-        bins = np.quantile(series[~np.isnan(series)], np.linspace(0, 1, n_bins + 1))
+        bins = np.quantile(series[~np.isnan(series)],
+                          np.linspace(0, 1, n_bins + 1))
         # Make bins unique
         bins = np.unique(bins)
         if len(bins) < 2:
             return np.zeros(len(series), dtype=int)
         digitized = np.digitize(series, bins[1:-1])
         return digitized
-    except (ValueError, IndexError) as e:
-        warnings.warn(f"Discretization failed, returning zeros: {e}")
+    except Exception:
         return np.zeros(len(series), dtype=int)
 
 
-def _transfer_entropy(
-    source: np.ndarray, target: np.ndarray, history: int = TE_HISTORY
-) -> float:
+def _transfer_entropy(source: np.ndarray, target: np.ndarray,
+                      history: int = TE_HISTORY) -> float:
     """Compute transfer entropy from source to target.
 
     TE(X -> Y) = H(Y_t | Y_{t-1:t-k}) - H(Y_t | Y_{t-1:t-k}, X_{t-1:t-k})
@@ -1914,12 +1586,8 @@ def _transfer_entropy(
     # Y present: y_t
 
     y_present = tgt_d[history:]
-    y_past = np.column_stack(
-        [tgt_d[history - h - 1 : n - h - 1] for h in range(history)]
-    )
-    x_past = np.column_stack(
-        [src_d[history - h - 1 : n - h - 1] for h in range(history)]
-    )
+    y_past = np.column_stack([tgt_d[history - h - 1: n - h - 1] for h in range(history)])
+    x_past = np.column_stack([src_d[history - h - 1: n - h - 1] for h in range(history)])
 
     # Convert to tuple keys
     def _to_keys(arr: np.ndarray) -> list[tuple]:
@@ -1943,8 +1611,7 @@ def _transfer_entropy(
             return 0.0
         return -sum(
             (c / total) * np.log2(max(c / total, SAFE_LOG_MIN))
-            for c in counts.values()
-            if c > 0
+            for c in counts.values() if c > 0
         )
 
     # Joint entropies for conditional entropy calculation
@@ -1978,32 +1645,13 @@ def run_transfer_entropy(daily: pd.DataFrame) -> dict[str, Any]:
         "runtime_s": 0,
     }
 
-    var_cols = [
-        "rem_sleep_duration",
-        "rem_pct",
-        "total_hours",
-        "deep_sleep_duration",
-        "mean_rmssd",
-        "max_rmssd",
-        "lowest_heart_rate",
-        "mean_hr",
-        "average_breath",
-        "spo2_average",
-        "temperature_deviation",
-    ]
-    var_labels = [
-        "REMdur",
-        "REMpct",
-        "TotalSleep",
-        "DeepDur",
-        "RMSSD",
-        "RMSSDmax",
-        "LowestHR",
-        "AvgHR",
-        "RespRate",
-        "SpO2",
-        "TempDev",
-    ]
+    var_cols = ["rem_sleep_duration", "rem_pct", "total_hours",
+                "deep_sleep_duration", "mean_rmssd", "max_rmssd",
+                "lowest_heart_rate", "mean_hr", "average_breath",
+                "spo2_average", "temperature_deviation"]
+    var_labels = ["REMdur", "REMpct", "TotalSleep", "DeepDur",
+                  "RMSSD", "RMSSDmax", "LowestHR", "AvgHR",
+                  "RespRate", "SpO2", "TempDev"]
 
     df = daily[["date", "period"] + var_cols].copy()
     df[var_cols] = df[var_cols].interpolate(method="linear", limit=3)
@@ -2035,14 +1683,12 @@ def run_transfer_entropy(daily: pd.DataFrame) -> dict[str, Any]:
         for i in range(n_vars):
             for j in range(n_vars):
                 if i != j and te_matrix[i, j] > 0.01:
-                    top_links.append(
-                        {
-                            "source": var_labels[i],
-                            "target": var_labels[j],
-                            "te": round(float(te_matrix[i, j]), 4),
-                            "net_te": round(float(net_te[i, j]), 4),
-                        }
-                    )
+                    top_links.append({
+                        "source": var_labels[i],
+                        "target": var_labels[j],
+                        "te": round(float(te_matrix[i, j]), 4),
+                        "net_te": round(float(net_te[i, j]), 4),
+                    })
 
         top_links.sort(key=lambda x: x["te"], reverse=True)
 
@@ -2097,9 +1743,7 @@ def run_transfer_entropy(daily: pd.DataFrame) -> dict[str, Any]:
             f"{var_labels[min_idx[0]]} -> {var_labels[min_idx[1]]}"
         )
     else:
-        results["pre_period"] = {
-            "error": f"Insufficient pre-period data ({len(pre_df)} rows)"
-        }
+        results["pre_period"] = {"error": f"Insufficient pre-period data ({len(pre_df)} rows)"}
 
     results["runtime_s"] = round(time.perf_counter() - t0, 2)
     print(f"\n  Transfer Entropy complete in {results['runtime_s']}s")
@@ -2116,10 +1760,8 @@ def plot_transfer_entropy(te_results: dict[str, Any]) -> list[go.Figure]:
 
     matrices_to_plot = []
 
-    for period_key, title in [
-        ("full_period", "Full period"),
-        ("pre_period", "Pre-ruxolitinib"),
-    ]:
+    for period_key, title in [("full_period", "Full period"),
+                               ("pre_period", "Pre-ruxolitinib")]:
         period = te_results.get(period_key, {})
         if "error" not in period and "te_matrix" in period:
             matrices_to_plot.append((period["te_matrix"], period["var_labels"], title))
@@ -2127,9 +1769,8 @@ def plot_transfer_entropy(te_results: dict[str, Any]) -> list[go.Figure]:
     # Add difference matrix if available
     diff = te_results.get("te_difference")
     if diff and "diff_matrix" in diff:
-        matrices_to_plot.append(
-            (diff["diff_matrix"], diff["var_labels"], "Change (Full - Pre)")
-        )
+        matrices_to_plot.append((diff["diff_matrix"], diff["var_labels"],
+                                "Change (Full - Pre)"))
 
     if not matrices_to_plot:
         return figures
@@ -2158,8 +1799,7 @@ def plot_transfer_entropy(te_results: dict[str, Any]) -> list[go.Figure]:
 
     n_plots = len(matrices_to_plot)
     fig = make_subplots(
-        rows=1,
-        cols=n_plots,
+        rows=1, cols=n_plots,
         subplot_titles=[t for _, _, t in matrices_to_plot],
         horizontal_spacing=0.1,
     )
@@ -2186,8 +1826,7 @@ def plot_transfer_entropy(te_results: dict[str, Any]) -> list[go.Figure]:
                     ""
                     if i == j
                     else (
-                        "#1A1D27"
-                        if mat[i][j] > z_mid + (zmax - z_mid) * 0.5
+                        "#1A1D27" if mat[i][j] > z_mid + (zmax - z_mid) * 0.5
                         else TEXT_PRIMARY
                     )
                 )
@@ -2197,10 +1836,9 @@ def plot_transfer_entropy(te_results: dict[str, Any]) -> list[go.Figure]:
         ]
 
         # Format text annotations
-        text = [
-            [f"{mat[i][j]:.3f}" if i != j else "" for j in range(len(labels))]
-            for i in range(len(labels))
-        ]
+        text = [[f"{mat[i][j]:.3f}" if i != j else ""
+                 for j in range(len(labels))]
+                for i in range(len(labels))]
 
         fig.add_trace(
             go.Heatmap(
@@ -2211,41 +1849,34 @@ def plot_transfer_entropy(te_results: dict[str, Any]) -> list[go.Figure]:
                 texttemplate="%{text}",
                 textfont=dict(size=9),
                 colorscale=colorscale,
-                zmin=zmin,
-                zmax=zmax,
+                zmin=zmin, zmax=zmax,
                 showscale=True,
                 colorbar=dict(
-                    title=dict(
-                        text="TE (bits)", font=dict(size=11, color=TEXT_SECONDARY)
-                    ),
+                    title=dict(text="TE (bits)", font=dict(size=11, color=TEXT_SECONDARY)),
                     len=0.8,
                     thickness=12,
                     tickfont=dict(size=10, color=TEXT_SECONDARY),
                     outlinewidth=0,
                 ),
-                xgap=2,
-                ygap=2,
+                xgap=2, ygap=2,
                 hovertemplate=(
                     "<b>%{y} -> %{x}</b><br>"
                     "Transfer Entropy: %{z:.4f} bits<extra></extra>"
                 ),
             ),
-            row=1,
-            col=col,
+            row=1, col=col,
         )
 
         fig.update_xaxes(
             title_text="Target",
             tickangle=45,
             tickfont=dict(size=9),
-            row=1,
-            col=col,
+            row=1, col=col,
         )
         fig.update_yaxes(
             title_text="Source",
             tickfont=dict(size=9),
-            row=1,
-            col=col,
+            row=1, col=col,
         )
 
     fig.update_layout(
@@ -2261,7 +1892,6 @@ def plot_transfer_entropy(te_results: dict[str, Any]) -> list[go.Figure]:
 # ===========================================================================
 # SECTION 4: INTERVENTION RESPONSE DECOMPOSITION (Mediation Analysis)
 # ===========================================================================
-
 
 def run_mediation_analysis(daily: pd.DataFrame) -> dict[str, Any]:
     """Decompose total ruxolitinib effect into causal pathways using
@@ -2333,21 +1963,15 @@ def run_mediation_analysis(daily: pd.DataFrame) -> dict[str, Any]:
     if len(pre_outcome) > 0 and len(post_outcome) > 0:
         total_effect = float(post_outcome.mean() - pre_outcome.mean())
         # Welch's t-test
-        t_stat, t_pval = scipy_stats.ttest_ind(
-            post_outcome, pre_outcome, equal_var=False
-        )
+        t_stat, t_pval = scipy_stats.ttest_ind(post_outcome, pre_outcome, equal_var=False)
     else:
         total_effect = 0.0
         t_stat, t_pval = 0.0, 1.0
 
     results["total_effect"] = {
         "effect": round(total_effect, 3),
-        "pre_mean": round(float(pre_outcome.mean()), 3)
-        if len(pre_outcome) > 0
-        else None,
-        "post_mean": round(float(post_outcome.mean()), 3)
-        if len(post_outcome) > 0
-        else None,
+        "pre_mean": round(float(pre_outcome.mean()), 3) if len(pre_outcome) > 0 else None,
+        "post_mean": round(float(post_outcome.mean()), 3) if len(post_outcome) > 0 else None,
         "t_statistic": round(float(t_stat), 3),
         "p_value": round(float(t_pval), 6),
         "n_pre": int(len(pre_outcome)),
@@ -2381,15 +2005,13 @@ def run_mediation_analysis(daily: pd.DataFrame) -> dict[str, Any]:
 
         # Standardize for comparability
         from sklearn.preprocessing import StandardScaler
-
         scaler_m = StandardScaler()
         scaler_o = StandardScaler()
         mediator_std = scaler_m.fit_transform(mediator.reshape(-1, 1)).ravel()
         outcome_std = scaler_o.fit_transform(outcome.reshape(-1, 1)).ravel()
 
-        def _mediation_estimates(
-            treat: np.ndarray, med: np.ndarray, out: np.ndarray
-        ) -> dict[str, float]:
+        def _mediation_estimates(treat: np.ndarray, med: np.ndarray,
+                                 out: np.ndarray) -> dict[str, float]:
             """Compute mediation effect sizes using Baron-Kenny approach."""
             from numpy.linalg import lstsq
 
@@ -2445,8 +2067,7 @@ def run_mediation_analysis(daily: pd.DataFrame) -> dict[str, Any]:
                 bootstrap_indirect.append(boot_est["indirect_ab"])
                 bootstrap_a.append(boot_est["a_path"])
                 bootstrap_b.append(boot_est["b_path"])
-            except (ValueError, np.linalg.LinAlgError, KeyError) as e:
-                logging.debug(f"Mediation bootstrap iteration failed: {e}")
+            except Exception:
                 continue
 
         bootstrap_indirect = np.array(bootstrap_indirect)
@@ -2461,27 +2082,20 @@ def run_mediation_analysis(daily: pd.DataFrame) -> dict[str, Any]:
                 float(np.percentile(bootstrap_indirect, 100 - alpha)),
             )
             # Sobel-like p-value: proportion of bootstrap samples crossing zero
-            p_indirect = float(
+            p_indirect = float(min(
                 min(
-                    min(
-                        (bootstrap_indirect <= 0).mean(),
-                        (bootstrap_indirect >= 0).mean(),
-                    )
-                    * 2,
-                    1.0,
-                )
-            )
+                    (bootstrap_indirect <= 0).mean(),
+                    (bootstrap_indirect >= 0).mean(),
+                ) * 2,
+                1.0,
+            ))
         else:
             indirect_ci = (0, 0)
             p_indirect = 1.0
 
         # Pre/post mediator change
-        pre_med = float(
-            pathway_df.loc[pathway_df["treatment"] == 0, mediator_col].mean()
-        )
-        post_med = float(
-            pathway_df.loc[pathway_df["treatment"] == 1, mediator_col].mean()
-        )
+        pre_med = float(pathway_df.loc[pathway_df["treatment"] == 0, mediator_col].mean())
+        post_med = float(pathway_df.loc[pathway_df["treatment"] == 1, mediator_col].mean())
 
         pathway_result = {
             "label": config["label"],
@@ -2517,58 +2131,12 @@ def run_mediation_analysis(daily: pd.DataFrame) -> dict[str, Any]:
 
         print(f"    a-path (T->M): {point_est['a_path']:+.4f}")
         print(f"    b-path (M->Y): {point_est['b_path']:+.4f}")
-        print(
-            f"    Indirect (a*b): {point_est['indirect_ab']:+.4f} "
-            f"[{indirect_ci[0]:+.4f}, {indirect_ci[1]:+.4f}] p={p_indirect:.4f}"
-        )
-        print(
-            f"    Mediator: {pre_med:.2f} -> {post_med:.2f} ({med_change:+.2f}) [{direction}]"
-        )
-        print(
-            f"    Proportion mediated: {point_est['proportion_mediated']:.1%} [{sig}]"
-        )
+        print(f"    Indirect (a*b): {point_est['indirect_ab']:+.4f} "
+              f"[{indirect_ci[0]:+.4f}, {indirect_ci[1]:+.4f}] p={p_indirect:.4f}")
+        print(f"    Mediator: {pre_med:.2f} -> {post_med:.2f} ({med_change:+.2f}) [{direction}]")
+        print(f"    Proportion mediated: {point_est['proportion_mediated']:.1%} [{sig}]")
 
         results["pathways"][pathway_key] = pathway_result
-
-    # ------------------------------------------------------------------
-    # Benjamini-Hochberg FDR correction across mediation pathways
-    # ------------------------------------------------------------------
-    valid_pathway_keys = [
-        k
-        for k, v in results["pathways"].items()
-        if "error" not in v and "p_indirect" in v
-    ]
-    if len(valid_pathway_keys) > 1 and MULTIPLETESTS_AVAILABLE:
-        raw_pvals = np.array(
-            [results["pathways"][k]["p_indirect"] for k in valid_pathway_keys]
-        )
-        try:
-            reject, qvals, _, _ = multipletests(raw_pvals, method="fdr_bh", alpha=0.05)
-            for i, k in enumerate(valid_pathway_keys):
-                results["pathways"][k]["q_indirect_bh"] = round(float(qvals[i]), 6)
-                results["pathways"][k]["significant_fdr"] = bool(reject[i])
-            n_sig_fdr = int(np.sum(reject))
-            print(
-                f"\n  FDR correction (Benjamini-Hochberg): {n_sig_fdr}/{len(valid_pathway_keys)} "
-                f"mediation pathways significant at q < 0.05"
-            )
-        except Exception as fdr_err:
-            print(f"\n  WARNING: FDR correction failed for mediation: {fdr_err}")
-            for k in valid_pathway_keys:
-                results["pathways"][k]["q_indirect_bh"] = results["pathways"][k][
-                    "p_indirect"
-                ]
-                results["pathways"][k]["significant_fdr"] = (
-                    results["pathways"][k]["p_indirect"] < 0.05
-                )
-    else:
-        for k in valid_pathway_keys:
-            results["pathways"][k]["q_indirect_bh"] = results["pathways"][k][
-                "p_indirect"
-            ]
-            results["pathways"][k]["significant_fdr"] = (
-                results["pathways"][k]["p_indirect"] < 0.05
-            )
 
     results["runtime_s"] = round(time.perf_counter() - t0, 2)
     print(f"\n  Mediation Analysis complete in {results['runtime_s']}s")
@@ -2603,58 +2171,51 @@ def plot_mediation(mediation_results: dict[str, Any]) -> list[go.Figure]:
         ci_lower.append(p["indirect_ci_lower"])
         ci_upper.append(p["indirect_ci_upper"])
         colors.append(COLOR_EFFECT if p.get("favorable") else ACCENT_RED)
-        sig_markers.append(p.get("significant_fdr", p.get("p_indirect", 1) < 0.05))
+        sig_markers.append(p.get("p_indirect", 1) < 0.05)
 
     fig1 = go.Figure()
 
-    fig1.add_trace(
-        go.Bar(
-            y=labels,
-            x=effects,
-            orientation="h",
-            marker=dict(
-                color=colors,
-                line=dict(width=1, color="rgba(255,255,255,0.2)"),
-            ),
-            error_x=dict(
-                type="data",
-                symmetric=False,
-                array=[u - e for u, e in zip(ci_upper, effects)],
-                arrayminus=[e - l for l, e in zip(ci_lower, effects)],
-                color="rgba(255,255,255,0.5)",
-                thickness=2,
-                width=4,
-            ),
-            hovertemplate=(
-                "<b>%{y}</b><br>Indirect effect: %{x:.4f}<br><extra></extra>"
-            ),
-            text=[f"{e:+.4f}" for e in effects],
-            textposition="outside",
-            textfont=dict(size=11, color=TEXT_PRIMARY),
-        )
-    )
+    fig1.add_trace(go.Bar(
+        y=labels,
+        x=effects,
+        orientation="h",
+        marker=dict(
+            color=colors,
+            line=dict(width=1, color="rgba(255,255,255,0.2)"),
+        ),
+        error_x=dict(
+            type="data",
+            symmetric=False,
+            array=[u - e for u, e in zip(ci_upper, effects)],
+            arrayminus=[e - l for l, e in zip(ci_lower, effects)],
+            color="rgba(255,255,255,0.5)",
+            thickness=2,
+            width=4,
+        ),
+        hovertemplate=(
+            "<b>%{y}</b><br>"
+            "Indirect effect: %{x:.4f}<br>"
+            "<extra></extra>"
+        ),
+        text=[f"{e:+.4f}" for e in effects],
+        textposition="outside",
+        textfont=dict(size=11, color=TEXT_PRIMARY),
+    ))
 
     # Zero reference line
     fig1.add_shape(
         type="line",
-        x0=0,
-        x1=0,
-        y0=-0.5,
-        y1=len(labels) - 0.5,
+        x0=0, x1=0,
+        y0=-0.5, y1=len(labels) - 0.5,
         line=dict(color=TEXT_TERTIARY, width=1, dash="dot"),
     )
 
     # Significance markers next to bars
     for i, (eff, sig) in enumerate(zip(effects, sig_markers)):
         if sig:
-            x_pos = (
-                max(ci_upper[i], eff) + abs(eff) * 0.3
-                if eff > 0
-                else min(ci_lower[i], eff) - abs(eff) * 0.3
-            )
+            x_pos = max(ci_upper[i], eff) + abs(eff) * 0.3 if eff > 0 else min(ci_lower[i], eff) - abs(eff) * 0.3
             fig1.add_annotation(
-                x=x_pos,
-                y=i,
+                x=x_pos, y=i,
                 text="*",
                 showarrow=False,
                 font=dict(size=18, color=ACCENT_GREEN),
@@ -2673,8 +2234,7 @@ def plot_mediation(mediation_results: dict[str, Any]) -> list[go.Figure]:
     n_valid = len(valid_pathways)
     if n_valid > 0:
         fig2 = make_subplots(
-            rows=1,
-            cols=n_valid,
+            rows=1, cols=n_valid,
             subplot_titles=[p["label"] for p in valid_pathways.values()],
             horizontal_spacing=0.08,
         )
@@ -2698,82 +2258,66 @@ def plot_mediation(mediation_results: dict[str, Any]) -> list[go.Figure]:
                     opacity=0.75,
                     name=p["label"],
                     showlegend=False,
-                    hovertemplate=("<b>%{x:.4f}</b><br>Count: %{y}<extra></extra>"),
+                    hovertemplate=(
+                        "<b>%{x:.4f}</b><br>"
+                        "Count: %{y}<extra></extra>"
+                    ),
                 ),
-                row=1,
-                col=i,
+                row=1, col=i,
             )
 
             # 95% CI shading
             ci_lo = p["indirect_ci_lower"]
             ci_hi = p["indirect_ci_upper"]
             fig2.add_vrect(
-                x0=ci_lo,
-                x1=ci_hi,
+                x0=ci_lo, x1=ci_hi,
                 fillcolor="rgba(59, 130, 246, 0.08)",
                 line=dict(width=0),
-                row=1,
-                col=i,
+                row=1, col=i,
             )
 
             # CI boundary lines
             for ci_bound in [ci_lo, ci_hi]:
                 fig2.add_shape(
                     type="line",
-                    x0=ci_bound,
-                    x1=ci_bound,
-                    y0=0,
-                    y1=1,
-                    yref=yref,
+                    x0=ci_bound, x1=ci_bound,
+                    y0=0, y1=1, yref=yref,
                     line=dict(color="rgba(59, 130, 246, 0.4)", width=1, dash="dot"),
-                    row=1,
-                    col=i,
+                    row=1, col=i,
                 )
 
             # Zero line (null hypothesis)
             fig2.add_shape(
                 type="line",
-                x0=0,
-                x1=0,
-                y0=0,
-                y1=1,
-                yref=yref,
+                x0=0, x1=0,
+                y0=0, y1=1, yref=yref,
                 line=dict(color=TEXT_TERTIARY, width=1.5, dash="dash"),
-                row=1,
-                col=i,
+                row=1, col=i,
             )
 
             # Point estimate line (prominent)
             point_est = p["indirect_effect"]
             fig2.add_shape(
                 type="line",
-                x0=point_est,
-                x1=point_est,
-                y0=0,
-                y1=1,
-                yref=yref,
+                x0=point_est, x1=point_est,
+                y0=0, y1=1, yref=yref,
                 line=dict(color="#FFFFFF", width=2),
-                row=1,
-                col=i,
+                row=1, col=i,
             )
 
             # Point estimate annotation
             fig2.add_annotation(
-                x=point_est,
-                y=1,
-                yref=yref,
+                x=point_est, y=1, yref=yref,
                 text=f"{point_est:+.4f}",
                 showarrow=True,
                 arrowhead=0,
-                ax=0,
-                ay=-20,
+                ax=0, ay=-20,
                 font=dict(size=10, color="#FFFFFF"),
                 bgcolor="rgba(59, 130, 246, 0.2)",
                 bordercolor=ACCENT_BLUE,
                 borderwidth=1,
                 borderpad=2,
-                row=1,
-                col=i,
+                row=1, col=i,
             )
 
             fig2.update_xaxes(title_text="Indirect effect", row=1, col=i)
@@ -2792,7 +2336,6 @@ def plot_mediation(mediation_results: dict[str, Any]) -> list[go.Figure]:
 # ===========================================================================
 # HTML REPORT GENERATION
 # ===========================================================================
-
 
 def generate_html_report(
     daily: pd.DataFrame,
@@ -2841,7 +2384,8 @@ def generate_html_report(
     def _figs_for(section: str) -> str:
         ids = section_figs.get(section, [])
         return "\n".join(
-            f'<div style="margin:16px 0"><div id="{fid}"></div></div>' for fid in ids
+            f'<div style="margin:16px 0"><div id="{fid}"></div></div>'
+            for fid in ids
         )
 
     n_pre = (daily["period"] == "pre").sum()
@@ -2857,7 +2401,8 @@ def generate_html_report(
     # --- Build KPI row ---
     ci_streams = all_results.get("causal_impact", {}).get("streams", {})
     usable_streams = [
-        s for s in ci_streams.values() if isinstance(s, dict) and "error" not in s
+        s for s in ci_streams.values()
+        if isinstance(s, dict) and "error" not in s
     ]
     n_sig_raw = sum(1 for s in usable_streams if s.get("p_value", 1) < 0.05)
     n_sig_fdr = sum(1 for s in usable_streams if s.get("significant_fdr", False))
@@ -2867,12 +2412,8 @@ def generate_html_report(
         default=None,
     )
     strongest_p = strongest_stream.get("p_value", 1.0) if strongest_stream else 1.0
-    strongest_q = (
-        strongest_stream.get("q_value_bh", strongest_p) if strongest_stream else 1.0
-    )
-    strongest_label = (
-        strongest_stream.get("label", "N/A") if strongest_stream else "N/A"
-    )
+    strongest_q = strongest_stream.get("q_value_bh", strongest_p) if strongest_stream else 1.0
+    strongest_label = strongest_stream.get("label", "N/A") if strongest_stream else "N/A"
 
     post_status = "warning" if n_post < 14 else "normal"
     post_label = "Insufficient" if n_post < 14 else ""
@@ -2885,27 +2426,9 @@ def generate_html_report(
 
     kpi_row = make_kpi_row(
         make_kpi_card("Pre-intervention", n_pre, "days", status="info", decimals=0),
-        make_kpi_card(
-            "Post-intervention",
-            n_post,
-            "days",
-            status=post_status,
-            decimals=0,
-            status_label=post_label,
-        ),
-        make_kpi_card(
-            "Raw p<0.05",
-            f"{n_sig_raw}/{len(ci_streams)}",
-            "",
-            status="normal" if n_sig_raw > 0 else "info",
-        ),
-        make_kpi_card(
-            "FDR-significant",
-            f"{n_sig_fdr}/{len(ci_streams)}",
-            "",
-            status=fdr_status,
-            status_label=fdr_label,
-        ),
+        make_kpi_card("Post-intervention", n_post, "days", status=post_status, decimals=0, status_label=post_label),
+        make_kpi_card("Raw p<0.05", f"{n_sig_raw}/{len(ci_streams)}", "", status="normal" if n_sig_raw > 0 else "info"),
+        make_kpi_card("FDR-significant", f"{n_sig_fdr}/{len(ci_streams)}", "", status=fdr_status, status_label=fdr_label),
         make_kpi_card(
             "Lowest raw p",
             format_p_value(strongest_p),
@@ -2914,13 +2437,7 @@ def generate_html_report(
             detail=f"{strongest_label} | q={strongest_q:.4f}",
             status_label=lowest_p_label,
         ),
-        make_kpi_card(
-            "Methods used",
-            "4",
-            "",
-            status="info",
-            detail="CI + PCMCI+ + TE + Mediation",
-        ),
+        make_kpi_card("Methods used", "4", "", status="info", detail="CI + PCMCI+ + TE + Mediation"),
     )
 
     # --- Build body ---
@@ -2932,7 +2449,7 @@ def generate_html_report(
         Four complementary causal analysis methods explore whether Oura biometrics
         shifted after ruxolitinib
         (10 mg BID, started {TREATMENT_START}) on Oura Ring biometrics.
-        <strong>Data period:</strong> {daily["date"].iloc[0]} to {daily["date"].iloc[-1]}
+        <strong>Data period:</strong> {daily['date'].iloc[0]} to {daily['date'].iloc[-1]}
         ({len(daily)} days).
     </div>""")
 
@@ -2964,101 +2481,87 @@ def generate_html_report(
     # Section 1: CausalImpact
     ci_method = (
         '<div class="causal-method-note">'
-        "<strong>Method:</strong> Bayesian Structural Time Series (BSTS) models pre-intervention dynamics "
-        "and generates a counterfactual prediction for the post-period. The difference between actual and "
-        "counterfactual estimates the causal effect, with full posterior uncertainty. "
-        "MCMC: 5,000 iterations, weekly seasonal component (nseasons=7). "
-        "Benjamini-Hochberg FDR correction for multiple testing.</div>"
+        '<strong>Method:</strong> Bayesian Structural Time Series (BSTS) models pre-intervention dynamics '
+        'and generates a counterfactual prediction for the post-period. The difference between actual and '
+        'counterfactual estimates the causal effect, with full posterior uncertainty. '
+        'MCMC: 5,000 iterations, weekly seasonal component (nseasons=7). '
+        'Benjamini-Hochberg FDR correction for multiple testing.</div>'
     )
-    body_parts.append(
-        make_section(
-            "1. CausalImpact - Bayesian Structural Time Series Analysis",
-            ci_method + ci_html + _figs_for("causal_impact"),
-            section_id="ci",
-        )
-    )
+    body_parts.append(make_section(
+        "1. CausalImpact - Bayesian Structural Time Series Analysis",
+        ci_method + ci_html + _figs_for("causal_impact"),
+        section_id="ci",
+    ))
 
     # Section 1a: Statistical Power
     sp_method = (
         '<div class="causal-method-note">'
-        "<strong>Purpose:</strong> All 11 metrics sorted by statistical significance, "
-        "with Benjamini-Hochberg corrected q-values for multiple testing.</div>"
+        '<strong>Purpose:</strong> All 11 metrics sorted by statistical significance, '
+        'with Benjamini-Hochberg corrected q-values for multiple testing.</div>'
     )
-    body_parts.append(
-        make_section(
-            "1a. Statistical Power &amp; Interpretation",
-            sp_method + stat_power_html,
-            section_id="statpower",
-        )
-    )
+    body_parts.append(make_section(
+        "1a. Statistical Power &amp; Interpretation",
+        sp_method + stat_power_html,
+        section_id="statpower",
+    ))
 
     # Section 1b: Placebo tests
     placebo_method = (
         '<div class="causal-method-note">'
-        "<strong>Method:</strong> CausalImpact is run with 3 random placebo dates in the pre-period "
-        "on the 3 most significant metrics. Placebo dates should NOT show significant effects.</div>"
+        '<strong>Method:</strong> CausalImpact is run with 3 random placebo dates in the pre-period '
+        'on the 3 most significant metrics. Placebo dates should NOT show significant effects.</div>'
     )
-    body_parts.append(
-        make_section(
-            "1b. Placebo tests (intervention date falsification)",
-            placebo_method + placebo_html,
-            section_id="placebo",
-        )
-    )
+    body_parts.append(make_section(
+        "1b. Placebo tests (intervention date falsification)",
+        placebo_method + placebo_html,
+        section_id="placebo",
+    ))
 
     # Section 2: PCMCI+
     pcmci_method = (
         f'<div class="causal-method-note">'
-        f"<strong>Method:</strong> PCMCI+ (tigramite) tests for time-lagged causal relationships "
-        f"between biometric variables using partial correlation. "
-        f"Tau_max = {PCMCI_TAU_MAX} days.</div>"
+        f'<strong>Method:</strong> PCMCI+ (tigramite) tests for time-lagged causal relationships '
+        f'between biometric variables using partial correlation. '
+        f'Tau_max = {PCMCI_TAU_MAX} days.</div>'
     )
-    body_parts.append(
-        make_section(
-            "2. Granger Causality Network (PCMCI+)",
-            pcmci_method + pcmci_html + _figs_for("pcmci"),
-            section_id="pcmci",
-        )
-    )
+    body_parts.append(make_section(
+        "2. Granger Causality Network (PCMCI+)",
+        pcmci_method + pcmci_html + _figs_for("pcmci"),
+        section_id="pcmci",
+    ))
 
     # Section 3: Transfer Entropy
     te_method = (
         '<div class="causal-method-note">'
-        "<strong>Method:</strong> Transfer entropy quantifies directional information flow "
-        "between biometric streams. Comparison of TE matrices for pre- and full period "
-        "reveals changes in information coupling after ruxolitinib start.</div>"
+        '<strong>Method:</strong> Transfer entropy quantifies directional information flow '
+        'between biometric streams. Comparison of TE matrices for pre- and full period '
+        'reveals changes in information coupling after ruxolitinib start.</div>'
     )
-    body_parts.append(
-        make_section(
-            "3. Transfer Entropy",
-            te_method + te_html + _figs_for("transfer_entropy"),
-            section_id="te",
-        )
-    )
+    body_parts.append(make_section(
+        "3. Transfer Entropy",
+        te_method + te_html + _figs_for("transfer_entropy"),
+        section_id="te",
+    ))
 
     # Section 4: Mediation Analysis
     med_method = (
         f'<div class="causal-method-note">'
-        f"<strong>Method:</strong> Linear mediation analysis (Baron-Kenny) decomposes total "
-        f"ruxolitinib effect into four mediating pathways. "
-        f"Bootstrap ({BOOTSTRAP_N} iterations) for confidence intervals.</div>"
+        f'<strong>Method:</strong> Linear mediation analysis (Baron-Kenny) decomposes total '
+        f'ruxolitinib effect into four mediating pathways. '
+        f'Bootstrap ({BOOTSTRAP_N} iterations) for confidence intervals.</div>'
     )
-    body_parts.append(
-        make_section(
-            "4. Intervention Response Decomposition",
-            med_method + mediation_html + _figs_for("mediation"),
-            section_id="mediation",
-        )
-    )
+    body_parts.append(make_section(
+        "4. Intervention Response Decomposition",
+        med_method + mediation_html + _figs_for("mediation"),
+        section_id="mediation",
+    ))
 
     # Section 5: Clinical interpretation
-    body_parts.append(
-        make_section(
-            "5. Clinical Interpretation",
-            _build_clinical_interpretation(daily, all_results),
-            section_id="clinical",
-        )
-    )
+    body_parts.append(make_section(
+        "5. Clinical Interpretation",
+        _build_clinical_interpretation(daily, all_results),
+        section_id="clinical",
+    ))
 
     body = "\n".join(body_parts)
 
@@ -3192,29 +2695,23 @@ def generate_html_report(
 def _build_ci_summary(ci_results: dict[str, Any]) -> str:
     """Build CausalImpact summary section."""
     if "error" in ci_results:
-        return (
-            f'<div class="causal-warning"><p><span class="badge badge-fail">FAILED</span> '
-            f"{ci_results['error']}</p></div>"
-        )
+        return (f'<div class="causal-warning"><p><span class="badge badge-fail">FAILED</span> '
+                f'{ci_results["error"]}</p></div>')
     streams = ci_results.get("streams", {})
     if not streams:
-        return "<p>No CausalImpact results available.</p>"
+        return '<p>No CausalImpact results available.</p>'
 
     rows = []
     for key, s in streams.items():
-        if (
-            "error" in s
-            and s.get("p_value", 1.0) == 1.0
-            and s.get("avg_effect", 0) == 0
-        ):
+        if "error" in s and s.get("p_value", 1.0) == 1.0 and s.get("avg_effect", 0) == 0:
             # Complete failure - show warning row
             label = s.get("label", key)
             error_msg = s.get("error", "Unknown error")
             rows.append(
-                f"<tr><td>{label}</td>"
+                f'<tr><td>{label}</td>'
                 f'<td colspan="7">'
                 f'<span class="badge-fail">FAILED</span> '
-                f"<em>{error_msg}</em></td></tr>"
+                f'<em>{error_msg}</em></td></tr>'
             )
             continue
 
@@ -3224,43 +2721,37 @@ def _build_ci_summary(ci_results: dict[str, Any]) -> str:
         q_val = s.get("q_value_bh")
         sig_fdr = s.get("significant_fdr", False)
         if q_val is not None:
-            sig_badge = (
-                '<span class="badge badge-sig">Sig (FDR)</span>'
-                if sig_fdr
-                else '<span class="badge badge-ns">NS (FDR)</span>'
-            )
-            q_str = f"{q_val:.4f}"
+            sig_badge = ('<span class="badge badge-sig">Sig (FDR)</span>'
+                         if sig_fdr
+                         else '<span class="badge badge-ns">NS (FDR)</span>')
+            q_str = f'{q_val:.4f}'
         else:
-            sig_badge = (
-                '<span class="badge badge-sig">Significant</span>'
-                if s.get("p_value", 1) < 0.05
-                else '<span class="badge badge-ns">Not significant</span>'
-            )
-            q_str = "-"
+            sig_badge = ('<span class="badge badge-sig">Significant</span>'
+                         if s.get("p_value", 1) < 0.05
+                         else '<span class="badge badge-ns">Not significant</span>')
+            q_str = '-'
 
         # Low confidence warning badge
         low_conf_badge = ""
         if s.get("low_confidence"):
-            low_conf_badge = (
-                ' <span class="badge-warn" '
-                f'title="{s.get("convergence_note", "")}">LOW CONFIDENCE</span>'
-            )
+            low_conf_badge = (' <span class="badge-warn" '
+                              f'title="{s.get("convergence_note", "")}">LOW CONFIDENCE</span>')
 
         ci_str = ""
         if s.get("ci_lower") is not None and s.get("ci_upper") is not None:
-            ci_str = f"[{s['ci_lower']:+.2f}, {s['ci_upper']:+.2f}]"
+            ci_str = f'[{s["ci_lower"]:+.2f}, {s["ci_upper"]:+.2f}]'
 
         rows.append(
-            f"<tr>"
-            f"<td><strong>{s['label']}</strong>{low_conf_badge}</td>"
-            f"<td>{s.get('avg_actual_post', 0):.2f}</td>"
-            f"<td>{s.get('avg_counterfactual_post', 0):.2f}</td>"
+            f'<tr>'
+            f'<td><strong>{s["label"]}</strong>{low_conf_badge}</td>'
+            f'<td>{s.get("avg_actual_post", 0):.2f}</td>'
+            f'<td>{s.get("avg_counterfactual_post", 0):.2f}</td>'
             f'<td class="{fav_class}">{s.get("avg_effect", 0):+.2f} {s["unit"]}</td>'
-            f"<td>{_format_relative_effect_html(s.get('relative_effect_pct'))}</td>"
-            f"<td>{ci_str}</td>"
-            f"<td>{s.get('p_value', 1):.4f}</td>"
-            f"<td>{q_str} {sig_badge}</td>"
-            f"</tr>"
+            f'<td>{_format_relative_effect_html(s.get("relative_effect_pct"))}</td>'
+            f'<td>{ci_str}</td>'
+            f'<td>{s.get("p_value", 1):.4f}</td>'
+            f'<td>{q_str} {sig_badge}</td>'
+            f'</tr>'
         )
 
     return f"""
@@ -3274,19 +2765,15 @@ def _build_ci_summary(ci_results: dict[str, Any]) -> str:
                 <th>Stream</th><th>Actual (post)</th><th>Counterfactual</th>
                 <th>Causal effect</th><th>Relative</th><th>95% CI</th><th>p-value</th><th>q-value (BH)</th>
             </tr></thead>
-            <tbody>{"".join(rows)}</tbody>
+            <tbody>{''.join(rows)}</tbody>
         </table>"""
 
 
 def _build_placebo_summary(placebo_results: dict[str, Any]) -> str:
     """Build placebo test summary section."""
     if not placebo_results or "error" in placebo_results:
-        err = (
-            placebo_results.get("error", "No placebo results")
-            if placebo_results
-            else "Not run"
-        )
-        return f"<p><em>{err}</em></p>"
+        err = placebo_results.get("error", "No placebo results") if placebo_results else "Not run"
+        return f'<p><em>{err}</em></p>'
 
     tests = placebo_results.get("tests", [])
     placebo_dates = placebo_results.get("placebo_dates", [])
@@ -3327,14 +2814,10 @@ def _build_placebo_summary(placebo_results: dict[str, Any]) -> str:
 
     # Metrics tested
     if metrics_tested:
-        metric_list = ", ".join(
-            f"{m['label']} (q={m['q_value']:.4f})" for m in metrics_tested
-        )
-        html_parts.append(f"<p><strong>Metrics tested:</strong> {metric_list}</p>")
+        metric_list = ", ".join(f'{m["label"]} (q={m["q_value"]:.4f})' for m in metrics_tested)
+        html_parts.append(f'<p><strong>Metrics tested:</strong> {metric_list}</p>')
 
-    html_parts.append(
-        f"<p><strong>Placebo dates:</strong> {', '.join(placebo_dates)}</p>"
-    )
+    html_parts.append(f'<p><strong>Placebo dates:</strong> {", ".join(placebo_dates)}</p>')
 
     # Results table
     valid_tests = [t for t in tests if "error" not in t]
@@ -3345,41 +2828,31 @@ def _build_placebo_summary(placebo_results: dict[str, Any]) -> str:
         for t in valid_tests:
             sig_class = "unfavorable" if t.get("significant") else "favorable"
             sig_label = "Sig (false alarm)" if t.get("significant") else "NS (expected)"
-            fdr_badge = (
-                '<span class="badge badge-sig">FDR-sig</span>'
-                if t.get("significant_fdr")
-                else ""
-            )
             rows.append(
-                f"<tr>"
-                f"<td>{t['placebo_date']}</td>"
-                f"<td>{t.get('label', t['metric'])}</td>"
-                f"<td>{t.get('n_pre', '-')}</td>"
-                f"<td>{t.get('n_post', '-')}</td>"
-                f"<td>{t.get('avg_effect', 0):+.3f}</td>"
-                f"<td>{t.get('p_value', 1):.4f}</td>"
-                f"<td>{t.get('q_value_bh', t.get('p_value', 1)):.4f} {fdr_badge}</td>"
+                f'<tr>'
+                f'<td>{t["placebo_date"]}</td>'
+                f'<td>{t.get("label", t["metric"])}</td>'
+                f'<td>{t.get("n_pre", "-")}</td>'
+                f'<td>{t.get("n_post", "-")}</td>'
+                f'<td>{t.get("avg_effect", 0):+.3f}</td>'
+                f'<td>{t.get("p_value", 1):.4f}</td>'
                 f'<td class="{sig_class}">{sig_label}</td>'
-                f"</tr>"
+                f'</tr>'
             )
 
         html_parts.append(f"""
         <table>
             <thead><tr>
                 <th>Placebo date</th><th>Metric</th><th>N pre</th><th>N post</th>
-                <th>Effect</th><th>Raw p-value</th><th>q-value (BH)</th><th>Result</th>
+                <th>Effect</th><th>p-value</th><th>Result</th>
             </tr></thead>
-            <tbody>{"".join(rows)}</tbody>
+            <tbody>{''.join(rows)}</tbody>
         </table>""")
 
     if error_tests:
-        err_items = ", ".join(
-            f"{t.get('label', t.get('metric', '?'))} @ {t.get('placebo_date', '?')} ({t['error']})"
-            for t in error_tests
-        )
-        html_parts.append(
-            f"<p><em>Errors in {len(error_tests)} tests: {err_items}</em></p>"
-        )
+        err_items = ", ".join(f'{t.get("label", t.get("metric", "?"))} @ {t.get("placebo_date", "?")} ({t["error"]})'
+                              for t in error_tests)
+        html_parts.append(f'<p><em>Errors in {len(error_tests)} tests: {err_items}</em></p>')
 
     # Interpretation
     if validation == "PASS":
@@ -3410,60 +2883,40 @@ def _build_placebo_summary(placebo_results: dict[str, Any]) -> str:
 def _build_pcmci_summary(pcmci_results: dict[str, Any]) -> str:
     """Build PCMCI+ summary section."""
     if "error" in pcmci_results:
-        return f"<p>Error: {pcmci_results['error']}</p>"
+        return f'<p>Error: {pcmci_results["error"]}</p>'
 
     html_parts = []
 
-    for period_key, label in [
-        ("full_period", "Full period"),
-        ("pre_period", "Pre-ruxolitinib"),
-    ]:
+    for period_key, label in [("full_period", "Full period"), ("pre_period", "Pre-ruxolitinib")]:
         period = pcmci_results.get(period_key, {})
         if "error" in period:
-            html_parts.append(f"<p><em>{label}: {period['error']}</em></p>")
+            html_parts.append(f'<p><em>{label}: {period["error"]}</em></p>')
             continue
 
         links = period.get("significant_links", [])
         n = period.get("n_observations", 0)
-        n_fdr = period.get("n_significant_links_fdr", 0)
-        n_tests = period.get("n_tests_total", 0)
 
         if not links:
-            html_parts.append(
-                f"<p><strong>{label}</strong> ({n} days): No significant causal links found.</p>"
-            )
+            html_parts.append(f'<p><strong>{label}</strong> ({n} days): No significant causal links found.</p>')
             continue
 
         rows = []
         for link in links[:10]:
-            fdr_badge = (
-                '<span class="badge badge-sig">FDR</span>'
-                if link.get("significant_fdr")
-                else '<span class="badge badge-ns">ns</span>'
-            )
             rows.append(
-                f"<tr>"
-                f"<td>{link['source']}</td>"
-                f"<td>{link['target']}</td>"
-                f"<td>{link['lag']} days</td>"
-                f"<td>{link['correlation']:+.3f}</td>"
-                f"<td>{link['p_value']:.4f}</td>"
-                f"<td>{link.get('q_value_bh', link['p_value']):.4f} {fdr_badge}</td>"
-                f"</tr>"
+                f'<tr>'
+                f'<td>{link["source"]}</td>'
+                f'<td>{link["target"]}</td>'
+                f'<td>{link["lag"]} days</td>'
+                f'<td>{link["val"]:+.3f}</td>'
+                f'<td>{link["p_value"]:.4f}</td>'
+                f'</tr>'
             )
-
-        fdr_note = (
-            f"<p><em>{len(links)} links at raw p &lt; {PCMCI_ALPHA}, "
-            f"{n_fdr} survive BH FDR correction (q &lt; {PCMCI_ALPHA}), "
-            f"from {n_tests} total tests.</em></p>"
-        )
 
         html_parts.append(f"""
-        <h3>{label} ({n} days, {len(links)} raw / {n_fdr} FDR-significant links)</h3>
-        {fdr_note}
+        <h3>{label} ({n} days, {len(links)} significant links)</h3>
         <table>
-            <thead><tr><th>Source</th><th>Target</th><th>Lag</th><th>Correlation</th><th>Raw p-value</th><th>q-value (BH)</th></tr></thead>
-            <tbody>{"".join(rows)}</tbody>
+            <thead><tr><th>Source</th><th>Target</th><th>Lag</th><th>Correlation</th><th>p-value</th></tr></thead>
+            <tbody>{''.join(rows)}</tbody>
         </table>""")
 
     # Network comparison
@@ -3474,19 +2927,11 @@ def _build_pcmci_summary(pcmci_results: dict[str, Any]) -> str:
         if new or lost:
             html_parts.append("<h3>Network change after ruxolitinib</h3>")
             if new:
-                items = ", ".join(
-                    f"{l['source']}->{l['target']}(lag={l['lag']})" for l in new
-                )
-                html_parts.append(
-                    f'<p class="favorable"><strong>New links:</strong> {items}</p>'
-                )
+                items = ", ".join(f"{l['source']}->{l['target']}(lag={l['lag']})" for l in new)
+                html_parts.append(f'<p class="favorable"><strong>New links:</strong> {items}</p>')
             if lost:
-                items = ", ".join(
-                    f"{l['source']}->{l['target']}(lag={l['lag']})" for l in lost
-                )
-                html_parts.append(
-                    f'<p class="unfavorable"><strong>Lost links:</strong> {items}</p>'
-                )
+                items = ", ".join(f"{l['source']}->{l['target']}(lag={l['lag']})" for l in lost)
+                html_parts.append(f'<p class="unfavorable"><strong>Lost links:</strong> {items}</p>')
 
     return "".join(html_parts)
 
@@ -3494,45 +2939,40 @@ def _build_pcmci_summary(pcmci_results: dict[str, Any]) -> str:
 def _build_te_summary(te_results: dict[str, Any]) -> str:
     """Build Transfer Entropy summary section."""
     if "error" in te_results:
-        return f"<p>Error: {te_results['error']}</p>"
+        return f'<p>Error: {te_results["error"]}</p>'
 
     html_parts = []
 
-    for period_key, label in [
-        ("full_period", "Full period"),
-        ("pre_period", "Pre-ruxolitinib"),
-    ]:
+    for period_key, label in [("full_period", "Full period"), ("pre_period", "Pre-ruxolitinib")]:
         period = te_results.get(period_key, {})
         if "error" in period:
-            html_parts.append(f"<p><em>{label}: {period['error']}</em></p>")
+            html_parts.append(f'<p><em>{label}: {period["error"]}</em></p>')
             continue
 
         links = period.get("top_links", [])
         n = period.get("n_observations", 0)
 
         if not links:
-            html_parts.append(
-                f"<p><strong>{label}</strong> ({n} days): No significant TE links.</p>"
-            )
+            html_parts.append(f'<p><strong>{label}</strong> ({n} days): No significant TE links.</p>')
             continue
 
         rows = []
         for link in links[:8]:
-            net_str = f"{link['net_te']:+.4f}" if link["net_te"] != 0 else "-"
+            net_str = f'{link["net_te"]:+.4f}' if link["net_te"] != 0 else "-"
             rows.append(
-                f"<tr>"
-                f"<td>{link['source']}</td>"
-                f"<td>{link['target']}</td>"
-                f"<td>{link['te']:.4f}</td>"
-                f"<td>{net_str}</td>"
-                f"</tr>"
+                f'<tr>'
+                f'<td>{link["source"]}</td>'
+                f'<td>{link["target"]}</td>'
+                f'<td>{link["te"]:.4f}</td>'
+                f'<td>{net_str}</td>'
+                f'</tr>'
             )
 
         html_parts.append(f"""
         <h3>{label} ({n} days)</h3>
         <table>
             <thead><tr><th>Source</th><th>Target</th><th>TE (bits)</th><th>Net TE</th></tr></thead>
-            <tbody>{"".join(rows)}</tbody>
+            <tbody>{''.join(rows)}</tbody>
         </table>""")
 
     # TE difference
@@ -3542,8 +2982,8 @@ def _build_te_summary(te_results: dict[str, Any]) -> str:
         max_dec = diff.get("max_decrease", {})
         html_parts.append(f"""
         <h3>Change in information flow</h3>
-        <p><strong>Largest increase:</strong> {max_inc.get("pair", "N/A")} ({max_inc.get("value", 0):+.4f} bits)</p>
-        <p><strong>Largest decrease:</strong> {max_dec.get("pair", "N/A")} ({max_dec.get("value", 0):+.4f} bits)</p>
+        <p><strong>Largest increase:</strong> {max_inc.get('pair', 'N/A')} ({max_inc.get('value', 0):+.4f} bits)</p>
+        <p><strong>Largest decrease:</strong> {max_dec.get('pair', 'N/A')} ({max_dec.get('value', 0):+.4f} bits)</p>
         """)
 
     return "".join(html_parts)
@@ -3552,7 +2992,7 @@ def _build_te_summary(te_results: dict[str, Any]) -> str:
 def _build_mediation_summary(mediation_results: dict[str, Any]) -> str:
     """Build mediation analysis summary section."""
     if "error" in mediation_results:
-        return f"<p>Error: {mediation_results['error']}</p>"
+        return f'<p>Error: {mediation_results["error"]}</p>'
 
     total = mediation_results.get("total_effect", {})
     pathways = mediation_results.get("pathways", {})
@@ -3561,23 +3001,21 @@ def _build_mediation_summary(mediation_results: dict[str, Any]) -> str:
 
     # Total effect summary
     if total:
-        sig_badge = (
-            '<span class="badge badge-sig">Significant</span>'
-            if total.get("p_value", 1) < 0.05
-            else '<span class="badge badge-ns">Not significant</span>'
-        )
+        sig_badge = ('<span class="badge badge-sig">Significant</span>'
+                     if total.get("p_value", 1) < 0.05
+                     else '<span class="badge badge-ns">Not significant</span>')
         html_parts.append(f"""
         <div class="causal-grid">
             <div class="causal-stat">
-                <div class="value">{total.get("effect", 0):+.1f}</div>
+                <div class="value">{total.get('effect', 0):+.1f}</div>
                 <div class="label">Total effect (readiness score)</div>
             </div>
             <div class="causal-stat">
-                <div class="value">{total.get("pre_mean", 0):.1f} -> {total.get("post_mean", 0):.1f}</div>
+                <div class="value">{total.get('pre_mean', 0):.1f} -> {total.get('post_mean', 0):.1f}</div>
                 <div class="label">Pre -> Post average</div>
             </div>
             <div class="causal-stat">
-                <div class="value">{format_p_value(total.get("p_value", 1.0))}</div>
+                <div class="value">{format_p_value(total.get('p_value', 1.0))}</div>
                 <div class="label">Raw p-value {sig_badge}</div>
             </div>
         </div>""")
@@ -3588,33 +3026,28 @@ def _build_mediation_summary(mediation_results: dict[str, Any]) -> str:
         for key, p in pathways.items():
             if "error" in p:
                 rows.append(
-                    f"<tr><td>{p.get('label', key)}</td>"
-                    f'<td colspan="8"><em>{p["error"]}</em></td></tr>'
+                    f'<tr><td>{p.get("label", key)}</td>'
+                    f'<td colspan="7"><em>{p["error"]}</em></td></tr>'
                 )
                 continue
 
             fav_class = "favorable" if p.get("favorable") else "unfavorable"
-            q_indirect = p.get("q_indirect_bh", p.get("p_indirect", 1))
-            sig_fdr = p.get("significant_fdr", p.get("p_indirect", 1) < 0.05)
-            sig_badge = (
-                '<span class="badge badge-sig">FDR-sig</span>'
-                if sig_fdr
-                else '<span class="badge badge-ns">NS</span>'
-            )
+            sig_badge = ('<span class="badge badge-sig">Sig</span>'
+                         if p.get("p_indirect", 1) < 0.05
+                         else '<span class="badge badge-ns">NS</span>')
 
             rows.append(
-                f"<tr>"
-                f"<td><strong>{p['label']}</strong><br>"
-                f"<small>{p['description']}</small></td>"
-                f"<td>{p['mediator_pre_mean']:.2f} -> {p['mediator_post_mean']:.2f}</td>"
-                f"<td>{p['a_path']:+.3f}</td>"
-                f"<td>{p['b_path']:+.3f}</td>"
+                f'<tr>'
+                f'<td><strong>{p["label"]}</strong><br>'
+                f'<small>{p["description"]}</small></td>'
+                f'<td>{p["mediator_pre_mean"]:.2f} -> {p["mediator_post_mean"]:.2f}</td>'
+                f'<td>{p["a_path"]:+.3f}</td>'
+                f'<td>{p["b_path"]:+.3f}</td>'
                 f'<td class="{fav_class}">{p["indirect_effect"]:+.4f}<br>'
-                f"<small>[{p['indirect_ci_lower']:+.4f}, {p['indirect_ci_upper']:+.4f}]</small></td>"
-                f"<td>{p['proportion_mediated']:.1f}%</td>"
-                f"<td>{p['p_indirect']:.4f}</td>"
-                f"<td>{q_indirect:.4f} {sig_badge}</td>"
-                f"</tr>"
+                f'<small>[{p["indirect_ci_lower"]:+.4f}, {p["indirect_ci_upper"]:+.4f}]</small></td>'
+                f'<td>{p["proportion_mediated"]:.1f}%</td>'
+                f'<td>{p["p_indirect"]:.4f} {sig_badge}</td>'
+                f'</tr>'
             )
 
         html_parts.append(f"""
@@ -3622,9 +3055,9 @@ def _build_mediation_summary(mediation_results: dict[str, Any]) -> str:
             <thead><tr>
                 <th>Pathway</th><th>Mediator (pre->post)</th><th>a (T->M)</th>
                 <th>b (M->Y)</th><th>Indirect effect [95% CI]</th>
-                <th>% mediated</th><th>Raw p-value</th><th>q-value (BH)</th>
+                <th>% mediated</th><th>p-value</th>
             </tr></thead>
-            <tbody>{"".join(rows)}</tbody>
+            <tbody>{''.join(rows)}</tbody>
         </table>""")
 
     return "".join(html_parts)
@@ -3644,9 +3077,7 @@ def _build_statistical_power_section(
     streams = ci_results.get("streams", {})
 
     if not streams:
-        return (
-            "<p>No CausalImpact results available for statistical power analysis.</p>"
-        )
+        return '<p>No CausalImpact results available for statistical power analysis.</p>'
 
     # --- Calculate post-intervention days from data ---
     rux_str = str(TREATMENT_START)
@@ -3660,11 +3091,7 @@ def _build_statistical_power_section(
         if not isinstance(s, dict):
             continue
         # Skip complete failures with no useful data
-        if (
-            "error" in s
-            and s.get("p_value", 1.0) == 1.0
-            and s.get("avg_effect", 0) == 0
-        ):
+        if "error" in s and s.get("p_value", 1.0) == 1.0 and s.get("avg_effect", 0) == 0:
             continue
 
         p_val = s.get("p_value", 1.0)
@@ -3681,7 +3108,7 @@ def _build_statistical_power_section(
             direction_arrow = "&#8595;"  # down arrow
             direction_text = "decreased"
         else:
-            direction_arrow = "-"  # em dash
+            direction_arrow = "&#8212;"  # em dash
             direction_text = "no change"
 
         # Significance status
@@ -3698,22 +3125,20 @@ def _build_statistical_power_section(
             sig_status = "Not significant"
             sig_class = ""
 
-        metric_rows.append(
-            {
-                "label": s.get("label", key),
-                "key": key,
-                "direction_arrow": direction_arrow,
-                "direction_text": direction_text,
-                "effect": effect,
-                "unit": s.get("unit", ""),
-                "rel_effect": rel_effect,
-                "p_value": p_val,
-                "q_value": q_val,
-                "low_confidence": s.get("low_confidence", False),
-                "sig_status": sig_status,
-                "sig_class": sig_class,
-            }
-        )
+        metric_rows.append({
+            "label": s.get("label", key),
+            "key": key,
+            "direction_arrow": direction_arrow,
+            "direction_text": direction_text,
+            "effect": effect,
+            "unit": s.get("unit", ""),
+            "rel_effect": rel_effect,
+            "p_value": p_val,
+            "q_value": q_val,
+            "low_confidence": s.get("low_confidence", False),
+            "sig_status": sig_status,
+            "sig_class": sig_class,
+        })
 
     # Sort by p-value ascending
     metric_rows.sort(key=lambda x: x["p_value"])
@@ -3743,18 +3168,16 @@ def _build_statistical_power_section(
     if strongest:
         strongest_q_sentence = (
             "remains significant after Benjamini-Hochberg correction"
-            if strongest["q_value"] < 0.05
-            else "does not remain significant after Benjamini-Hochberg correction"
+            if strongest["q_value"] < 0.05 else
+            "does not remain significant after Benjamini-Hochberg correction"
         )
         lead_html = f"""
     <p style="font-size: 1.05em; line-height: 1.7; color: {TEXT_PRIMARY};">
-        <strong>{strongest["label"]}</strong> is the strongest hypothesis-generating unadjusted p-value signal
-        ({format_p_value(strongest["p_value"])}, q={strongest["q_value"]:.3f}) but {strongest_q_sentence}.
+        <strong>{strongest['label']}</strong> is the strongest hypothesis-generating raw p-value signal
+        ({format_p_value(strongest['p_value'])}, q={strongest['q_value']:.3f}) but {strongest_q_sentence}.
     </p>"""
 
-    tests = (
-        placebo_results.get("tests", []) if isinstance(placebo_results, dict) else []
-    )
+    tests = placebo_results.get("tests", []) if isinstance(placebo_results, dict) else []
     valid_tests = [t for t in tests if isinstance(t, dict) and "error" not in t]
     n_sig_placebo = sum(1 for t in valid_tests if t.get("significant", False))
 
@@ -3764,14 +3187,14 @@ def _build_statistical_power_section(
         bg = BG_ELEVATED if i % 2 == 0 else BG_SURFACE
         table_rows.append(
             f'<tr style="background:{bg};">'
-            f"<td><strong>{m['label']}</strong></td>"
+            f'<td><strong>{m["label"]}</strong></td>'
             f'<td style="text-align:center;">{m["direction_arrow"]} {m["direction_text"]}</td>'
             f'<td style="text-align:right;">{m["effect"]:+.2f} {m["unit"]}</td>'
             f'<td style="text-align:right;">{_format_relative_effect_html(m["rel_effect"])}</td>'
             f'<td style="text-align:right;">{m["p_value"]:.4f}</td>'
             f'<td style="text-align:right;">{m["q_value"]:.4f}</td>'
             f'<td class="{m["sig_class"]}">{m["sig_status"]}</td>'
-            f"</tr>"
+            f'</tr>'
         )
 
     metrics_table = f"""
@@ -3784,21 +3207,21 @@ def _build_statistical_power_section(
             <th style="text-align:right;">BH q-value</th>
             <th>Significance</th>
         </tr></thead>
-        <tbody>{"".join(table_rows)}</tbody>
+        <tbody>{''.join(table_rows)}</tbody>
     </table>"""
 
     # --- Interpretation text ---
     placebo_clause = (
         f"{n_sig_placebo}/{len(valid_tests)} placebo tests also reached p&lt;0.05"
-        if valid_tests
-        else "placebo validation was not available in this run"
+        if valid_tests else
+        "placebo validation was not available in this run"
     )
     strongest_label = strongest["label"] if strongest else "the leading metric"
     interpretation_html = f"""
     <div class="causal-method-note" style="margin-top: 20px;">
         <strong>Interpretation:</strong>
         With {n_post_days} post-intervention days, <strong>{strongest_label}</strong> is the strongest
-        unadjusted p-value signal, but no stream remains significant after BH correction. {placebo_clause},
+        raw p-value signal, but no stream remains significant after BH correction. {placebo_clause},
         so the current result should be treated as hypothesis-generating rather than confirmed.
         Autonomic metrics (HRV, lowest HR, REM) still trend in the expected direction and may
         stabilize with additional follow-up. A 14-day post-intervention window is expected to
@@ -3812,18 +3235,14 @@ def _build_statistical_power_section(
         placebo_rows = []
         for t in valid_tests:
             sig_text = "Yes" if t.get("significant") else "No"
-            sig_style = (
-                f"color: {ACCENT_RED}; font-weight: 600;"
-                if t.get("significant")
-                else f"color: {ACCENT_GREEN};"
-            )
+            sig_style = f'color: {ACCENT_RED}; font-weight: 600;' if t.get("significant") else f'color: {ACCENT_GREEN};'
             placebo_rows.append(
-                f"<tr>"
-                f"<td>{t.get('placebo_date', '')}</td>"
-                f"<td>{t.get('label', t.get('metric', ''))}</td>"
+                f'<tr>'
+                f'<td>{t.get("placebo_date", "")}</td>'
+                f'<td>{t.get("label", t.get("metric", ""))}</td>'
                 f'<td style="text-align:right;">{t.get("p_value", 1):.4f}</td>'
                 f'<td style="{sig_style}">{sig_text}</td>'
-                f"</tr>"
+                f'</tr>'
             )
 
         placebo_html = f"""
@@ -3833,11 +3252,11 @@ def _build_statistical_power_section(
             <th>Placebo date</th><th>Metric</th>
             <th style="text-align:right;">p-value</th><th>Significant?</th>
         </tr></thead>
-        <tbody>{"".join(placebo_rows)}</tbody>
+        <tbody>{''.join(placebo_rows)}</tbody>
     </table>
     <p style="margin-top: 8px;">
         <strong>{n_sig_placebo}/{len(valid_tests)}</strong> placebo tests reached significance.
-        This {"supports" if n_sig_placebo == 0 else "tempers"} the March 16 signal and keeps the
+        This {'supports' if n_sig_placebo == 0 else 'tempers'} the March 16 signal and keeps the
         current result in the hypothesis-generating category.
     </p>"""
 
@@ -3882,25 +3301,21 @@ def _build_clinical_interpretation(
 
     # Count metrics trending in expected direction
     n_favorable = sum(
-        1
-        for s in ci_streams.values()
+        1 for s in ci_streams.values()
         if isinstance(s, dict) and s.get("favorable", False)
     )
     n_total_streams = sum(
-        1 for s in ci_streams.values() if isinstance(s, dict) and "error" not in s
+        1 for s in ci_streams.values()
+        if isinstance(s, dict) and "error" not in s
     )
 
     pcmci_full = all_results.get("pcmci", {}).get("full_period", {})
-    n_causal_links = (
-        pcmci_full.get("n_significant_links", 0) if isinstance(pcmci_full, dict) else 0
-    )
+    n_causal_links = pcmci_full.get("n_significant_links", 0) if isinstance(pcmci_full, dict) else 0
 
     n_pathways_sig = 0
     pathways = all_results.get("mediation", {}).get("pathways", {})
     for p in pathways.values():
-        if isinstance(p, dict) and p.get(
-            "significant_fdr", p.get("p_indirect", 1) < 0.05
-        ):
+        if isinstance(p, dict) and p.get("p_indirect", 1) < 0.05:
             n_pathways_sig += 1
 
     # Placebo validation
@@ -3931,7 +3346,7 @@ def _build_clinical_interpretation(
             </div>
         </div>
         <ul>
-            <li><strong>{strongest_label}:</strong> strongest hypothesis-generating unadjusted p-value signal
+            <li><strong>{strongest_label}:</strong> strongest hypothesis-generating raw p-value signal
             (p={strongest_p:.4f}, q={strongest_q:.4f}). It {"survives" if strongest_q < 0.05 else "does not survive"}
             FDR correction, so confirmation still depends on more post-treatment follow-up.</li>
             <li><strong>CausalImpact:</strong> {sig_ci_raw} of {len(ci_streams)} biometric streams show
@@ -3956,7 +3371,7 @@ def _build_clinical_interpretation(
             Measurements have inherent noise that can affect causal estimates.</li>
             <li><strong>Single patient:</strong> N=1 study without control group. Causality cannot be
             definitively established, but Bayesian posterior probability of effect provides a strength measure.</li>
-            <li><strong>HEV diagnosis:</strong> HEV was diagnosed {HEV_DIAGNOSIS_DATE} (2 days after
+            <li><strong>HEV diagnosis:</strong> HEV was diagnosed 2026-03-18 (2 days after
             ruxolitinib start). Hepatitis may confound biometric changes.</li>
         </ul>
 
@@ -3973,7 +3388,6 @@ def _build_clinical_interpretation(
 # ===========================================================================
 # MAIN
 # ===========================================================================
-
 
 def main() -> None:
     """Run all causal inference methods and generate report."""
@@ -3996,9 +3410,7 @@ def main() -> None:
     try:
         all_results["causal_impact"] = run_causal_impact(daily)
         all_figures["causal_impact"] = plot_causal_impact(all_results["causal_impact"])
-        print(
-            f"  [OK] CausalImpact: {len(all_figures.get('causal_impact', []))} figures"
-        )
+        print(f"  [OK] CausalImpact: {len(all_figures.get('causal_impact', []))} figures")
     except Exception as e:
         print(f"  [ERROR] CausalImpact failed: {e}")
         traceback.print_exc()
@@ -4012,13 +3424,9 @@ def main() -> None:
         ci_res = all_results.get("causal_impact", {})
         if "error" not in ci_res:
             all_results["placebo_tests"] = run_placebo_tests(daily, ci_res)
-            print(
-                f"  [OK] Placebo tests: {all_results['placebo_tests'].get('placebo_validation', 'N/A')}"
-            )
+            print(f"  [OK] Placebo tests: {all_results['placebo_tests'].get('placebo_validation', 'N/A')}")
         else:
-            all_results["placebo_tests"] = {
-                "error": "CausalImpact failed, skipping placebo"
-            }
+            all_results["placebo_tests"] = {"error": "CausalImpact failed, skipping placebo"}
     except Exception as e:
         print(f"  [ERROR] Placebo tests failed: {e}")
         traceback.print_exc()
@@ -4042,19 +3450,12 @@ def main() -> None:
     # ---------------------------------------------------------------
     try:
         all_results["transfer_entropy"] = run_transfer_entropy(daily)
-        all_figures["transfer_entropy"] = plot_transfer_entropy(
-            all_results["transfer_entropy"]
-        )
-        print(
-            f"  [OK] Transfer Entropy: {len(all_figures.get('transfer_entropy', []))} figures"
-        )
+        all_figures["transfer_entropy"] = plot_transfer_entropy(all_results["transfer_entropy"])
+        print(f"  [OK] Transfer Entropy: {len(all_figures.get('transfer_entropy', []))} figures")
     except Exception as e:
         print(f"  [ERROR] Transfer Entropy failed: {e}")
         traceback.print_exc()
-        all_results["transfer_entropy"] = {
-            "error": str(e),
-            "method": "Transfer Entropy",
-        }
+        all_results["transfer_entropy"] = {"error": str(e), "method": "Transfer Entropy"}
         all_figures["transfer_entropy"] = []
 
     # ---------------------------------------------------------------
@@ -4120,50 +3521,28 @@ def main() -> None:
             # Strip large arrays (time series, bootstrap distributions)
             stripped = {}
             for k, v in result.items():
-                if k in (
-                    "ts_dates",
-                    "ts_actual",
-                    "ts_predicted",
-                    "ts_pred_lower",
-                    "ts_pred_upper",
-                    "bootstrap_indirect_distribution",
-                    "val_matrix",
-                    "p_matrix",
-                ):
+                if k in ("ts_dates", "ts_actual", "ts_predicted", "ts_pred_lower",
+                         "ts_pred_upper", "bootstrap_indirect_distribution",
+                         "val_matrix", "p_matrix"):
                     continue
                 if isinstance(v, dict):
                     inner = {}
                     for ik, iv in v.items():
-                        if ik in (
-                            "ts_dates",
-                            "ts_actual",
-                            "ts_predicted",
-                            "ts_pred_lower",
-                            "ts_pred_upper",
-                            "bootstrap_indirect_distribution",
-                            "val_matrix",
-                            "p_matrix",
-                        ):
+                        if ik in ("ts_dates", "ts_actual", "ts_predicted",
+                                  "ts_pred_lower", "ts_pred_upper",
+                                  "bootstrap_indirect_distribution",
+                                  "val_matrix", "p_matrix"):
                             continue
                         # Also strip nested large arrays
                         if isinstance(iv, dict):
                             inner[ik] = {
-                                iik: iiv
-                                for iik, iiv in iv.items()
-                                if iik
-                                not in (
-                                    "ts_dates",
-                                    "ts_actual",
-                                    "ts_predicted",
-                                    "ts_pred_lower",
-                                    "ts_pred_upper",
-                                    "bootstrap_indirect_distribution",
-                                    "val_matrix",
-                                    "p_matrix",
-                                    "te_matrix",
-                                    "net_te_matrix",
-                                    "diff_matrix",
-                                )
+                                iik: iiv for iik, iiv in iv.items()
+                                if iik not in ("ts_dates", "ts_actual", "ts_predicted",
+                                               "ts_pred_lower", "ts_pred_upper",
+                                               "bootstrap_indirect_distribution",
+                                               "val_matrix", "p_matrix",
+                                               "te_matrix", "net_te_matrix",
+                                               "diff_matrix")
                             }
                         else:
                             inner[ik] = iv
@@ -4223,11 +3602,7 @@ def main() -> None:
             status = "OK"
             runtime = result.get("runtime_s", 0)
         else:
-            status = (
-                f"FAILED: {result.get('error', 'unknown')}"
-                if isinstance(result, dict)
-                else "FAILED"
-            )
+            status = f"FAILED: {result.get('error', 'unknown')}" if isinstance(result, dict) else "FAILED"
             runtime = 0
         print(f"  {method_key}: {status} ({runtime:.1f}s)")
 
