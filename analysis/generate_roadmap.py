@@ -48,11 +48,11 @@ def honest_assessment() -> str:
     total_days = (today - DATA_START).days
     pre_days = (TREATMENT_START - DATA_START).days
     post_days = (today - TREATMENT_START).days
-    hev_str = HEV_DIAGNOSIS_DATE.strftime("%B %-d") if HEV_DIAGNOSIS_DATE else "N/A"
-    rux_str = TREATMENT_START.strftime("%B %-d")
+    hev_str = HEV_DIAGNOSIS_DATE.strftime("%B %d") if HEV_DIAGNOSIS_DATE else "N/A"
+    rux_str = TREATMENT_START.strftime("%B %d")
     confound_gap = (HEV_DIAGNOSIS_DATE - TREATMENT_START).days if HEV_DIAGNOSIS_DATE else 0
     day28 = TREATMENT_START + __import__("datetime").timedelta(days=28)
-    day28_str = day28.strftime("~%B %-d")
+    day28_str = day28.strftime("~%B %d")
 
     return f"""
 <h3>What we have</h3>
