@@ -31,9 +31,9 @@ PATIENT_LABEL = "Patient"
 
 # --- Clinical thresholds (referenced across multiple scripts) ---
 ESC_RMSSD_DEFICIENCY = 15     # RMSSD < 15 ms = severe autonomic deficiency (Kleiger 1987)
-NOCTURNAL_HR_ELEVATED = 80    # Sleeping HR concern threshold (bpm) — above this is abnormal
-IST_HR_THRESHOLD = 90         # IST criterion: mean 24-hour HR (HRS/EHRA 2015) — NOT for sleep-only data
-POPULATION_RMSSD_MEDIAN = 49  # General population median RMSSD (ms) — Nunan 2010
+NOCTURNAL_HR_ELEVATED = 80    # Sleeping HR concern threshold (bpm) - above this is abnormal
+IST_HR_THRESHOLD = 90         # IST criterion: mean 24-hour HR (HRS/EHRA 2015) - NOT for sleep-only data
+POPULATION_RMSSD_MEDIAN = 49  # General population median RMSSD (ms) - Nunan 2010
 NORM_RMSSD_P25 = 36           # Population 25th percentile (young adults, Nunan 2010)
 NORM_RMSSD_P75 = 72           # Population 75th percentile (young adults, Nunan 2010)
 POPULATION_RMSSD_MEAN = 42.0  # Shaffer & Ginsberg 2017, healthy adults
