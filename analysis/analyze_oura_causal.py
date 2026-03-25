@@ -1198,9 +1198,14 @@ def run_pcmci(daily: pd.DataFrame) -> dict[str, Any]:
     print("=" * 70)
     t0 = time.perf_counter()
 
-    from tigramite import data_processing as pp
-    from tigramite.pcmci import PCMCI
-    from tigramite.independence_tests.parcorr import ParCorr
+    try:
+        from tigramite import data_processing as pp
+        from tigramite.pcmci import PCMCI
+        from tigramite.independence_tests.parcorr import ParCorr
+    except ImportError:
+        print("  tigramite not installed - skipping PCMCI+")
+        print("  Install: pip install tigramite")
+        return {"method": "PCMCI+ (tigramite)", "skipped": True, "reason": "tigramite not installed", "figures": []}
 
     results: dict[str, Any] = {
         "method": "PCMCI+ (tigramite)",
