@@ -1507,8 +1507,15 @@ def build_html_report(
     # --- KPI Cards ---
     bos_status = "critical" if bos_risk["composite_score"] > 50 else "warning" if bos_risk["composite_score"] > 30 else "normal"
     bos_lbl = "Elevated" if bos_status in ("critical", "warning") else ""
-    trend_status = "critical" if trend["slope_pct_per_day"] < SPO2_CONCERN_SLOPE else "normal"
-    trend_lbl = "Declining" if trend_status in ("critical", "warning") else ""
+    if trend["slope_pct_per_day"] < SPO2_CONCERN_SLOPE:
+        trend_status = "critical"
+        trend_lbl = "Declining"
+    elif trend["concern_level"] == "MODERATE":
+        trend_status = "warning"
+        trend_lbl = "Moderate"
+    else:
+        trend_status = "normal"
+        trend_lbl = ""
     spo2_status = "normal" if variability["overall_mean"] >= 95 else "warning"
     spo2_lbl = "Low" if spo2_status in ("critical", "warning") else ""
     desat_status = "critical" if desat["absolute_desaturation_pct"] > 10 else "warning" if desat["absolute_desaturation_pct"] > 3 else "normal"
