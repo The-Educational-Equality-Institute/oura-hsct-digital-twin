@@ -35,12 +35,13 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
-# Load the parent project's .env first; repo-local .env is a fallback only.
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-ENV_PATH = PROJECT_ROOT / ".env"
-LOCAL_ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
-load_dotenv(ENV_PATH)  # parent project .env is authoritative
-load_dotenv(LOCAL_ENV_PATH)  # optional repo-local fallback for missing vars
+# Load .env: repo root first, then parent directory as fallback.
+# Matches the load order in import_oura.py.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+ENV_PATH = REPO_ROOT / ".env"
+PARENT_ENV_PATH = REPO_ROOT.parent / ".env"
+load_dotenv(ENV_PATH)  # repo root .env (tokens written here)
+load_dotenv(PARENT_ENV_PATH)  # parent project .env (fallback for client ID/secret)
 
 # Oura OAuth2 endpoints
 AUTH_URL = "https://cloud.ouraring.com/oauth/authorize"
