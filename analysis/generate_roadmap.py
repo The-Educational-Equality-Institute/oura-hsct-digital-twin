@@ -8,7 +8,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from config import REPORTS_DIR  # noqa: E402
+from datetime import date
+from config import REPORTS_DIR, TREATMENT_START, DATA_START, HEV_DIAGNOSIS_DATE  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _theme import wrap_html, make_section, make_kpi_card, make_kpi_row  # noqa: E402
