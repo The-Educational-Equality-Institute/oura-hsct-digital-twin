@@ -621,9 +621,9 @@ def print_summary(result: AuditResult) -> None:
             print()
 
     if result.sanity_issues:
-        print(f"{'─' * 70}")
+        print(f"{'-' * 70}")
         print("  SANITY ISSUES")
-        print(f"{'─' * 70}")
+        print(f"{'-' * 70}")
         for s in result.sanity_issues:
             icon = "!!" if s.severity == "error" else "!"
             print(f"  [{icon}] {s.report}: {s.issue_type} = {s.value}")
