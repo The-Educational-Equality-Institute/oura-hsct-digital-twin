@@ -22,5 +22,7 @@ python-dotenv>=1.0
 # Latest published version is 0.3.0 at time of writing.
 oura-ring>=0.3,<0.4
 
+pykalman>=0.9
+
 # Data validation (required by data_schemas.py)
 pandera>=0.18
