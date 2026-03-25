@@ -3,7 +3,7 @@
 Oura Ring OAuth2 Setup Utility
 
 Performs the OAuth2 authorization code flow to obtain access and refresh tokens
-for the Oura API. Stores tokens in the parent project's .env file for use by
+for the Oura API. Stores tokens in the repo root .env file for use by
 import_oura.py.
 
 PATs (Personal Access Tokens) were deprecated end of 2025. OAuth2 is now required.
