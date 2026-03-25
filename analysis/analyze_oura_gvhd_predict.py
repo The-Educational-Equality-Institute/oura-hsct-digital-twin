@@ -121,8 +121,8 @@ def _resolve_data_end() -> str:
         ).fetchone()
     if row and row[0]:
         return row[0]
-    print("No data found. Run: python api/import_oura.py --days 90")
-    sys.exit(0)
+    print("ERROR: No data found in database. Run: python api/import_oura.py --days 90", file=sys.stderr)
+    sys.exit(1)
 
 # BOS risk score — loaded at runtime from SpO2/BOS analysis output
 SPO2_BOS_METRICS_PATH = REPORTS_DIR / "spo2_bos_metrics.json"
