@@ -8,6 +8,7 @@ config.py
 
 # Data (user-specific databases)
 data/*.db
+!data/demo.db
 
 # Python
 __pycache__/
