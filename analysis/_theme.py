@@ -1804,7 +1804,7 @@ def get_navigation_html(current_report_id: str) -> str:
 
     return (
         '<nav class="odt-nav">\n'
-        '  <a class="odt-nav-brand" href="oura_full_analysis.html">'
+        '  <a class="odt-nav-brand" href="index.html">'
         '<span class="odt-logo">DT</span>'
         'Oura <span>Digital Twin</span></a>\n'
         '  <button class="odt-nav-toggle" '
