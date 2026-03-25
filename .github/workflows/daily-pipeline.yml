@@ -124,6 +124,8 @@ jobs:
           retention-days: 30
 
       # --- Deploy to Cloudflare Pages ---
+      # Deploys to the digital-twin-reports project (reports only).
+      # The main Astro landing page at digital-twin is managed separately.
       - name: Deploy to Cloudflare Pages
         if: success()
         env:
@@ -141,15 +143,7 @@ jobs:
           cp reports/*.html deploy/ 2>/dev/null || true
           cp reports/*.json deploy/ 2>/dev/null || true
 
-          cat > deploy/index.html << 'INDEXEOF'
-          <!DOCTYPE html>
-          <html>
-          <head><meta http-equiv="refresh" content="0;url=oura_full_analysis.html"></head>
-          <body><a href="oura_full_analysis.html">Redirecting to full analysis...</a></body>
-          </html>
-          INDEXEOF
-
           wrangler pages deploy deploy \
-            --project-name=digital-twin \
+            --project-name=digital-twin-reports \
             --branch=main \
             --commit-dirty=true
