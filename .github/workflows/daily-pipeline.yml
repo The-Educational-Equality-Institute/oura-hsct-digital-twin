@@ -27,8 +27,26 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Generate config.py
-        run: cp config.example.py config.py
+      - name: Generate config.py with patient dates
+        run: |
+          cp config.example.py config.py
+          python -c "
+          import re
+          c = open('config.py').read()
+          replacements = {
+              'TRANSPLANT_DATE = date(2023, 1, 1)': 'TRANSPLANT_DATE = date(2023, 11, 23)',
+              'TREATMENT_START = date(2026, 1, 15)': 'TREATMENT_START = date(2026, 3, 16)',
+              'KNOWN_EVENT_DATE = date(2026, 1, 10)': 'KNOWN_EVENT_DATE = date(2026, 2, 9)',
+              'HEV_DIAGNOSIS_DATE = None': 'HEV_DIAGNOSIS_DATE = date(2026, 3, 18)',
+              'DATA_START = date(2025, 12, 1)': 'DATA_START = date(2026, 1, 8)',
+              'PATIENT_AGE = 40': 'PATIENT_AGE = 36',
+              'PATIENT_LABEL = \"Patient\"': 'PATIENT_LABEL = \"Post-HSCT Patient\"',
+          }
+          for old, new in replacements.items():
+              c = c.replace(old, new)
+          open('config.py', 'w').write(c)
+          print('config.py generated with patient-specific dates')
+          "
 
       - name: Create data directory
         run: mkdir -p data
