@@ -25,7 +25,7 @@ oura-ring>=0.3,<0.4
 pandera>=0.18
 
 # Causal impact analysis (required by analyze_oura_causal.py)
-pycausalimpact>=0.2
+pycausalimpact>=0.1,<0.2
 
 # Entropy / nonlinear HRV metrics (required by advanced_hrv + biomarkers)
 antropy>=0.1

@@ -45,6 +45,7 @@ reports/send_bundle/
 # Local automation (keep daily_pipeline.sh tracked)
 scripts/*
 !scripts/daily_pipeline.sh
+!scripts/install_full_stack.sh
 
 # Build / deploy artifacts
 test-results/
