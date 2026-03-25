@@ -1,9 +1,12 @@
 # ---------------------------------------------------------------------------
-# Core install path (fresh clone):
+# Core dependencies - enough to run the basic pipeline.
 #
 #   pip install -r requirements.txt
 #
-# See bottom of file for optional packages that require manual install.
+# For the full stack (all optional backends), install requirements-full.txt
+# instead:
+#
+#   pip install -r requirements-full.txt
 # ---------------------------------------------------------------------------
 
 numpy>=1.24
@@ -21,37 +24,3 @@ oura-ring>=0.3,<0.4
 
 # Data validation (required by data_schemas.py)
 pandera>=0.18
-
-# Causal impact analysis (required by analyze_oura_causal.py)
-pycausalimpact>=0.1,<0.2
-
-# Entropy / nonlinear HRV metrics (required by advanced_hrv + biomarkers)
-antropy>=0.1
-nolds>=0.5
-
-# Optional: Foundation model forecasting (requires GPU)
-# chronos-forecasting>=1.0
-# torch>=2.0
-
-# Optional: Causal discovery (PCMCI+)
-# tigramite>=5.2
-
-# Optional: Matrix Profile anomaly detection
-# stumpy>=1.12
-
-# Optional: Time-series feature extraction
-# tsfresh>=0.20
-
-# Kalman filter digital twin
-filterpy>=1.4
-pykalman>=0.9
-
-# Optional: HMM state detection (GVHD prediction)
-hmmlearn>=0.3
-
-# Optional (requires manual install): ssm, Cython
-# The GVHD script already has try/except with HMM fallback.
-# ssm fails to build on clean installs (needs Cython at build time).
-# To install manually:
-#   pip install Cython==3.0.11 numpy setuptools wheel
-#   pip install --no-build-isolation ssm==0.0.1
