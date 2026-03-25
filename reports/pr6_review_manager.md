@@ -48,4 +48,28 @@
 ### Triage Decision
 Fixing all CRITICAL and actionable MAJOR issues. Deferring cosmetic MINOR issues.
 
-**Issues to fix:**
+**All fixes applied (19 of 19 comments addressed):**
+
+| # | File | Fix | Status |
+|---|------|-----|--------|
+| 1 | config.example.py | Changed KNOWN_EVENT_DATE and HEV_DIAGNOSIS_DATE to date() objects | DONE |
+| 2 | scripts/daily_pipeline.sh:10 | Fixed VENV_DIR to resolve relative to repo parent | DONE |
+| 3 | analysis/_theme.py | Import HEV_DIAGNOSIS_DATE; use in disclaimer_banner dynamically | DONE |
+| 4 | analyze_oura_anomalies.py:240 | Seed all_dates from all 6 sources (was missing 3) | DONE |
+| 5 | analyze_oura_anomalies.py:488 | Resolved by fix 1 (config.example.py now uses date()) | N/A |
+| 6 | analyze_oura_digital_twin.py | Replaced all 7 np.bool_(False) checks with np.ma.getmaskarray() | DONE |
+| 7 | analyze_oura_foundation_models.py:1790 | KPI card uses TREATMENT_START.strftime() dynamically | DONE |
+| 8 | analyze_oura_foundation_models.py:2162 | Added raise SystemExit(1) on HTML/JSON generation failure | DONE |
+| 9 | analyze_oura_gvhd_predict.py:474 | Fragmentation now joins on period_id (same as primary) | DONE |
+| 10 | analyze_oura_sleep_advanced.py:835 | Division uses safe_total with .replace(0, np.nan) | DONE |
+| 11 | analyze_oura_spo2_trend.py:1845 | Added early return when spo2 DataFrame is empty | DONE |
+| 12 | generate_roadmap.py:41 | Day counts and dates computed from config constants | DONE |
+| 13 | api/import_oura.py:1059 | Guard os.makedirs for empty dirname | DONE |
+| 14 | requirements.txt:34 | Uncommented pykalman (hard import in digital_twin.py) | DONE |
+| 15 | scripts/daily_pipeline.sh:31 | OAuth2 refresh only when client_id+refresh_token set | DONE |
+| 16 | .env.example | Recommend OAuth2 as primary, note PAT deprecation | DONE |
+| 17 | analyze_oura_spo2_trend.py:1511 | Added MODERATE trend state in KPI | DONE |
+| 18 | api/oura_oauth2_setup.py:270 | Removed extraneous f-string prefix | DONE |
+| 19 | README.md:50 | Removed duplicate generate_*.py line | DONE |
+
+### Running pipeline verification...
