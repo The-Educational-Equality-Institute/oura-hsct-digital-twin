@@ -35,22 +35,28 @@ The pipeline re-computes all reported values from the current data on every run.
 
 ```
 oura-digital-twin/
-  config.example.py      Patient-specific constants template (copy to config.py)
-  run_all.py             Pipeline runner — executes all 12 scripts sequentially
-  requirements.txt       Core dependencies
+  config.example.py        Patient-specific constants (copy to config.py)
+  .env.example             API credentials template (copy to .env)
+  run_all.py               Pipeline runner - all 12 scripts sequentially
+  requirements.txt         Core dependencies
+  requirements-full.txt    Full stack (optional backends included)
+  pyproject.toml           Ruff linter configuration
   api/
-    oura_oauth2_setup.py OAuth2 authorization flow
-    import_oura.py       Oura API → SQLite importer
+    oura_oauth2_setup.py   OAuth2 authorization flow
+    import_oura.py         Oura API -> SQLite importer
   analysis/
-    _theme.py            Shared HTML/CSS design system
-    _config.py           Backwards-compat config re-export
-    _hardening.py        Numerical stability utilities
-    analyze_oura_*.py    Analysis scripts
-    generate_*.py        Dashboard and roadmap generators
-  data/demo.db           Demo dataset (79 days of real Oura data, included)
-  data/oura.db           Your own data (created by importer, gitignored)
-  reports/               Generated output (gitignored, see live site)
-  examples/              Example outputs
+    _theme.py              Shared HTML/CSS design system
+    _config.py             Backwards-compat config re-export
+    _hardening.py          Numerical stability utilities
+    statcheck_reports.py   QA - verify stats match between HTML and JSON
+    analyze_oura_*.py      10 analysis scripts
+    generate_*.py          2 dashboard/roadmap generators
+  scripts/
+    daily_pipeline.sh      Cron-ready daily import + analysis
+    install_full_stack.sh  Full dependency installer (handles ssm/Cython)
+  data/demo.db             Demo dataset (79 days of real Oura data, included)
+  data/oura.db             Your own data (created by importer, gitignored)
+  reports/                 Generated output (gitignored, see live site)
 ```
 
 ## Quick Start (demo data included)
