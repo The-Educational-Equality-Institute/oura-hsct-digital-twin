@@ -387,14 +387,10 @@ def build_daily_features(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
 
     # --- Sleep fragmentation index ---
     # From epochs: count phase transitions per hour of sleep
-    # Use the primary (longest) period's period_id so fragmentation matches
+    # Join on period_id to keep fragmentation aligned with primary (longest) period
     epoch_frag = compute_epoch_fragmentation(data["epochs"], data["sleep"])
-    if "period_id" in daily.columns and "period_id" in epoch_frag.columns:
-        # Join on period_id to keep fragmentation aligned with primary period
-        frag_cols = [c for c in epoch_frag.columns if c != "date"]
-        daily = daily.merge(epoch_frag[frag_cols], on="period_id", how="left")
-    else:
-        daily = daily.merge(epoch_frag, on="date", how="left")
+    frag_cols = ["period_id", "frag_index", "transitions", "awake_epochs_pct"]
+    daily = daily.merge(epoch_frag[frag_cols], on="period_id", how="left")
 
     # --- SpO2 ---
     spo2 = data["spo2"][["date", "spo2_average", "breathing_disturbance_index"]].copy()
