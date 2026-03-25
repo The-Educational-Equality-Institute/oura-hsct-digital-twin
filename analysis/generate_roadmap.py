@@ -118,7 +118,7 @@ these sample sizes.</p>
 
 <h3>What resolves this</h3>
 <p>Time. HEV is acute. It resolves in weeks. Ruxolitinib is sustained.
-If the signals persist and strengthen at day 28 (~April 13), it is
+If the signals persist and strengthen at day 28 ({day28_str}), it is
 ruxolitinib. If they fade, it was HEV. We cannot know before then.</p>
 
 <p>There is one shortcut: <strong>Oura has the answer now.</strong>
