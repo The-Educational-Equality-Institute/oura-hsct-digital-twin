@@ -55,9 +55,13 @@ oura-digital-twin/
 ## Setup
 
 1. Create and activate a Python 3.12+ virtual environment
-2. Install dependencies:
+2. Install core dependencies:
    ```bash
    pip install -r requirements.txt
+   ```
+   For full stack (includes optional `ssm` rSLDS backend):
+   ```bash
+   bash scripts/install_full_stack.sh
    ```
 3. Copy `.env.example` to `.env` and add your Oura API credentials:
    ```bash
@@ -69,6 +73,7 @@ oura-digital-twin/
    cp config.example.py config.py
    # Edit config.py — set your dates, patient label, and thresholds
    ```
+   `.env` is for API auth secrets. `config.py` is for analysis constants and clinical/context parameters.
 5. Import your Oura data (creates the SQLite database in `data/`):
    ```bash
    python api/import_oura.py --days 90
@@ -91,6 +96,8 @@ Full pipeline (all 12 scripts, ~10 minutes):
 ```bash
 python run_all.py
 ```
+If data is missing/empty, `run_all.py` now stops at precheck with an actionable import command
+instead of emitting long per-script tracebacks.
 
 All output goes to `reports/`.
 
@@ -107,7 +114,7 @@ Key fields to set:
 ```python
 TRANSPLANT_DATE = date(2023, 1, 1)       # Major clinical event / baseline anchor
 TREATMENT_START = date(2026, 1, 15)      # Intervention start (for causal analysis)
-KNOWN_EVENT_DATE = "2026-01-10"          # Known acute episode (validation anchor)
+KNOWN_EVENT_DATE = date(2026, 1, 10)     # Known acute episode (validation anchor)
 PATIENT_AGE = 40
 PATIENT_LABEL = "Patient"
 ```
@@ -121,9 +128,14 @@ Core:
 pip install -r requirements.txt
 ```
 
-Optional (for advanced analyses):
+Optional full-stack install (includes `ssm` rSLDS backend):
 ```
-pip install nolds filterpy hmmlearn chronos-forecasting torch tigramite stumpy
+bash scripts/install_full_stack.sh
+```
+
+Optional extras (for advanced analyses beyond core):
+```
+pip install chronos-forecasting torch tigramite stumpy
 ```
 
 - `nolds` — Nonlinear dynamics (DFA, Lyapunov) for advanced HRV

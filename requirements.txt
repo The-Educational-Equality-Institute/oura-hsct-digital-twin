@@ -1,21 +1,14 @@
 # ---------------------------------------------------------------------------
-# INSTALL NOTE: ssm==0.0.1 requires Cython at build time. pip installs
-# packages in listed order, so the build prerequisites below MUST appear
-# before ssm. From a clean venv:
+# Core install path (fresh clone):
 #
 #   pip install -r requirements.txt
 #
-# If the ssm build still fails, do a two-step install:
-#
-#   pip install cython numpy setuptools wheel
-#   pip install -r requirements.txt
+# Optional rSLDS backend (ssm) requires a local C/C++ toolchain and can fail
+# on fresh systems. GVHD analysis falls back to hmmlearn automatically when
+# ssm is not installed.
 # ---------------------------------------------------------------------------
 
-# Build prerequisites (must be installed before ssm)
-cython
 numpy>=1.24
-setuptools
-wheel
 
 # Core dependencies
 plotly>=5.18
@@ -25,7 +18,8 @@ statsmodels>=0.14
 scikit-learn>=1.3
 requests>=2.31
 python-dotenv>=1.0
-oura-ring>=0.4
+# Latest published version is 0.3.0 at time of writing.
+oura-ring>=0.3,<0.4
 
 # Data validation (required by data_schemas.py)
 pandera>=0.18
@@ -57,6 +51,8 @@ pykalman>=0.9
 # Optional: HMM state detection (GVHD prediction)
 hmmlearn>=0.3
 
-# State-space models (required by analyze_oura_gvhd_predict.py)
-# Requires cython, numpy, setuptools, wheel at build time (listed above)
-ssm==0.0.1
+# Optional: true rSLDS backend (GVHD script already has HMM fallback)
+# To install:
+#   pip install cython numpy setuptools wheel
+#   pip install --no-build-isolation ssm==0.0.1
+# ssm==0.0.1

@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from config import REPORTS_DIR  # noqa: E402
+from config import REPORTS_DIR, validate_config  # noqa: E402
 
 ANALYSIS_DIR = Path(__file__).resolve().parent / "analysis"
 REPORTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -149,7 +149,21 @@ def main():
         action="store_true",
         help="Exit with code 1 if ANY script fails (default: exit 0 if at least one passes)",
     )
+    parser.add_argument(
+        "--skip-precheck",
+        action="store_true",
+        help="Skip database precheck and run scripts regardless of config/data readiness.",
+    )
     args = parser.parse_args()
+
+    if not args.skip_precheck and not validate_config():
+        log("=" * 70)
+        log("  PRECHECK FAILED - database is missing, empty, or not initialized.")
+        log("  Run: python api/import_oura.py --days 90")
+        log("  Skipping pipeline run to avoid noisy downstream tracebacks.")
+        log("  Use --skip-precheck only if you intentionally want per-script failures.")
+        log("=" * 70)
+        return
 
     t_total = time.perf_counter()
     log("=" * 70)
