@@ -109,8 +109,8 @@ def _resolve_data_end() -> str:
     """Query database for the latest available date across key tables."""
     import sqlite3 as _sql
     if not Path(DATABASE_PATH).exists():
-        print("No data found. Run: python api/import_oura.py --days 90")
-        sys.exit(0)
+        print(f"ERROR: Database not found at {DATABASE_PATH}. Run: python api/import_oura.py --days 90", file=sys.stderr)
+        sys.exit(1)
     with _sql.connect(str(DATABASE_PATH)) as conn:
         row = conn.execute(
             "SELECT MAX(d) FROM ("
