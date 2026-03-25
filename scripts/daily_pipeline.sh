@@ -7,7 +7,7 @@
 set -euo pipefail
 
 # --- Configuration (edit these) ---
-VENV_DIR="${VENV_DIR:-$(dirname "$0")/../../.venv}"
+VENV_DIR="${VENV_DIR:-$(cd "$(dirname "$0")/.." && pwd)/../.venv}"
 DIGITAL_TWIN="$(cd "$(dirname "$0")/.." && pwd)"
 IMPORT_SCRIPT="${IMPORT_SCRIPT:-$DIGITAL_TWIN/api/import_oura.py}"
 LOGFILE="${LOGFILE:-/tmp/oura_daily_pipeline.log}"
