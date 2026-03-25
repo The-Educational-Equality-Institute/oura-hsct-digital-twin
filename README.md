@@ -213,7 +213,7 @@ See [`reports/DATA_METHODOLOGY.md`](reports/DATA_METHODOLOGY.md) for detailed do
 - [Oura Ring Gen 4](https://ouraring.com) — wearable biometric data
 - [Claude Code](https://claude.ai/code) — AI-assisted development
 - [Plotly](https://plotly.com/python/) — interactive visualizations
-- [CausalImpact](https://github.com/jamalsenouci/causalimpact) — Bayesian causal inference
+- [CausalImpact](https://pypi.org/project/pycausalimpact/) — Bayesian causal inference
 - Python 3.12 / pandas / scipy / statsmodels / scikit-learn
 
 ## Disclaimer
