@@ -1168,10 +1168,8 @@ def analyze_sensor_fusion(
     # --- Observation availability ---
     availability = {}
     for j, col in enumerate(obs_cols):
-        if hasattr(obs_masked[:, j], 'mask') and obs_masked[:, j].mask is not np.bool_(False):
-            n_avail = int((~obs_masked[:, j].mask).sum())
-        else:
-            n_avail = int((~np.isnan(np.array(obs_masked[:, j]))).sum())
+        mask_j = np.ma.getmaskarray(obs_masked[:, j])
+        n_avail = int((~mask_j).sum())
         availability[col] = {
             "n_available": n_avail,
             "fraction": round(n_avail / n_days, 3),
