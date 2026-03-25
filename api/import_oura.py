@@ -122,8 +122,14 @@ def _fetch_paginated(
                 time.sleep(retry_after)
                 continue
             if resp.status_code == 401:
+                global _auth_failure_count
+                _auth_failure_count += 1
                 logging.warning("Oura API returned 401 for %s - skipping (scope/token issue). "
                                 "Try: python api/oura_oauth2_setup.py", endpoint)
+                if _auth_failure_count >= 3:
+                    logging.error("Multiple 401 errors (%d endpoints) - token may be fully "
+                                  "expired or revoked. Run: python api/oura_oauth2_setup.py --refresh",
+                                  _auth_failure_count)
                 return []
             break  # Got a non-429, non-401 response
         else:
