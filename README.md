@@ -114,7 +114,7 @@ Single analysis:
 python analysis/analyze_oura_causal.py
 ```
 
-Full pipeline (all 12 scripts, ~10 minutes):
+Full pipeline (all 12 scripts, ~35 seconds with core deps, ~2 minutes with full stack):
 ```bash
 python run_all.py
 ```
