@@ -181,9 +181,9 @@ def main():
             results.append((script, "MISSING"))
             continue
 
-        log(f"\n{'─' * 70}")
+        log(f"\n{'-' * 70}")
         log(f"[{i}/{n_scripts}] Running {script}...")
-        log(f"{'─' * 70}")
+        log(f"{'-' * 70}")
         t0 = time.perf_counter()
 
         try:
