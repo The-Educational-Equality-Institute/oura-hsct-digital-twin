@@ -1842,6 +1842,10 @@ def main() -> int:
         sleep = load_sleep_periods(conn)
         readiness = load_readiness(conn)
 
+        if spo2.empty:
+            print("  WARNING: No SpO2 data found. Skipping SpO2/BOS analysis.")
+            conn.close()
+            return
         print(f"  SpO2: {len(spo2)} nights ({spo2['date'].min()} to {spo2['date'].max()})")
         print(f"  HR (nightly): {len(nightly_hr)} days")
         print(f"  Sleep periods: {len(sleep)} periods")
