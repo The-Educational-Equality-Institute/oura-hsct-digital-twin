@@ -6,8 +6,10 @@ and JSON metrics to oura-digital-twin/reports/.
 
 Usage:
     cd oura-digital-twin
-    python run_all.py
+    python run_all.py           # exit 0 if at least one script passes
+    python run_all.py --strict  # exit 1 if ANY script fails
 """
+import argparse
 import os
 import json
 import shutil
