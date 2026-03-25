@@ -11,7 +11,7 @@ PATs (Personal Access Tokens) were deprecated end of 2025. OAuth2 is now require
 Prerequisites:
     1. Register an app at https://cloud.ouraring.com (developer portal)
     2. Set redirect URI to http://localhost:4421/callback
-    3. Add OURA_CLIENT_ID and OURA_CLIENT_SECRET to the parent .env
+    3. Add OURA_CLIENT_ID and OURA_CLIENT_SECRET to .env (repo root or parent)
 
 Usage:
     python api/oura_oauth2_setup.py              # First-time setup (opens browser)
