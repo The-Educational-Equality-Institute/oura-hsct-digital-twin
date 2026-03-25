@@ -43,6 +43,7 @@ SCRIPTS = [
 ]
 
 SEND_BUNDLE_HTML = [
+    "index.html",
     "oura_full_analysis.html",
     "advanced_hrv_analysis.html",
     "advanced_sleep_analysis.html",
