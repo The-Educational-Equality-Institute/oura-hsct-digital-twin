@@ -1851,13 +1851,8 @@ def main() -> int:
         efficiency_df, ultradian, hrv_coupling, rux_comparison, periods,
     )
 
-    # Save JSON
+    # Build and save dashboard (write HTML first - if this crashes, no orphaned JSON)
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    with open(JSON_OUT, "w", encoding="utf-8") as f:
-        json.dump(summary, f, indent=2, ensure_ascii=False, default=str)
-    print(f"JSON saved: {JSON_OUT}")
-
-    # Build and save dashboard
     print("Building interactive dashboard...")
     plotly_div = build_dashboard(
         frag_df, trans_counts, trans_probs, rem_latency_df, cycles_df,
@@ -1867,6 +1862,11 @@ def main() -> int:
     with open(HTML_OUT, "w", encoding="utf-8") as f:
         f.write(html)
     print(f"Dashboard saved: {HTML_OUT}")
+
+    # Save JSON (written after HTML succeeds)
+    with open(JSON_OUT, "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2, ensure_ascii=False, default=str)
+    print(f"JSON saved: {JSON_OUT}")
 
     # Print summary
     print_summary(summary)

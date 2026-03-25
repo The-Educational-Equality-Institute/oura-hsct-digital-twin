@@ -2474,15 +2474,16 @@ def _run_analysis(conn: sqlite3.Connection) -> None:
         def default(self, obj: Any) -> Any:
             return _json_safe(obj)
 
-    with open(JSON_OUTPUT, "w", encoding="utf-8") as f:
-        json.dump(_sanitize_nan(metrics), f, indent=2, ensure_ascii=False, cls=NumpyEncoder)
-    print(f"  -> JSON: {JSON_OUTPUT}")
-
-    # HTML report
+    # HTML report (write first - if this crashes, no orphaned JSON)
     html = generate_html_report(metrics, figures)
     with open(HTML_OUTPUT, "w", encoding="utf-8") as f:
         f.write(html)
     print(f"  -> HTML: {HTML_OUTPUT}")
+
+    # JSON metrics (written after HTML succeeds)
+    with open(JSON_OUTPUT, "w", encoding="utf-8") as f:
+        json.dump(_sanitize_nan(metrics), f, indent=2, ensure_ascii=False, cls=NumpyEncoder)
+    print(f"  -> JSON: {JSON_OUTPUT}")
 
     # -----------------------------------------------------------------------
     # Summary
