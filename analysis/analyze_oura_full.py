@@ -995,7 +995,7 @@ def fig_readiness_recovery(data: dict) -> go.Figure:
                      gridcolor="rgba(255,255,255,0.05)")
     fig.update_yaxes(title_text="BPM", zeroline=False, row=2, col=1,
                      gridcolor="rgba(255,255,255,0.05)")
-    fig.update_yaxes(title_text="Degrees C", zeroline=False, row=2, col=2,
+    fig.update_yaxes(title_text="Temperature (°C)", zeroline=False, row=2, col=2,
                      gridcolor="rgba(255,255,255,0.05)")
 
     fig.update_layout(

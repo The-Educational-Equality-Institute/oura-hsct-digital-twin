@@ -517,11 +517,11 @@ def run_causal_impact(daily: pd.DataFrame) -> dict[str, Any]:
                               "higher_is_better": False},
         "mean_hr": {"label": "Average heart rate (bpm)", "unit": "bpm",
                     "higher_is_better": False},
-        "average_breath": {"label": "Respiratory rate (bpm)", "unit": "bpm",
+        "average_breath": {"label": "Respiratory rate (br/min)", "unit": "br/min",
                            "higher_is_better": False},
         "spo2_average": {"label": "SpO2 (%)", "unit": "%",
                          "higher_is_better": True},
-        "temperature_deviation": {"label": "Temperature deviation (C)", "unit": "C",
+        "temperature_deviation": {"label": "Temperature deviation (°C)", "unit": "°C",
                                   "higher_is_better": False},
     }
 

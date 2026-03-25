@@ -1094,7 +1094,7 @@ def compute_allostatic_load(conn: sqlite3.Connection) -> dict:
         details["sleep_efficiency"] = {"value": round(avg_eff, 1), "threshold": 85,
                                        "exceeded": eff_flag, "unit": "%"}
 
-    # 4. Temperature deviation > 0.5C
+    # 4. Temperature deviation > 0.5°C
     rows = conn.execute(
         "SELECT temperature_deviation FROM oura_readiness WHERE temperature_deviation IS NOT NULL"
     ).fetchall()
@@ -1103,7 +1103,7 @@ def compute_allostatic_load(conn: sqlite3.Connection) -> dict:
         temp_flag = avg_temp_dev > 0.5
         score += int(temp_flag)
         details["temp_deviation"] = {"value": round(avg_temp_dev, 3), "threshold": 0.5,
-                                     "exceeded": temp_flag, "unit": "C"}
+                                     "exceeded": temp_flag, "unit": "°C"}
 
     # 5. SpO2 < 95%
     rows = conn.execute(
