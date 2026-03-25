@@ -1,13 +1,34 @@
+# ---------------------------------------------------------------------------
+# INSTALL NOTE: ssm==0.0.1 requires Cython at build time. pip installs
+# packages in listed order, so the build prerequisites below MUST appear
+# before ssm. From a clean venv:
+#
+#   pip install -r requirements.txt
+#
+# If the ssm build still fails, do a two-step install:
+#
+#   pip install cython numpy setuptools wheel
+#   pip install -r requirements.txt
+# ---------------------------------------------------------------------------
+
+# Build prerequisites (must be installed before ssm)
+cython
+numpy>=1.24
+setuptools
+wheel
+
 # Core dependencies
 plotly>=5.18
 pandas>=2.0
-numpy>=1.24
 scipy>=1.11
 statsmodels>=0.14
 scikit-learn>=1.3
 requests>=2.31
 python-dotenv>=1.0
 oura-ring>=0.4
+
+# Data validation (required by data_schemas.py)
+pandera>=0.18
 
 # Causal impact analysis (required by analyze_oura_causal.py)
 pycausalimpact>=0.2
@@ -35,3 +56,7 @@ pykalman>=0.9
 
 # Optional: HMM state detection (GVHD prediction)
 hmmlearn>=0.3
+
+# State-space models (required by analyze_oura_gvhd_predict.py)
+# Requires cython, numpy, setuptools, wheel at build time (listed above)
+ssm==0.0.1
