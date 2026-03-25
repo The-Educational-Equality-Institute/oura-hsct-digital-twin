@@ -1,0 +1,148 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ['3.12']
+        include:
+          - os: windows-latest
+            python-version: '3.12'
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Lint with ruff
+        run: |
+          pip install ruff
+          ruff check .
+          ruff format --check .
+
+      - name: Generate config.py for CI
+        run: cp config.example.py config.py
+
+      - name: Create test database
+        run: python ci/setup_test_db.py data/oura.db
+
+      - name: Smoke test - import modules
+        run: |
+          python -c "
+          import importlib, sys
+          modules = [
+              'config',
+              'analysis._config',
+              'analysis._hardening',
+              'analysis._theme',
+              'analysis.data_schemas',
+              'analysis._bos_risk',
+          ]
+          failed = []
+          for mod in modules:
+              try:
+                  importlib.import_module(mod)
+                  print(f'  OK: {mod}')
+              except Exception as e:
+                  print(f'  FAIL: {mod} - {e}')
+                  failed.append(mod)
+          if failed:
+              print(f'\n{len(failed)} module(s) failed to import')
+              sys.exit(1)
+          print(f'\nAll {len(modules)} modules imported successfully')
+          "
+
+      - name: PHI scan
+        run: |
+          python -c "
+          import re, sys, pathlib
+
+          patterns = [
+              (r'R(?:ø|oe)ine', 'Patient surname'),
+              (r'Giller', 'Patient middle name'),
+              (r'personnummer', 'National ID reference'),
+              (r'f(?:ø|oe)dselsnummer', 'National ID reference'),
+              (r'\b\d{11}\b', '11-digit number (possible national ID)'),
+              (r'1989[-./]?11[-./]?05|05[-./]?11[-./]?1989', 'Patient birth date'),
+              (r'roine\.o\.henrik@gmail', 'Patient email'),
+          ]
+
+          skip_dirs = {'.git', '.venv', 'venv', '__pycache__', '.ruff_cache',
+                       'node_modules', '.codegraph', '.code-review-graph'}
+          text_exts = {'.py', '.md', '.txt', '.yml', '.yaml', '.json', '.toml',
+                       '.sh', '.html', '.css', '.js'}
+
+          violations = []
+          root = pathlib.Path('.')
+          for f in sorted(root.rglob('*')):
+              if any(d in f.parts for d in skip_dirs):
+                  continue
+              if not f.is_file() or f.suffix not in text_exts:
+                  continue
+              try:
+                  content = f.read_text(encoding='utf-8', errors='ignore')
+              except Exception:
+                  continue
+              for pattern, label in patterns:
+                  for match in re.finditer(pattern, content, re.IGNORECASE):
+                      violations.append((str(f), label, match.group()))
+
+          if violations:
+              print(f'PHI SCAN FAILED - {len(violations)} violation(s):')
+              for filepath, label, text in violations[:20]:
+                  print(f'  {filepath}: {label} (\"{text}\")')
+              if len(violations) > 20:
+                  print(f'  ... and {len(violations) - 20} more')
+              sys.exit(1)
+          else:
+              print('PHI scan passed - no patient-identifiable data found')
+          "
+
+      - name: Check README links
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        run: |
+          python -c "
+          import re, urllib.request, sys
+
+          readme = open('README.md').read()
+          urls = list(set(re.findall(r'https?://[^\s\)\">\]]+', readme)))
+
+          failed = []
+          for url in urls:
+              try:
+                  req = urllib.request.Request(url, method='HEAD',
+                      headers={'User-Agent': 'Mozilla/5.0 (CI link checker)'})
+                  resp = urllib.request.urlopen(req, timeout=10)
+                  if resp.status >= 400:
+                      failed.append((url, f'HTTP {resp.status}'))
+              except Exception as e:
+                  failed.append((url, str(e)[:80]))
+
+          print(f'Checked {len(urls)} URLs: {len(urls) - len(failed)} OK, {len(failed)} failed')
+          for url, err in failed:
+              print(f'  BROKEN: {url} ({err})')
+          if failed:
+              sys.exit(1)
+          "
