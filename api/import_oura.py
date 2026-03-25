@@ -1055,7 +1055,9 @@ def main():
 
     # Initialize database
     db_path = args.db or get_database_path()
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    db_dir = os.path.dirname(db_path)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
     conn = init_database(db_path)
 
     try:
