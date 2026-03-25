@@ -2161,6 +2161,7 @@ def main() -> int:
     except Exception as e:
         print(f"[ERROR] HTML generation failed: {e}")
         traceback.print_exc()
+        raise SystemExit(1) from e
 
     # Save JSON metrics
     try:
@@ -2187,6 +2188,7 @@ def main() -> int:
     except Exception as e:
         print(f"[ERROR] JSON save failed: {e}")
         traceback.print_exc()
+        raise SystemExit(1) from e
 
     # Summary
     print("\n" + "=" * 70)
