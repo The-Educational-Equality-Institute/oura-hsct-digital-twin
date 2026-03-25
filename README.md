@@ -137,10 +137,16 @@ Core:
 pip install -r requirements.txt
 ```
 
-Optional full-stack install (includes `ssm` rSLDS backend):
+Full stack (includes `ssm` rSLDS backend with Cython build workaround):
+```bash
+bash scripts/install_full_stack.sh          # includes ssm
+bash scripts/install_full_stack.sh --no-ssm # skip ssm, use hmmlearn fallback
 ```
-bash scripts/install_full_stack.sh
-```
+
+The install script handles the `ssm==0.0.1` Cython build isolation issue,
+checks Python version, verifies imports after install, and provides clear
+error messages at each step. Run `bash scripts/install_full_stack.sh --help`
+for details.
 
 Optional extras (for advanced analyses beyond core):
 ```
