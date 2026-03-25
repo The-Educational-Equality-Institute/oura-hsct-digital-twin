@@ -1864,7 +1864,7 @@ def disclaimer_banner(post_days: int | None = None) -> str:
         '<span class="odt-ctx-dot"></span>'
         '<span class="odt-ctx-item">N=1 case study — not validated for clinical decisions</span>'
         '<span class="odt-ctx-dot"></span>'
-        '<span class="odt-ctx-item warn">HEV diagnosed Mar 18; interpret findings cautiously '
+        f'<span class="odt-ctx-item warn">HEV diagnosed {HEV_DIAGNOSIS_DATE.strftime("%b %-d") if HEV_DIAGNOSIS_DATE else "N/A"}; interpret findings cautiously '
         f'in this Day {post_days} post-ruxolitinib window</span>'
         '</div>'
     )
