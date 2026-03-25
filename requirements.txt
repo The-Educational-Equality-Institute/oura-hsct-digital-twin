@@ -3,9 +3,7 @@
 #
 #   pip install -r requirements.txt
 #
-# Optional rSLDS backend (ssm) requires a local C/C++ toolchain and can fail
-# on fresh systems. GVHD analysis falls back to hmmlearn automatically when
-# ssm is not installed.
+# See bottom of file for optional packages that require manual install.
 # ---------------------------------------------------------------------------
 
 numpy>=1.24
