@@ -1928,10 +1928,7 @@ def create_observation_overlay_figure(
 
         # Raw observations (de-standardized) - small muted scatter
         raw = obs_masked[:, j]
-        if hasattr(raw, 'mask') and raw.mask is not np.bool_(False):
-            valid = ~raw.mask
-        else:
-            valid = ~np.isnan(np.array(raw))
+        valid = ~np.ma.getmaskarray(raw)
 
         if valid.any():
             raw_orig = np.array(raw[valid], dtype=float) * sigma + mu
