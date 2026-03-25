@@ -33,13 +33,14 @@ jobs:
       - name: Create data directory
         run: mkdir -p data
 
-      # --- OAuth2 Token Refresh ---
-      - name: Refresh OAuth2 token
-        id: refresh_token
+      # --- OAuth2 Token Refresh + Import ---
+      - name: Refresh token and import data
         env:
           OURA_CLIENT_ID: ${{ secrets.OURA_CLIENT_ID }}
           OURA_CLIENT_SECRET: ${{ secrets.OURA_CLIENT_SECRET }}
           OURA_REFRESH_TOKEN: ${{ secrets.OURA_REFRESH_TOKEN }}
+          GH_TOKEN: ${{ secrets.ACTIONS_PAT }}
+          DATABASE_PATH: data/oura.db
         run: |
           python -c "
           import os, requests
@@ -59,27 +60,31 @@ jobs:
           access_token = tokens['access_token']
           new_refresh = tokens.get('refresh_token', '')
 
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write(f'access_token={access_token}\n')
-              f.write(f'new_refresh_token={new_refresh}\n')
+          # Write tokens to .env (never to step outputs)
+          with open('.env', 'w') as f:
+              f.write(f'OURA_ACCESS_TOKEN={access_token}\n')
+          os.chmod('.env', 0o600)
+
+          # Store new refresh token for secret rotation
+          if new_refresh:
+              with open('.new_refresh_token', 'w') as f:
+                  f.write(new_refresh)
+              os.chmod('.new_refresh_token', 0o600)
 
           print(f'Token refreshed: access={len(access_token)} chars, refresh={len(new_refresh)} chars')
           "
 
-      # --- Rotate refresh token secret for next run ---
-      - name: Rotate refresh token secret
-        if: steps.refresh_token.outputs.new_refresh_token != ''
-        env:
-          GH_TOKEN: ${{ secrets.ACTIONS_PAT }}
-        run: |
-          gh secret set OURA_REFRESH_TOKEN \
-            --body "${{ steps.refresh_token.outputs.new_refresh_token }}" \
-            --repo ${{ github.repository }}
+          # Rotate refresh token secret if a new one was issued
+          if [ -f .new_refresh_token ]; then
+            gh secret set OURA_REFRESH_TOKEN \
+              --body "$(cat .new_refresh_token)" \
+              --repo ${{ github.repository }}
+            rm -f .new_refresh_token
+          fi
 
       # --- Import Oura Data ---
       - name: Import Oura data (last 3 days)
         env:
-          OURA_ACCESS_TOKEN: ${{ steps.refresh_token.outputs.access_token }}
           DATABASE_PATH: data/oura.db
         run: python api/import_oura.py --days 3
 
