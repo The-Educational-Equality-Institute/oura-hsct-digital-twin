@@ -209,6 +209,9 @@ def log(tag: str, msg: str) -> None:
 def load_all_data() -> dict[str, pd.DataFrame]:
     """Load all Oura tables into a dict of DataFrames."""
     log("DATA", "Loading Oura biometric data from SQLite...")
+    if not Path(DATABASE_PATH).exists():
+        print("No data found. Run: python api/import_oura.py --days 90")
+        sys.exit(0)
     conn = sqlite3.connect(f"file:{DATABASE_PATH}?mode=ro", uri=True)
     data = {}
 
