@@ -360,10 +360,11 @@ def run_matrix_profile(daily: pd.DataFrame) -> dict[str, Any]:
             }
 
             # Check if Feb 9 is in top anomalies
-            feb9_in_top = KNOWN_EVENT_DATE in anomaly_dates
+            feb9_str = str(KNOWN_EVENT_DATE)
+            feb9_in_top = feb9_str in anomaly_dates
             if feb9_in_top:
                 results["feb9_detected"] = True
-                rank = anomaly_dates.index(KNOWN_EVENT_DATE) + 1
+                rank = anomaly_dates.index(feb9_str) + 1
                 print(f"    ** Feb 9 detected as #{rank} discord! **")
             else:
                 # Check if any date +-1 day from Feb 9 is there
