@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install and lint
+        run: |
+          pip install -r requirements.txt ruff
+          ruff check .
+
+      - name: Smoke test
+        run: |
+          cp config.example.py config.py
+          python ci/setup_test_db.py data/oura.db
+          python -c "import config; print('config OK')"
+          python -c "from analysis._config import DATABASE_PATH; print(f'DB: {DATABASE_PATH}')"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREV_TAG=$(git tag --sort=-creatordate | sed -n '2p')
+          if [ -z "$PREV_TAG" ]; then
+            PREV_TAG=$(git rev-list --max-parents=0 HEAD)
+          fi
+
+          echo "## Changes since ${PREV_TAG}" > /tmp/changelog.md
+          echo "" >> /tmp/changelog.md
+          git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges >> /tmp/changelog.md
+          echo "" >> /tmp/changelog.md
+          echo "" >> /tmp/changelog.md
+          echo "**Full diff:** https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${{ github.ref_name }}" >> /tmp/changelog.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: /tmp/changelog.md
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}
