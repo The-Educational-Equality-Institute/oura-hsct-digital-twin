@@ -60,10 +60,13 @@ oura-digital-twin/
    # Option A: Core only (recommended for most users)
    pip install -r requirements.txt
 
-   # Option B: Full stack including ssm rSLDS backend
+   # Option B: Full stack (all optional backends, no ssm)
+   pip install -r requirements-full.txt
+
+   # Option C: Full stack including ssm rSLDS backend
    bash scripts/install_full_stack.sh
 
-   # Option C: Full stack, skip ssm (use hmmlearn HMM fallback)
+   # Option D: Full stack, skip ssm (use hmmlearn HMM fallback)
    bash scripts/install_full_stack.sh --no-ssm
    ```
    **Why the install script?** The `ssm==0.0.1` package requires Cython at
