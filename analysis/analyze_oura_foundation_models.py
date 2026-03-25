@@ -1779,7 +1779,7 @@ def generate_simple_html_report(
         ),
         make_kpi_card(
             "Ruxolitinib Start",
-            TREATMENT_START.strftime("%-d. %b %Y").lower(),
+            TREATMENT_START.strftime("%d. %b %Y").lower(),
             status="info",
             decimals=0,
         ),
