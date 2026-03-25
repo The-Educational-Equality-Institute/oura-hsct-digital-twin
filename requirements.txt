@@ -29,9 +29,9 @@ nolds>=0.5
 # Optional: Time-series feature extraction
 # tsfresh>=0.20
 
-# Optional: Kalman filter digital twin
+# Kalman filter digital twin
 filterpy>=1.4
-# pykalman>=0.9
+pykalman>=0.9
 
 # Optional: HMM state detection (GVHD prediction)
 hmmlearn>=0.3
