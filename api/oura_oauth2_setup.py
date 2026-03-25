@@ -267,7 +267,7 @@ def check_status() -> None:
         if resp.status_code == 200:
             print(f"\n  API access: WORKING (using {'OAuth2' if access_token else 'PAT'})")
         elif resp.status_code == 401:
-            print(f"\n  API access: EXPIRED/INVALID (HTTP 401)")
+            print("\n  API access: EXPIRED/INVALID (HTTP 401)")
             if access_token and refresh_token:
                 print("  Try: python api/oura_oauth2_setup.py --refresh")
         else:
