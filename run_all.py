@@ -39,6 +39,7 @@ SCRIPTS = [
     "analyze_oura_gvhd_predict.py",
     "generate_oura_3d_dashboard.py",
     "generate_roadmap.py",
+    "generate_index.py",
 ]
 
 SEND_BUNDLE_HTML = [
