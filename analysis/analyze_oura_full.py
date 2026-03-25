@@ -81,7 +81,7 @@ C_BG = C_BG_LIGHT
 
 def connect(path: Path) -> sqlite3.Connection:
     if not path.exists():
-        print(f"ERROR: {path} not found")
+        print(f"ERROR: Database not found at {path}. Run: python api/import_oura.py --days 90", file=sys.stderr)
         sys.exit(1)
     conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row

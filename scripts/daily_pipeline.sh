@@ -29,7 +29,7 @@ source "$VENV_DIR/bin/activate"
 # 2. Refresh OAuth2 token (prevents expired-token failures)
 echo "[1/4] Refreshing OAuth2 token..."
 if [ -n "${OURA_CLIENT_ID:-}" ] && [ -n "${OURA_REFRESH_TOKEN:-}" ]; then
-  python "$DIGITAL_TWIN/api/oura_oauth2_setup.py" --refresh 2>&1 | sed 's/\(token.*=\s*\).\{8\}/\1********/gi'
+  python "$DIGITAL_TWIN/api/oura_oauth2_setup.py" --refresh 2>&1 | sed 's/eyJ[a-zA-Z0-9_-]*/[REDACTED]/g; s/[0-9a-f]\{8\}-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{12\}/[REDACTED-UUID]/g'
 else
   echo "  Skipping OAuth2 refresh (no client ID or refresh token configured)"
 fi

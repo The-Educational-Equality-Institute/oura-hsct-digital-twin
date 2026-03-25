@@ -35,7 +35,7 @@ The pipeline re-computes all reported values from the current data on every run.
 
 ```
 oura-digital-twin/
-  config.py              Patient-specific constants (dates, paths, thresholds)
+  config.example.py      Patient-specific constants template (copy to config.py)
   run_all.py             Pipeline runner — executes all 12 scripts sequentially
   requirements.txt       Core dependencies
   api/

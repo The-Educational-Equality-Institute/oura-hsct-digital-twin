@@ -153,7 +153,7 @@ def _fmt_nan(val: Any, fmt: str = "", fallback: str = "N/A") -> str:
 def connect_db(path: Path) -> sqlite3.Connection:
     """Open a read-only SQLite connection."""
     if not path.exists():
-        print(f"ERROR: Database not found: {path}")
+        print(f"ERROR: Database not found at {path}. Run: python api/import_oura.py --days 90", file=sys.stderr)
         sys.exit(1)
     conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row

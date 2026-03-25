@@ -185,8 +185,8 @@ def load_oura_data() -> pd.DataFrame:
     log("DATA", "Loading Oura Ring data from database...")
 
     if not Path(DATABASE_PATH).exists():
-        print("No data found. Run: python api/import_oura.py --days 90")
-        sys.exit(0)
+        print(f"ERROR: Database not found at {DATABASE_PATH}. Run: python api/import_oura.py --days 90", file=sys.stderr)
+        sys.exit(1)
 
     conn = sqlite3.connect(f"file:{DATABASE_PATH}?mode=ro", uri=True)
 
