@@ -52,7 +52,20 @@ oura-digital-twin/
   examples/              Example outputs
 ```
 
-## Setup
+## Quick Start (demo data included)
+
+```bash
+git clone https://github.com/The-Educational-Equality-Institute/oura-hsct-digital-twin.git
+cd oura-hsct-digital-twin
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp config.example.py config.py
+python run_all.py
+```
+
+No OAuth setup needed. The repo includes `data/demo.db` with real Oura Ring data (79 days, post-HSCT). Reports appear in `reports/`.
+
+## Setup (your own data)
 
 1. Create and activate a Python 3.10+ virtual environment
 2. Install dependencies (pick one):
@@ -60,33 +73,23 @@ oura-digital-twin/
    # Option A: Core only (recommended for most users)
    pip install -r requirements.txt
 
-   # Option B: Full stack (all optional backends, no ssm)
+   # Option B: Full stack (all optional backends)
    pip install -r requirements-full.txt
 
-   # Option C: Full stack including ssm rSLDS backend
+   # Option C: Full stack including ssm rSLDS backend (needs C compiler)
    bash scripts/install_full_stack.sh
-
-   # Option D: Full stack, skip ssm (use hmmlearn HMM fallback)
-   bash scripts/install_full_stack.sh --no-ssm
    ```
-   **Why the install script?** The `ssm==0.0.1` package requires Cython at
-   build time, but pip's build isolation prevents Cython from being available
-   during the build. The script pre-installs build dependencies and then
-   installs ssm with `--no-build-isolation`. A C compiler (gcc/clang) is
-   required. If ssm fails, the GVHD analysis falls back to hmmlearn
-   automatically.
 3. Copy `.env.example` to `.env` and add your Oura API credentials:
    ```bash
    cp .env.example .env
-   # Edit .env — add your Personal Access Token or OAuth2 credentials
+   # Edit .env - add your Personal Access Token or OAuth2 credentials
    ```
 4. Copy and edit the config file for your patient:
    ```bash
    cp config.example.py config.py
-   # Edit config.py — set your dates, patient label, and thresholds
+   # Edit config.py - set DATABASE_PATH to data/oura.db, update dates and thresholds
    ```
-   `.env` is for API auth secrets. `config.py` is for analysis constants and clinical/context parameters.
-5. Import your Oura data (creates the SQLite database in `data/`):
+5. Import your Oura data:
    ```bash
    python api/import_oura.py --days 90
    ```
