@@ -138,7 +138,7 @@ def hero_kpis() -> str:
         cards.append(make_kpi_card(
             "HRV (RMSSD)", float(rmssd), "ms",
             status=_status("rmssd_mean", (20, 15)),
-            detail=f"ESC threshold: 15 ms",
+            detail="ESC threshold: 15 ms",
         ))
 
     hr = full.get("hr_daily_mean")
