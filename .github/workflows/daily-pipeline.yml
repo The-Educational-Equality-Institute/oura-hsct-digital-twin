@@ -101,10 +101,11 @@ jobs:
           fi
 
       # --- Import Oura Data ---
-      - name: Import Oura data (last 3 days)
+      # DB is created fresh each run, so import the full analysis window
+      - name: Import Oura data (full range)
         env:
           DATABASE_PATH: data/oura.db
-        run: python api/import_oura.py --days 3
+        run: python api/import_oura.py --start 2026-01-08 --end $(date -u +%Y-%m-%d)
 
       # --- Run Analysis Pipeline ---
       - name: Run all analysis scripts
