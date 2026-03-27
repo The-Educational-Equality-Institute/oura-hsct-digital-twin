@@ -113,6 +113,22 @@ jobs:
           DATABASE_PATH: data/oura.db
         run: python run_all.py
 
+      # --- Commit updated database back to repo ---
+      - name: Commit updated database
+        continue-on-error: true
+        run: |
+          cp data/oura.db data/demo.db
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/demo.db
+          if git diff --cached --quiet; then
+            echo "No database changes to commit"
+          else
+            git commit -m "auto: update demo.db $(date -u +%Y-%m-%d)"
+            git pull --rebase origin main
+            git push
+          fi
+
       # --- Upload reports as artifact ---
       - name: Upload reports artifact
         uses: actions/upload-artifact@v4
