@@ -55,7 +55,7 @@ REDIRECT_PORT = 4421
 REDIRECT_URI = f"http://{REDIRECT_HOST}:{REDIRECT_PORT}/callback"
 
 # All available scopes
-SCOPES = "email personal daily heartrate workout tag session spo2"
+SCOPES = "email personal daily heartrate workout tag session spo2 stress"
 
 
 class OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):

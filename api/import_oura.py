@@ -601,20 +601,33 @@ def import_oura_data(
     except Exception as e:
         logging.warning("Could not import activity data: %s", e)
 
-    # ---- 4. Heart rate (existing) ----
+    # ---- 4. Heart rate (chunked into 30-day windows) ----
+    # The Oura heart rate API uses datetime params and rejects ranges > 30 days.
     try:
-        hr_data = client.get_heart_rate(start_date, end_date)
-        records = hr_data if isinstance(hr_data, list) else hr_data.get("data", [])
-        for record in records:
-            cursor.execute("""
-                INSERT OR IGNORE INTO oura_heart_rate (timestamp, bpm, source)
-                VALUES (?, ?, ?)
-            """, (
-                record.get("timestamp"),
-                record.get("bpm"),
-                record.get("source")
-            ))
-            stats["heart_rate"] += 1
+        sd = datetime.strptime(start_date, "%Y-%m-%d")
+        ed = datetime.strptime(end_date, "%Y-%m-%d")
+        chunk_days = 30
+        chunk_start = sd
+        while chunk_start < ed:
+            chunk_end = min(chunk_start + timedelta(days=chunk_days), ed)
+            cs = chunk_start.strftime("%Y-%m-%d")
+            ce = chunk_end.strftime("%Y-%m-%d")
+            try:
+                hr_data = client.get_heart_rate(cs, ce)
+                records = hr_data if isinstance(hr_data, list) else hr_data.get("data", [])
+                for record in records:
+                    cursor.execute("""
+                        INSERT OR IGNORE INTO oura_heart_rate (timestamp, bpm, source)
+                        VALUES (?, ?, ?)
+                    """, (
+                        record.get("timestamp"),
+                        record.get("bpm"),
+                        record.get("source")
+                    ))
+                    stats["heart_rate"] += 1
+            except Exception as e:
+                logging.warning("Could not import heart rate chunk %s to %s: %s", cs, ce, e)
+            chunk_start = chunk_end
     except Exception as e:
         logging.warning("Could not import heart rate data: %s", e)
 
@@ -1037,16 +1050,43 @@ def main():
         "--db",
         help="Database path (default: from DATABASE_PATH env)"
     )
+    parser.add_argument(
+        "--profile", "-p",
+        help="Patient profile name from profiles.py (e.g. 'mitch'). Default: henrik"
+    )
 
     args = parser.parse_args()
 
-    # Get Oura token  - prefer OAuth2 access token, fall back to PAT
-    oura_token = os.getenv("OURA_ACCESS_TOKEN") or os.getenv("OURA_PAT")
-    token_type = "OAuth2" if os.getenv("OURA_ACCESS_TOKEN") else "PAT"
+    # Resolve profile-based token and database
+    profile = None
+    if args.profile:
+        try:
+            from profiles import PROFILES
+            profile = PROFILES.get(args.profile)
+            if not profile:
+                print(f"Error: Unknown profile '{args.profile}'. Available: {', '.join(PROFILES.keys())}")
+                return 1
+            print(f"Using profile: {args.profile} ({profile['label']})")
+        except ImportError:
+            print("Error: profiles.py not found. Create it or omit --profile.")
+            return 1
+
+    if profile:
+        oura_token = os.getenv(profile["token_env"])
+        token_type = f"profile:{args.profile}"
+        if not args.db:
+            args.db = str(profile["database"])
+    else:
+        oura_token = os.getenv("OURA_ACCESS_TOKEN") or os.getenv("OURA_PAT")
+        token_type = "OAuth2" if os.getenv("OURA_ACCESS_TOKEN") else "PAT"
+
     if not oura_token or oura_token == "your_oura_personal_access_token":
-        print("Error: No Oura API token configured in the parent .env file")
-        print("Option 1 (recommended): python api/oura_oauth2_setup.py")
-        print("Option 2 (legacy): Set OURA_PAT at https://cloud.ouraring.com/personal-access-tokens")
+        if profile:
+            print(f"Error: No token for profile '{args.profile}'. Set {profile['token_env']} in .env")
+        else:
+            print("Error: No Oura API token configured in the parent .env file")
+            print("Option 1 (recommended): python api/oura_oauth2_setup.py")
+            print("Option 2 (legacy): Set OURA_PAT at https://cloud.ouraring.com/personal-access-tokens")
         return 1
     print(f"Using {token_type} authentication")
 
