@@ -120,7 +120,7 @@ def load_data() -> dict[str, pd.DataFrame]:
         hr = pd.read_sql_query(
             "SELECT timestamp, bpm FROM oura_heart_rate ORDER BY timestamp", conn
         )
-        hr["date"] = pd.to_datetime(hr["timestamp"]).dt.date.astype(str)
+        hr["date"] = pd.to_datetime(hr["timestamp"], utc=True).dt.date.astype(str)
         hr["bpm"] = pd.to_numeric(hr["bpm"], errors="coerce")
 
         # Sleep periods (per-night aggregates)
@@ -929,7 +929,7 @@ def run_tsfresh_clustering(data: dict[str, pd.DataFrame]) -> dict[str, Any]:
 
     # Use HR data grouped by date
     hr = data["hr"][["date", "timestamp", "bpm"]].copy()
-    hr["timestamp_dt"] = pd.to_datetime(hr["timestamp"])
+    hr["timestamp_dt"] = pd.to_datetime(hr["timestamp"], utc=True)
     hr = hr.sort_values("timestamp_dt")
 
     # Get unique dates with enough data

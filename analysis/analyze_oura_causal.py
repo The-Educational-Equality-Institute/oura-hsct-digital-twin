@@ -273,14 +273,14 @@ def load_data() -> dict[str, pd.DataFrame]:
     hrv = pd.read_sql_query(
         "SELECT timestamp, rmssd FROM oura_hrv ORDER BY timestamp", conn
     )
-    hrv["date"] = pd.to_datetime(hrv["timestamp"]).dt.date.astype(str)
+    hrv["date"] = pd.to_datetime(hrv["timestamp"], utc=True).dt.date.astype(str)
     hrv["rmssd"] = pd.to_numeric(hrv["rmssd"], errors="coerce")
 
     # Heart rate (continuous)
     hr = pd.read_sql_query(
         "SELECT timestamp, bpm FROM oura_heart_rate ORDER BY timestamp", conn
     )
-    hr["date"] = pd.to_datetime(hr["timestamp"]).dt.date.astype(str)
+    hr["date"] = pd.to_datetime(hr["timestamp"], utc=True).dt.date.astype(str)
     hr["bpm"] = pd.to_numeric(hr["bpm"], errors="coerce")
 
     # Sleep periods (per-night aggregates)

@@ -278,6 +278,11 @@ def get_daily_metrics(conn: sqlite3.Connection) -> pd.DataFrame:
     df.sort_values("day", inplace=True)
     df.set_index("day", inplace=True)
 
+    # Ensure columns exist even when source tables are empty
+    for col in ["cv_age", "cv_age_delta", "spo2", "dfa_alpha1"]:
+        if col not in df.columns:
+            df[col] = np.nan
+
     # -- Compute HR dipping --
     df["hr_dip_pct"] = np.where(
         (df["awake_hr_mean"].notna()) & (df["sleep_hr_mean"].notna()) & (df["awake_hr_mean"] > 0),
