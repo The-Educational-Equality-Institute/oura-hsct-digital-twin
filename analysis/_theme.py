@@ -53,6 +53,11 @@ REPORT_REGISTRY = [
     {"id": "foundation", "file": "foundation_model_report.html", "title": "Foundation Model", "group": "Advanced"},
     {"id": "anomalies", "file": "anomaly_detection_report.html", "title": "Anomaly Detection", "group": "Advanced"},
     {"id": "3d_dashboard", "file": "oura_3d_dashboard.html", "title": "3D Dashboard", "group": "Advanced"},
+    {"id": "comp_autonomic", "file": "comparative_autonomic_report.html", "title": "Autonomic Comparison", "group": "Comparative"},
+    {"id": "comp_treatment", "file": "comparative_treatment_response.html", "title": "Treatment Response", "group": "Comparative"},
+    {"id": "comp_sleep", "file": "comparative_sleep_analysis.html", "title": "Sleep Architecture", "group": "Comparative"},
+    {"id": "comp_coupling", "file": "comparative_activity_recovery_coupling.html", "title": "Activity-Recovery", "group": "Comparative"},
+    {"id": "comp_anomalies", "file": "comparative_anomaly_report.html", "title": "Anomaly Patterns", "group": "Comparative"},
 ]
 
 # ---------------------------------------------------------------------------

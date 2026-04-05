@@ -38,6 +38,11 @@ SCRIPTS = [
     "analyze_oura_causal.py",
     "analyze_oura_gvhd_predict.py",
     "generate_oura_3d_dashboard.py",
+    "analyze_comparative_autonomic.py",
+    "analyze_comparative_treatment.py",
+    "analyze_comparative_sleep.py",
+    "analyze_comparative_coupling.py",
+    "analyze_comparative_anomalies.py",
     "generate_roadmap.py",
     "generate_index.py",
 ]
@@ -55,6 +60,11 @@ SEND_BUNDLE_HTML = [
     "causal_inference_report.html",
     "gvhd_prediction_report.html",
     "oura_3d_dashboard.html",
+    "comparative_autonomic_report.html",
+    "comparative_treatment_response.html",
+    "comparative_sleep_analysis.html",
+    "comparative_activity_recovery_coupling.html",
+    "comparative_anomaly_report.html",
     "roadmap.html",
 ]
 
@@ -70,6 +80,11 @@ SEND_BUNDLE_JSON = [
     "causal_inference_metrics.json",
     "gvhd_prediction_metrics.json",
     "oura_3d_dashboard_metrics.json",
+    "comparative_autonomic_metrics.json",
+    "comparative_treatment_response.json",
+    "comparative_sleep_metrics.json",
+    "comparative_activity_recovery_coupling.json",
+    "comparative_anomaly_metrics.json",
 ]
 
 
