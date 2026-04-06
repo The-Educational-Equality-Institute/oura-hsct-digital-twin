@@ -22,6 +22,8 @@ PROFILES = {
         "treatment_start": date(2026, 3, 16),
         "treatment": "Ruxolitinib 10mg BID",
         "database": PROJECT_ROOT / "data" / "demo.db",
+        "major_event_date": date(2023, 11, 23),
+        "major_event_label": "HSCT",
         # Uses default env vars: OURA_ACCESS_TOKEN, OURA_REFRESH_TOKEN
         "token_env": "OURA_ACCESS_TOKEN",
         "refresh_env": "OURA_REFRESH_TOKEN",
@@ -32,6 +34,8 @@ PROFILES = {
         "age": 33,
         "condition": "Stroke at 33, bilateral carotid/vertebral artery dissection (left main)",
         "database": PROJECT_ROOT / "data" / "mitch.db",
+        "major_event_date": date(2024, 12, 15),
+        "major_event_label": "Stroke",
         # Mitch's tokens use prefixed env vars
         "token_env": "MITCH_OURA_ACCESS_TOKEN",
         "refresh_env": "MITCH_OURA_REFRESH_TOKEN",

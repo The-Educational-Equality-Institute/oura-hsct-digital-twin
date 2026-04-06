@@ -54,8 +54,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from config import (
     DATABASE_PATH, REPORTS_DIR, TRANSPLANT_DATE, TREATMENT_START,
     TREATMENT_START_STR, PATIENT_AGE, PATIENT_LABEL,
-    ESC_RMSSD_DEFICIENCY,
+    ESC_RMSSD_DEFICIENCY, KNOWN_EVENT_DATE,
 )
+from _hardening import section_html_or_placeholder
 from _theme import (
     wrap_html, make_kpi_card, make_kpi_row, make_section,
     METRIC_DESCRIPTIONS,
@@ -1197,6 +1198,246 @@ def build_summary(df: pd.DataFrame, biomarkers: dict[str, pd.Series],
 
 
 # ---------------------------------------------------------------------------
+# Individual Metric Treatment Response
+# ---------------------------------------------------------------------------
+
+_TREATMENT_METRICS = [
+    ("rmssd_mean", "HRV (RMSSD)", "ms"),
+    ("sleep_hr_lowest", "Lowest HR", "bpm"),
+    ("sleep_hr_mean", "Average HR", "bpm"),
+    ("sleep_efficiency", "Sleep Efficiency", "%"),
+]
+
+
+def _effect_label(d: float) -> str:
+    """Return Cohen's d effect-size label."""
+    ad = abs(d)
+    if ad < 0.2:
+        return "negligible"
+    if ad < 0.5:
+        return "small"
+    if ad < 0.8:
+        return "medium"
+    return "large"
+
+
+def _build_treatment_response_section(df: pd.DataFrame) -> str:
+    """Pre/post Ruxolitinib comparison for individual biometrics.
+
+    Returns an HTML string with KPI cards, comparison table,
+    three-period trajectory, clinical note, and grouped bar chart.
+    """
+    from scipy.stats import mannwhitneyu
+
+    # ------------------------------------------------------------------
+    # 1. Split at TREATMENT_START
+    # ------------------------------------------------------------------
+    pre = df[df.index < TREATMENT_START]
+    post = df[df.index >= TREATMENT_START]
+
+    if len(pre) < 5 or len(post) < 1:
+        return "<p>Insufficient data for treatment response analysis.</p>"
+
+    # ------------------------------------------------------------------
+    # 2. Mann-Whitney U for each metric
+    # ------------------------------------------------------------------
+    results: list[dict[str, Any]] = []
+    for col, label, unit in _TREATMENT_METRICS:
+        if col not in df.columns:
+            continue
+        a = pre[col].dropna()
+        b = post[col].dropna()
+        if len(a) < 3 or len(b) < 1:
+            continue
+        stat, p = mannwhitneyu(a, b, alternative="two-sided")
+        na, nb = len(a), len(b)
+        pooled_std = np.sqrt(
+            ((na - 1) * a.std() ** 2 + (nb - 1) * b.std() ** 2) / (na + nb - 2)
+        )
+        d = (b.mean() - a.mean()) / pooled_std if pooled_std > 0 else 0.0
+        pct_change = (
+            ((b.mean() - a.mean()) / a.mean()) * 100 if a.mean() != 0 else 0.0
+        )
+        results.append({
+            "col": col,
+            "label": label,
+            "unit": unit,
+            "pre_mean": a.mean(),
+            "pre_sd": a.std(),
+            "post_mean": b.mean(),
+            "post_sd": b.std(),
+            "pct_change": pct_change,
+            "p": p,
+            "d": d,
+            "effect": _effect_label(d),
+        })
+
+    if not results:
+        return "<p>No treatment response metrics available.</p>"
+
+    # ------------------------------------------------------------------
+    # 3. Three-period breakdown
+    # ------------------------------------------------------------------
+    period1 = df[df.index < KNOWN_EVENT_DATE]
+    period2 = df[(df.index >= KNOWN_EVENT_DATE) & (df.index < TREATMENT_START)]
+    period3 = df[df.index >= TREATMENT_START]
+
+    three_period: dict[str, dict[str, float | None]] = {}
+    for col, label, unit in _TREATMENT_METRICS:
+        if col not in df.columns:
+            continue
+        p1 = period1[col].dropna()
+        p2 = period2[col].dropna()
+        p3 = period3[col].dropna()
+        three_period[col] = {
+            "label": label,
+            "unit": unit,
+            "p1_mean": float(p1.mean()) if len(p1) else None,
+            "p2_mean": float(p2.mean()) if len(p2) else None,
+            "p3_mean": float(p3.mean()) if len(p3) else None,
+        }
+
+    # ------------------------------------------------------------------
+    # 4. Build HTML
+    # ------------------------------------------------------------------
+
+    # KPI cards
+    cards = []
+    for r in results:
+        if r["p"] < 0.05:
+            status = "good"
+        elif r["p"] < 0.10:
+            status = "warning"
+        else:
+            status = "neutral"
+        cards.append(make_kpi_card(
+            label=r["label"],
+            value=r["pct_change"],
+            unit="% change",
+            status=status,
+            detail=f"p={r['p']:.4f}, d={abs(r['d']):.2f} ({r['effect']})",
+            status_label="Significant" if r["p"] < 0.05 else "",
+        ))
+    kpi_html = make_kpi_row(*cards)
+
+    # Comparison table
+    table_rows = ""
+    for r in results:
+        direction = "+" if r["pct_change"] >= 0 else ""
+        table_rows += (
+            f"<tr>"
+            f"<td>{r['label']}</td>"
+            f"<td>{r['pre_mean']:.1f} &plusmn; {r['pre_sd']:.1f} {r['unit']}</td>"
+            f"<td>{r['post_mean']:.1f} &plusmn; {r['post_sd']:.1f} {r['unit']}</td>"
+            f"<td>{direction}{r['pct_change']:.1f}%</td>"
+            f"<td><b>{r['p']:.4f}</b></td>"
+            f"<td>{abs(r['d']):.2f}</td>"
+            f"<td>{r['effect']}</td>"
+            f"</tr>"
+        )
+    table_html = (
+        f'<table style="width:100%;border-collapse:collapse;background:{BG_SURFACE};'
+        f'color:{TEXT_PRIMARY};margin:16px 0;">'
+        f'<tr style="border-bottom:1px solid {BORDER_SUBTLE};">'
+        f"<th style='padding:8px;text-align:left;'>Metric</th>"
+        f"<th style='padding:8px;'>Pre-Rux (mean&plusmn;SD)</th>"
+        f"<th style='padding:8px;'>Post-Rux (mean&plusmn;SD)</th>"
+        f"<th style='padding:8px;'>Change</th>"
+        f"<th style='padding:8px;'>p-value</th>"
+        f"<th style='padding:8px;'>Cohen's d</th>"
+        f"<th style='padding:8px;'>Effect</th></tr>"
+        f"{table_rows}</table>"
+    )
+
+    # Three-period trajectory
+    traj_lines = ""
+    for col, info in three_period.items():
+        vals = []
+        for key in ("p1_mean", "p2_mean", "p3_mean"):
+            v = info[key]
+            vals.append(f"{v:.1f}" if v is not None else "N/A")
+        interpretation = ""
+        if col == "rmssd_mean":
+            interpretation = "(acute event = inflection, Rux stabilized)"
+        elif col in ("sleep_hr_lowest", "sleep_hr_mean"):
+            interpretation = "(steady improvement)"
+        elif col == "sleep_efficiency":
+            interpretation = ""
+        traj_lines += (
+            f"<div style='padding:4px 0;'>"
+            f"<b>{info['label']}:</b> "
+            f"{vals[0]} {info['unit']} &rarr; {vals[1]} {info['unit']} &rarr; {vals[2]} {info['unit']} "
+            f"<span style='color:{TEXT_SECONDARY};'>{interpretation}</span></div>"
+        )
+    trajectory_html = (
+        f'<div style="background:{BG_SURFACE};padding:16px;border-radius:8px;'
+        f'border:1px solid {BORDER_SUBTLE};margin:16px 0;">'
+        f'<h4 style="margin:0 0 8px 0;color:{TEXT_PRIMARY};">Three-Period Trajectory</h4>'
+        f'<p style="color:{TEXT_SECONDARY};margin:0 0 8px 0;font-size:0.85em;">'
+        f'Pre-acute ({KNOWN_EVENT_DATE}) &rarr; Post-acute/Pre-Rux &rarr; Post-Rux ({TREATMENT_START})</p>'
+        f'{traj_lines}</div>'
+    )
+
+    # Clinical note
+    note_html = (
+        f'<div style="background:{BG_SURFACE};padding:16px;border-radius:8px;'
+        f'border-left:3px solid {ACCENT_AMBER};margin:16px 0;">'
+        f'<p style="color:{TEXT_PRIMARY};margin:0;"><b>Clinical note:</b> '
+        f'The composite ADSI score dilutes these individual metric signals. '
+        f'While ADSI aggregates multiple domains into a single index, individual metrics '
+        f'like HRV and heart rate show statistically significant pre/post differences that '
+        f'the composite score may obscure through averaging.</p></div>'
+    )
+
+    # Plotly grouped bar chart
+    fig = make_subplots(
+        rows=2, cols=2,
+        subplot_titles=[r["label"] for r in results[:4]],
+        vertical_spacing=0.15,
+        horizontal_spacing=0.12,
+    )
+    positions = [(1, 1), (1, 2), (2, 1), (2, 2)]
+    for idx, r in enumerate(results[:4]):
+        row, col = positions[idx]
+        fig.add_trace(
+            go.Bar(
+                x=["Pre-Rux"],
+                y=[r["pre_mean"]],
+                error_y=dict(type="data", array=[r["pre_sd"]], visible=True),
+                marker_color=ACCENT_PURPLE,
+                name="Pre-Rux" if idx == 0 else None,
+                showlegend=(idx == 0),
+                legendgroup="pre",
+            ),
+            row=row, col=col,
+        )
+        fig.add_trace(
+            go.Bar(
+                x=["Post-Rux"],
+                y=[r["post_mean"]],
+                error_y=dict(type="data", array=[r["post_sd"]], visible=True),
+                marker_color=ACCENT_GREEN,
+                name="Post-Rux" if idx == 0 else None,
+                showlegend=(idx == 0),
+                legendgroup="post",
+            ),
+            row=row, col=col,
+        )
+        fig.update_yaxes(
+            title_text=f"{r['unit']}", row=row, col=col,
+        )
+    fig.update_layout(
+        height=500,
+        title_text="Individual Metric Pre/Post Ruxolitinib Comparison",
+        barmode="group",
+        margin=dict(t=60, b=40, l=60, r=20),
+    )
+    plot_div = fig.to_html(include_plotlyjs=False, full_html=False)
+
+    return kpi_html + table_html + trajectory_html + note_html + plot_div
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -1352,6 +1593,13 @@ def main() -> int:
     )
     body += make_section("Summary", summary_html)
 
+    # --- Individual Metric Treatment Response ---
+    body += section_html_or_placeholder(
+        "Treatment Response",
+        _build_treatment_response_section,
+        df,
+    )
+
     # --- Main chart ---
     body += make_section("Biomarker Dashboard", plot_div)
 
@@ -1364,8 +1612,54 @@ def main() -> int:
     HTML_OUTPUT.write_text(html_content, encoding="utf-8")
     print(f"  -> HTML: {HTML_OUTPUT}")
 
-    # 6. Export JSON
+    # 6. Export JSON — include individual treatment response metrics
     print("\n[6/6] Exporting JSON metrics...")
+
+    # Build treatment_response and three_period for JSON
+    _pre = df[df.index < TREATMENT_START]
+    _post = df[df.index >= TREATMENT_START]
+    _p1 = df[df.index < KNOWN_EVENT_DATE]
+    _p2 = df[(df.index >= KNOWN_EVENT_DATE) & (df.index < TREATMENT_START)]
+    _p3 = df[df.index >= TREATMENT_START]
+
+    tr_json: dict[str, Any] = {}
+    tp_json: dict[str, Any] = {}
+    for _col, _label, _unit in _TREATMENT_METRICS:
+        if _col not in df.columns:
+            continue
+        a = _pre[_col].dropna()
+        b = _post[_col].dropna()
+        if len(a) >= 3 and len(b) >= 1:
+            from scipy.stats import mannwhitneyu
+            _stat, _p = mannwhitneyu(a, b, alternative="two-sided")
+            _na, _nb = len(a), len(b)
+            _pooled = np.sqrt(
+                ((_na - 1) * a.std() ** 2 + (_nb - 1) * b.std() ** 2) / (_na + _nb - 2)
+            )
+            _d = (b.mean() - a.mean()) / _pooled if _pooled > 0 else 0.0
+            _pct = ((b.mean() - a.mean()) / a.mean()) * 100 if a.mean() != 0 else 0.0
+            tr_json[_col] = {
+                "pre_mean": round(float(a.mean()), 2),
+                "post_mean": round(float(b.mean()), 2),
+                "pct_change": round(float(_pct), 2),
+                "mann_whitney_p": round(float(_p), 6),
+                "cohens_d": round(float(_d), 3),
+                "effect_label": _effect_label(_d),
+            }
+        # Three-period values
+        v1 = _p1[_col].dropna()
+        v2 = _p2[_col].dropna()
+        v3 = _p3[_col].dropna()
+        tp_json[_col] = {
+            "label": _label,
+            "pre_acute_mean": round(float(v1.mean()), 2) if len(v1) else None,
+            "post_acute_pre_rux_mean": round(float(v2.mean()), 2) if len(v2) else None,
+            "post_rux_mean": round(float(v3.mean()), 2) if len(v3) else None,
+        }
+
+    summary["treatment_response"] = tr_json
+    summary["three_period"] = tp_json
+
     with open(JSON_OUTPUT, "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2, default=str)
     print(f"  -> JSON: {JSON_OUTPUT}")

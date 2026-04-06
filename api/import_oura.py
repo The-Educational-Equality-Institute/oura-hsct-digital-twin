@@ -756,6 +756,59 @@ def import_oura_data(
             if cursor.rowcount > 0:
                 stats["sleep_hrv_updated"] += 1
 
+        # Backfill oura_sleep with full metrics from best sleep period per day.
+        # The daily_sleep endpoint only returns score/contributors; the sleep
+        # periods endpoint has the actual durations, HR, efficiency, etc.
+        # Prefer long_sleep periods; fall back to the longest period of the day.
+        best_period_per_day: dict[str, dict] = {}
+        for record in records:
+            day = record.get("day")
+            if not day:
+                continue
+            sleep_type = record.get("type", "unknown")
+            duration = record.get("total_sleep_duration") or 0
+            existing = best_period_per_day.get(day)
+            if existing is None:
+                best_period_per_day[day] = record
+            elif sleep_type == "long_sleep" and existing.get("type") != "long_sleep":
+                best_period_per_day[day] = record
+            elif sleep_type == existing.get("type") and duration > (existing.get("total_sleep_duration") or 0):
+                best_period_per_day[day] = record
+
+        for day, period in best_period_per_day.items():
+            cursor.execute("""
+                UPDATE oura_sleep SET
+                    total_sleep_duration = COALESCE(NULLIF(total_sleep_duration, 0), ?),
+                    deep_sleep_duration = COALESCE(NULLIF(deep_sleep_duration, 0), ?),
+                    rem_sleep_duration = COALESCE(NULLIF(rem_sleep_duration, 0), ?),
+                    light_sleep_duration = COALESCE(NULLIF(light_sleep_duration, 0), ?),
+                    awake_time = COALESCE(NULLIF(awake_time, 0), ?),
+                    efficiency = COALESCE(NULLIF(efficiency, 0), ?),
+                    latency = COALESCE(NULLIF(latency, 0), ?),
+                    hr_lowest = COALESCE(NULLIF(hr_lowest, 0), ?),
+                    hr_average = COALESCE(NULLIF(hr_average, 0), ?),
+                    breath_average = COALESCE(NULLIF(breath_average, 0), ?),
+                    bedtime_start = COALESCE(bedtime_start, ?),
+                    bedtime_end = COALESCE(bedtime_end, ?),
+                    temperature_delta = COALESCE(temperature_delta, ?)
+                WHERE date = ?
+            """, (
+                period.get("total_sleep_duration"),
+                period.get("deep_sleep_duration"),
+                period.get("rem_sleep_duration"),
+                period.get("light_sleep_duration"),
+                period.get("awake_time"),
+                period.get("efficiency"),
+                period.get("latency"),
+                period.get("lowest_heart_rate"),
+                period.get("average_heart_rate"),
+                period.get("average_breath"),
+                period.get("bedtime_start"),
+                period.get("bedtime_end"),
+                period.get("readiness_score_delta"),
+                day,
+            ))
+
     except Exception as e:
         logging.warning("Could not import sleep periods/HRV data: %s", e)
 

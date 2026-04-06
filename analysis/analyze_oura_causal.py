@@ -92,6 +92,7 @@ from config import (
     REPORTS_DIR,
     TRANSPLANT_DATE,
     TREATMENT_START,
+    KNOWN_EVENT_DATE,
     PATIENT_AGE,
     PATIENT_LABEL,
     DATA_START,
@@ -2339,6 +2340,186 @@ def plot_mediation(mediation_results: dict[str, Any]) -> list[go.Figure]:
 
 
 # ===========================================================================
+# INDIVIDUAL METRIC TREATMENT TESTS
+# ===========================================================================
+
+
+def _build_individual_metric_tests(
+    daily: pd.DataFrame,
+) -> tuple[str, dict[str, Any]]:
+    """Per-metric Mann-Whitney U tests with Cohen's d and bootstrap CI.
+
+    Splits at TREATMENT_START and optionally at KNOWN_EVENT_DATE (2026-02-09)
+    for a three-period view. Returns (html_section_str, metrics_dict).
+    """
+    METRIC_DEFS = [
+        ("mean_rmssd", "HRV (RMSSD)", "ms"),
+        ("lowest_heart_rate", "Lowest HR", "bpm"),
+        ("average_heart_rate", "Average HR", "bpm"),
+        ("sleep_efficiency", "Sleep Efficiency", "%"),
+    ]
+
+    rux_str = str(TREATMENT_START)
+    event_str = str(KNOWN_EVENT_DATE)
+
+    pre = daily[daily["period"] == "pre"]
+    post = daily[daily["period"] == "post"]
+
+    results: dict[str, Any] = {}
+    cards_html: list[str] = []
+    table_rows: list[str] = []
+
+    for col, label, unit in METRIC_DEFS:
+        pre_vals = pre[col].dropna()
+        post_vals = post[col].dropna()
+
+        if len(pre_vals) < 5 or len(post_vals) < 3:
+            results[col] = {"label": label, "error": "insufficient data"}
+            continue
+
+        # Mann-Whitney U test
+        u_stat, p_val = scipy_stats.mannwhitneyu(
+            pre_vals, post_vals, alternative="two-sided",
+        )
+
+        # Cohen's d (pooled SD)
+        pre_mean = float(pre_vals.mean())
+        post_mean = float(post_vals.mean())
+        pre_std = float(pre_vals.std(ddof=1))
+        post_std = float(post_vals.std(ddof=1))
+        n_pre = len(pre_vals)
+        n_post = len(post_vals)
+        pooled_std = np.sqrt(
+            ((n_pre - 1) * pre_std ** 2 + (n_post - 1) * post_std ** 2)
+            / (n_pre + n_post - 2)
+        )
+        cohens_d = (
+            _safe_div(post_mean - pre_mean, pooled_std)
+            if pooled_std > SAFE_DIV_EPS
+            else 0.0
+        )
+
+        # Bootstrap 95% CI for the mean difference
+        rng = np.random.default_rng(42)
+        boot_diffs = np.empty(BOOTSTRAP_N)
+        for i in range(BOOTSTRAP_N):
+            boot_pre = rng.choice(pre_vals.values, size=n_pre, replace=True)
+            boot_post = rng.choice(post_vals.values, size=n_post, replace=True)
+            boot_diffs[i] = float(boot_post.mean() - boot_pre.mean())
+        ci_lower = float(np.percentile(boot_diffs, 2.5))
+        ci_upper = float(np.percentile(boot_diffs, 97.5))
+
+        # Direction
+        diff = post_mean - pre_mean
+        # For HR metrics, decrease is favorable; for HRV/efficiency, increase is favorable
+        if col in ("lowest_heart_rate", "average_heart_rate"):
+            favorable = diff < 0
+        else:
+            favorable = diff > 0
+        direction = "favorable" if favorable else "unfavorable"
+
+        # Three-period split
+        early_post = post[post["date"] < event_str][col].dropna()
+        late_post = post[post["date"] >= event_str][col].dropna()
+
+        three_period = {}
+        if len(early_post) >= 3 and len(late_post) >= 3:
+            three_period = {
+                "early_post_mean": float(early_post.mean()),
+                "early_post_n": len(early_post),
+                "late_post_mean": float(late_post.mean()),
+                "late_post_n": len(late_post),
+                "event_date": event_str,
+            }
+
+        results[col] = {
+            "label": label,
+            "unit": unit,
+            "pre_mean": pre_mean,
+            "post_mean": post_mean,
+            "diff": diff,
+            "cohens_d": cohens_d,
+            "p_value": float(p_val),
+            "u_statistic": float(u_stat),
+            "n_pre": n_pre,
+            "n_post": n_post,
+            "ci_95_lower": ci_lower,
+            "ci_95_upper": ci_upper,
+            "direction": direction,
+            "three_period": three_period,
+        }
+
+        # KPI card
+        sig = p_val < 0.05
+        status = "normal" if sig else "warning"
+        d_abs = abs(cohens_d)
+        size_label = (
+            "large" if d_abs >= 0.8 else "medium" if d_abs >= 0.5 else "small"
+        )
+        cards_html.append(make_kpi_card(
+            label,
+            format_p_value(p_val),
+            "",
+            status=status,
+            detail=f"d={cohens_d:+.2f} ({size_label})",
+            status_label="Significant" if sig else "NS",
+        ))
+
+        # Table row
+        dir_cls = "favorable" if favorable else "unfavorable"
+        sig_badge = (
+            '<span class="badge badge-sig">Sig</span>'
+            if sig
+            else '<span class="badge badge-ns">NS</span>'
+        )
+        table_rows.append(
+            f"<tr>"
+            f'<td style="font-weight:600">{label}</td>'
+            f"<td>{pre_mean:.2f} {unit}</td>"
+            f"<td>{post_mean:.2f} {unit}</td>"
+            f'<td class="{dir_cls}">{diff:+.2f} {unit}</td>'
+            f"<td>{cohens_d:+.2f} ({size_label})</td>"
+            f"<td>{sig_badge} {format_p_value(p_val)}</td>"
+            f"<td>[{ci_lower:+.2f}, {ci_upper:+.2f}]</td>"
+            f"</tr>"
+        )
+
+    # Assemble HTML
+    kpi_row = make_kpi_row(*cards_html) if cards_html else ""
+
+    table_html = f"""
+    <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:0.9rem">
+      <thead>
+        <tr style="border-bottom:2px solid {BORDER_DEFAULT};text-align:left">
+          <th style="padding:10px 12px;color:{TEXT_PRIMARY}">Metric</th>
+          <th style="padding:10px 12px;color:{TEXT_PRIMARY}">Pre-Rux Mean</th>
+          <th style="padding:10px 12px;color:{TEXT_PRIMARY}">Post-Rux Mean</th>
+          <th style="padding:10px 12px;color:{TEXT_PRIMARY}">Change</th>
+          <th style="padding:10px 12px;color:{TEXT_PRIMARY}">Cohen's d</th>
+          <th style="padding:10px 12px;color:{TEXT_PRIMARY}">Mann-Whitney</th>
+          <th style="padding:10px 12px;color:{TEXT_PRIMARY}">95% CI (diff)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {"".join(table_rows)}
+      </tbody>
+    </table>"""
+
+    note_html = (
+        f'<div class="causal-method-note" style="margin-top:16px">'
+        f"<strong>Note:</strong> These per-metric tests complement the Bayesian "
+        f"CausalImpact analysis below. For full changepoint detection and multi-patient "
+        f"comparison, see the "
+        f'<a href="comparative_treatment_response.html" style="color:{ACCENT_BLUE}">'
+        f"Comparative Treatment Response</a> report."
+        f"</div>"
+    )
+
+    section_content = kpi_row + table_html + note_html
+    return section_content, results
+
+
+# ===========================================================================
 # HTML REPORT GENERATION
 # ===========================================================================
 
@@ -2374,12 +2555,16 @@ def generate_html_report(
             fig_counter += 1
 
     # Build section HTML
+    indiv_html, indiv_metrics = _build_individual_metric_tests(daily)
     ci_html = _build_ci_summary(all_results.get("causal_impact", {}))
     stat_power_html = _build_statistical_power_section(daily, all_results)
     placebo_html = _build_placebo_summary(all_results.get("placebo_tests", {}))
     pcmci_html = _build_pcmci_summary(all_results.get("pcmci", {}))
     te_html = _build_te_summary(all_results.get("transfer_entropy", {}))
     mediation_html = _build_mediation_summary(all_results.get("mediation", {}))
+
+    # Store individual metric results for JSON export
+    all_results["individual_metric_tests"] = indiv_metrics
 
     # Organize figure divs by section
     section_figs: dict[str, list[str]] = {}
@@ -2472,7 +2657,8 @@ def generate_html_report(
     body_parts.append("""
     <div class="causal-toc">
         <strong>Table of contents:</strong>
-        <ol>
+        <ol start="0">
+            <li><a href="#indiv">Individual Metric Treatment Response</a></li>
             <li><a href="#ci">CausalImpact - Bayesian Structural Time Series</a></li>
             <li><a href="#statpower">Statistical Power &amp; Interpretation</a></li>
             <li><a href="#placebo">Placebo tests (falsification)</a></li>
@@ -2482,6 +2668,21 @@ def generate_html_report(
             <li><a href="#clinical">Clinical Interpretation</a></li>
         </ol>
     </div>""")
+
+    # Section 0: Individual Metric Treatment Response
+    indiv_method = (
+        '<div class="causal-method-note">'
+        '<strong>Method:</strong> Non-parametric Mann-Whitney U test compares pre- vs post-ruxolitinib '
+        'distributions for each core biometric. Effect sizes reported as Cohen\'s d with '
+        f'bootstrap 95% CI ({BOOTSTRAP_N} iterations). '
+        'These direct statistical tests provide intuitive per-metric significance before '
+        'the multivariate causal methods below.</div>'
+    )
+    body_parts.append(make_section(
+        "0. Individual Metric Treatment Response",
+        indiv_method + indiv_html,
+        section_id="indiv",
+    ))
 
     # Section 1: CausalImpact
     ci_method = (
