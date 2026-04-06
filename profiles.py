@@ -1,12 +1,12 @@
 """Patient profiles for multi-user Oura data collection.
 
-Henrik is the primary patient — config.py holds his clinical parameters.
+Patient 1 (P1) is the primary patient — config.py holds clinical parameters.
 Secondary profiles store their own clinical context and use separate databases
 so the analysis pipeline can run independently for each patient.
 
 Usage:
-    python api/import_oura.py --days 30                  # Henrik (default)
-    python api/import_oura.py --days 30 --profile mitch  # Mitch
+    python api/import_oura.py --days 30                  # P1 (default)
+    python api/import_oura.py --days 30 --profile mitch  # P2
 """
 from datetime import date
 from pathlib import Path
@@ -36,7 +36,7 @@ PROFILES = {
         "database": PROJECT_ROOT / "data" / "mitch.db",
         "major_event_date": date(2024, 12, 15),
         "major_event_label": "Stroke",
-        # Mitch's tokens use prefixed env vars
+        # P2's tokens use prefixed env vars
         "token_env": "MITCH_OURA_ACCESS_TOKEN",
         "refresh_env": "MITCH_OURA_REFRESH_TOKEN",
         "ring_gen": 3,

@@ -2,7 +2,7 @@
 """Comparative Temperature Deviation Analysis.
 
 Systematic temperature deviation analysis for both patients. Validated by
-Mitchell's +13C flight day.  Can flag illness before symptoms appear.
+P2's +13C flight day.  Can flag illness before symptoms appear.
 
 Temperature delta from Oura represents nightly skin temperature deviation
 from the wearer's personal baseline, measured in degrees Celsius.
@@ -85,6 +85,8 @@ from _theme import (
 from _hardening import section_html_or_placeholder
 
 pio.templates.default = "clinical_dark"
+
+PID_LABEL = {"henrik": "P1", "mitch": "P2"}
 
 HTML_OUTPUT = REPORTS_DIR / "comparative_temperature_analysis.html"
 JSON_OUTPUT = REPORTS_DIR / "comparative_temperature_metrics.json"
@@ -414,13 +416,13 @@ def compute_lag_correlations(
 
 
 # ---------------------------------------------------------------------------
-# 6. Pre/Post Ruxolitinib Analysis (Henrik)
+# 6. Pre/Post Ruxolitinib Analysis (Patient 1)
 # ---------------------------------------------------------------------------
 
 def rux_pre_post_analysis(
     data: dict[str, dict[str, pd.DataFrame]],
 ) -> dict[str, Any]:
-    """Compare Henrik temperature variability pre vs post Ruxolitinib."""
+    """Compare Patient 1 temperature variability pre vs post Ruxolitinib."""
     result: dict[str, Any] = {"available": False}
 
     henrik_frames = data.get("henrik")
@@ -682,7 +684,7 @@ def fig_rux_pre_post(
     data: dict[str, dict[str, pd.DataFrame]],
     rux_stats: dict[str, Any],
 ) -> go.Figure:
-    """Box/violin for Henrik pre vs post Ruxolitinib temperature distribution."""
+    """Box/violin for Patient 1 pre vs post Ruxolitinib temperature distribution."""
     fig = go.Figure()
 
     henrik_frames = data.get("henrik")
@@ -739,7 +741,7 @@ def fig_rux_pre_post(
     )
 
     fig.update_layout(
-        title=dict(text="Henrik: Pre vs Post Ruxolitinib Temperature", font=dict(size=16)),
+        title=dict(text="Patient 1: Pre vs Post Ruxolitinib Temperature", font=dict(size=16)),
         yaxis_title="Temperature Delta (C)",
         violinmode="overlay",
         margin=dict(l=60, r=20, t=50, b=40),
@@ -950,7 +952,7 @@ def _build_event_table(events: list[dict[str, Any]]) -> str:
 
         rows_html += (
             f"<tr>"
-            f"<td>{ev['patient'].title()}</td>"
+            f"<td>{PID_LABEL.get(ev['patient'], ev['patient'])}</td>"
             f"<td>{ev['date']}</td>"
             f"<td>{ev['event']}</td>"
             f"<td>{ev.get('expected_delta', 'N/A')}</td>"
@@ -990,7 +992,7 @@ def _build_lag_table(lag_corrs: dict[str, dict[str, Any]]) -> str:
                 sig_color = ACCENT_GREEN if p_val < 0.05 else TEXT_SECONDARY
                 rows_html += (
                     f"<tr>"
-                    f"<td>{pid.title()}</td>"
+                    f"<td>{PID_LABEL.get(pid, pid)}</td>"
                     f"<td>{target_label}</td>"
                     f"<td>{lag_key.replace('lag_', '')}</td>"
                     f"<td>{rho:.3f}</td>"
@@ -1029,7 +1031,7 @@ def _build_spikes_table(
             color = ACCENT_RED if cls == "fever" else ACCENT_AMBER
             rows_html += (
                 f"<tr>"
-                f"<td>{pid.title()}</td>"
+                f"<td>{PID_LABEL.get(pid, pid)}</td>"
                 f"<td>{dt.strftime('%Y-%m-%d')}</td>"
                 f'<td style="color:{color}">{delta:+.2f} C</td>'
                 f"<td>{cls.replace('_', ' ').title()}</td>"
@@ -1079,21 +1081,21 @@ def build_html(
 
         cards = [
             make_kpi_card(
-                "HENRIK MEAN TEMP",
+                "P1 MEAN TEMP",
                 h_mean if not np.isnan(h_mean) else "N/A",
                 unit="C",
                 status="normal" if abs(h_mean) < 0.5 and not np.isnan(h_mean) else "warning",
                 detail=f"n={h_stats.get('n_days', 0)} days",
             ),
             make_kpi_card(
-                "MITCHELL MEAN TEMP",
+                "P2 MEAN TEMP",
                 m_mean if not np.isnan(m_mean) else "N/A",
                 unit="C",
                 status="normal" if abs(m_mean) < 0.5 and not np.isnan(m_mean) else "warning",
                 detail=f"n={m_stats.get('n_days', 0)} days",
             ),
             make_kpi_card(
-                "HENRIK TEMP SD",
+                "P1 TEMP SD",
                 h_sd if not np.isnan(h_sd) else "N/A",
                 unit="C",
                 decimals=3,
@@ -1101,7 +1103,7 @@ def build_html(
                 detail=f"IQR={h_stats.get('iqr', 0):.3f}",
             ),
             make_kpi_card(
-                "MITCHELL TEMP SD",
+                "P2 TEMP SD",
                 m_sd if not np.isnan(m_sd) else "N/A",
                 unit="C",
                 decimals=3,
@@ -1146,13 +1148,13 @@ def build_html(
                 f'({comp.get("effect_label", "n/a")}). '
             )
             if cross_patient.get("henrik_runs_hotter"):
-                stats_html += "Henrik runs warmer on average. "
+                stats_html += "Patient 1 runs warmer on average. "
             else:
-                stats_html += "Mitchell runs warmer on average. "
+                stats_html += "Patient 2 runs warmer on average. "
             if cross_patient.get("henrik_more_variable"):
-                stats_html += "Henrik shows more temperature variability."
+                stats_html += "Patient 1 shows more temperature variability."
             else:
-                stats_html += "Mitchell shows more temperature variability."
+                stats_html += "Patient 2 shows more temperature variability."
             stats_html += "</div>"
 
         return make_section(
@@ -1183,7 +1185,7 @@ def build_html(
                 f'</div>'
             )
 
-        return make_section("Ruxolitinib Effect (Henrik)", chart + summary, section_id="rux")
+        return make_section("Ruxolitinib Effect (Patient 1)", chart + summary, section_id="rux")
 
     sections.append(section_html_or_placeholder("Ruxolitinib Effect", _rux_section))
 
@@ -1241,7 +1243,7 @@ def build_html(
         h_sd = h_stats.get("std", 0)
         m_sd = m_stats.get("std", 0)
         if h_sd > 0 and m_sd > 0:
-            more_var = "Henrik" if h_sd > m_sd else "Mitchell"
+            more_var = "Patient 1" if h_sd > m_sd else "Patient 2"
             ratio = max(h_sd, m_sd) / min(h_sd, m_sd) if min(h_sd, m_sd) > 0 else 0
             bullets.append(
                 f"<strong>Temperature variability:</strong> {more_var} shows {ratio:.1f}x "
@@ -1270,7 +1272,7 @@ def build_html(
                 rho = lag1["rho"]
                 direction = "negative" if rho < 0 else "positive"
                 bullets.append(
-                    f"<strong>Early warning ({pid.title()}):</strong> Significant {direction} "
+                    f"<strong>Early warning ({PID_LABEL.get(pid, pid)}):</strong> Significant {direction} "
                     f"lag-1 correlation (rho={rho:.3f}) between temperature and next-day readiness, "
                     f"suggesting temperature deviations may predict readiness changes 24 hours in advance."
                 )
@@ -1280,7 +1282,7 @@ def build_html(
         m_anom_n = len(anomalies.get("mitch", pd.DataFrame()))
         bullets.append(
             f"<strong>Anomalies:</strong> {h_anom_n + m_anom_n} total anomaly days detected "
-            f"(Henrik: {h_anom_n}, Mitchell: {m_anom_n}) using 2-SD threshold."
+            f"(Patient 1: {h_anom_n}, Patient 2: {m_anom_n}) using 2-SD threshold."
         )
 
         content = "<ul>" + "".join(f"<li>{b}</li>" for b in bullets) + "</ul>"
@@ -1330,7 +1332,7 @@ def build_html(
         title="Comparative Temperature Analysis",
         body_content=body,
         report_id="comp_temperature",
-        header_meta="Henrik (post-HSCT) vs Mitchell (post-Stroke)",
+        header_meta="Patient 1 (post-HSCT) vs Patient 2 (post-Stroke)",
         data_end=data_end,
     )
 

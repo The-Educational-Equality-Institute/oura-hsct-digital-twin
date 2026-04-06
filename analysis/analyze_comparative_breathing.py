@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Module 6: Breathing Rate Analysis & BOS Screening.
 
-Compares breathing rate patterns between Henrik (post-HSCT) and Mitchell
+Compares breathing rate patterns between Patient 1 (post-HSCT) and Patient 2
 (post-stroke). Elevated breathing rate is an early marker for BOS
 (Bronchiolitis Obliterans Syndrome) post-HSCT.
 
@@ -259,14 +259,14 @@ def compute_rolling(
 
 
 # ---------------------------------------------------------------------------
-# [3/7] BOS Screening (Henrik)
+# [3/7] BOS Screening (Patient 1)
 # ---------------------------------------------------------------------------
 
 def compute_bos_screening(
     data: dict[str, dict[str, Any]],
     henrik_id: str,
 ) -> dict[str, Any]:
-    """Compute BOS risk indicators for Henrik.
+    """Compute BOS risk indicators for Patient 1.
 
     Returns dict with trend analysis, elevated count, risk classification.
     """
@@ -308,7 +308,7 @@ def compute_bos_screening(
 
 
 # ---------------------------------------------------------------------------
-# [4/7] Pre/Post Ruxolitinib Analysis (Henrik)
+# [4/7] Pre/Post Ruxolitinib Analysis (Patient 1)
 # ---------------------------------------------------------------------------
 
 def compute_rux_effect(
@@ -518,7 +518,7 @@ def _fig_rux_effect(
     patients: tuple[PatientConfig, PatientConfig],
     rux_stats: dict[str, Any],
 ) -> go.Figure:
-    """Fig 3: Pre/post Rux -- Henrik only, box/violin with stats annotation."""
+    """Fig 3: Pre/post Rux -- Patient 1 only, box/violin with stats annotation."""
     h_id = patients[0].patient_id
     breath = data[h_id]["breath"]
     rux_ts = pd.Timestamp(TREATMENT_START)
@@ -579,7 +579,7 @@ def _fig_rux_effect(
 
     fig.update_layout(
         height=500,
-        title=dict(text="Ruxolitinib Effect on Breathing Rate (Henrik)", font=dict(size=16)),
+        title=dict(text="Ruxolitinib Effect on Breathing Rate (Patient 1)", font=dict(size=16)),
         yaxis_title="Breathing Rate (brpm)",
         legend=dict(orientation="h", y=-0.12),
         margin=dict(l=60, r=20, t=90, b=60),
@@ -669,7 +669,7 @@ def _fig_bos_panel(
     patients: tuple[PatientConfig, PatientConfig],
     bos_stats: dict[str, Any],
 ) -> go.Figure:
-    """Fig 5: BOS risk panel -- Henrik's trend with thresholds and trend line."""
+    """Fig 5: BOS risk panel -- P1's trend with thresholds and trend line."""
     h_id = patients[0].patient_id
     breath = data[h_id]["breath"]
     breath_7d = data[h_id].get("breath_7d", pd.Series(dtype=float))
@@ -748,7 +748,7 @@ def _fig_bos_panel(
 
     fig.update_layout(
         height=500,
-        title=dict(text="BOS Screening: Henrik Breathing Rate Trend", font=dict(size=16)),
+        title=dict(text="BOS Screening: Patient 1 Breathing Rate Trend", font=dict(size=16)),
         yaxis_title="Breathing Rate (brpm)",
         xaxis_title="Date",
         legend=dict(orientation="h", y=-0.12),
@@ -797,19 +797,19 @@ def build_html(
 
     kpi_row = make_kpi_row(
         make_kpi_card(
-            "HENRIK MEAN BREATH", h_mean, "brpm",
+            "P1 MEAN BREATH", h_mean, "brpm",
             status=h_status,
             detail=f"Range: {BREATH_NORMAL_LOW}-{BREATH_NORMAL_HIGH} brpm normal",
             explainer="Average nighttime breathing rate",
         ),
         make_kpi_card(
-            "MITCHELL MEAN BREATH", m_mean, "brpm",
+            "P2 MEAN BREATH", m_mean, "brpm",
             status=m_status,
             detail="Reference (no respiratory comorbidity)",
             explainer="Average nighttime breathing rate",
         ),
         make_kpi_card(
-            "HENRIK TREND", h_trend_dir.title(), "",
+            "P1 TREND", h_trend_dir.title(), "",
             status=trend_status,
             detail=f"Slope: {bos_stats.get('trend', {}).get('slope_per_day', 0):.4f}/day",
             status_label=h_trend_dir.title(),
@@ -895,7 +895,7 @@ def build_html(
         body_content=body,
         report_id="comp_breathing",
         subtitle="Module 6: Comparative Breathing Analysis",
-        header_meta="Henrik (post-HSCT) vs Mitchell (post-Stroke)",
+        header_meta="Patient 1 (post-HSCT) vs Patient 2 (post-Stroke)",
     )
 
 
@@ -947,10 +947,10 @@ def _build_coupling_section(
         f'higher HRV correlates with lower breathing rate through vagal modulation. '
         f'Disrupted coupling may indicate autonomic dysfunction.</p>'
         f'<p style="color:{TEXT_SECONDARY};line-height:1.7;margin-top:8px;">'
-        f'<strong>Henrik:</strong> r={h_coup.get("spearman_r", 0):.2f}, '
+        f'<strong>Patient 1:</strong> r={h_coup.get("spearman_r", 0):.2f}, '
         f'{format_p_value(h_coup.get("p_value"))}, n={h_coup.get("n", 0)} '
         f'-- {"Coupling intact" if h_intact else "Coupling disrupted/weak"}<br>'
-        f'<strong>Mitchell:</strong> r={m_coup.get("spearman_r", 0):.2f}, '
+        f'<strong>Patient 2:</strong> r={m_coup.get("spearman_r", 0):.2f}, '
         f'{format_p_value(m_coup.get("p_value"))}, n={m_coup.get("n", 0)} '
         f'-- {"Coupling intact" if m_intact else "Coupling disrupted/weak"}'
         f'</p></div>'
@@ -992,7 +992,7 @@ def _build_clinical_interpretation(
             for a in h_anomalies[:15]
         )
         anomaly_html = (
-            f'<h3 style="color:{TEXT_PRIMARY};margin-top:20px;">Anomalous Nights (Henrik)</h3>'
+            f'<h3 style="color:{TEXT_PRIMARY};margin-top:20px;">Anomalous Nights (Patient 1)</h3>'
             f'<p style="color:{TEXT_SECONDARY};">Nights with breathing rate &gt;2 SD above personal mean '
             f'({len(h_anomalies)} detected):</p>'
             f'<table style="width:100%;border-collapse:collapse;margin-top:8px;">'
@@ -1007,7 +1007,7 @@ def _build_clinical_interpretation(
 
     return (
         f'<p style="color:{TEXT_SECONDARY};line-height:1.7;">'
-        f'<strong>BOS Screening:</strong> Henrik\'s breathing rate trend is classified as '
+        f'<strong>BOS Screening:</strong> P1\'s breathing rate trend is classified as '
         f'<strong>{risk_label}</strong>. The linear trend slope is {slope:+.4f} brpm/day '
         f'({pct_elevated:.1f}% of nights above the {BREATH_ELEVATED} brpm elevated threshold). '
         f'Post-HSCT patients require ongoing monitoring for BOS, especially with chronic GVHD.</p>'
@@ -1021,7 +1021,7 @@ def _build_clinical_interpretation(
         f'<p style="color:{TEXT_SECONDARY};line-height:1.7;margin-top:12px;">'
         f'<strong>Autonomic Coupling:</strong> '
         f'{"Respiratory-autonomic coupling appears intact" if coupling_intact else "Respiratory-autonomic coupling is disrupted or weak"} '
-        f'in Henrik (Spearman r={coupling.get("spearman_r", 0):.2f}). '
+        f'in Patient 1 (Spearman r={coupling.get("spearman_r", 0):.2f}). '
         f'Disrupted breath-HRV coupling in HSCT patients may reflect '
         f'autonomic neuropathy or chronic inflammatory burden affecting vagal tone.</p>'
         f'{anomaly_html}'
@@ -1152,7 +1152,7 @@ def main() -> int:
     logger.info("[2/7] Computing rolling metrics...")
     data = compute_rolling(raw_data)
 
-    logger.info("[3/7] BOS screening (Henrik)...")
+    logger.info("[3/7] BOS screening (Patient 1)...")
     bos_stats = compute_bos_screening(data, patients[0].patient_id)
 
     logger.info("[4/7] Pre/post Ruxolitinib analysis...")

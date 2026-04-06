@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Mitchell Changepoint Investigation.
+"""Patient 2 Changepoint Investigation.
 
 Deep investigation of 14 automatically discovered changepoints from the
 comparative treatment analysis.  Cross-references with known life events
@@ -387,7 +387,7 @@ def segment_trajectory(daily: pd.DataFrame) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 def australia_analysis(daily: pd.DataFrame) -> dict[str, Any]:
-    """Analyze Mitchell's Australia stay (Dec 18, 2021 - Feb 18, 2022 data)."""
+    """Analyze P2's Australia stay (Dec 18, 2021 - Feb 18, 2022 data)."""
     aus_start = pd.Timestamp(AUSTRALIA_ARRIVAL)
     # Data gap starts Feb 19, so last usable data is Feb 18
     aus_data_end = pd.Timestamp(date(2022, 2, 18))
@@ -435,7 +435,7 @@ def australia_analysis(daily: pd.DataFrame) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 def generate_questions(results: list[dict[str, Any]]) -> list[str]:
-    """Auto-generate questions for Mitchell about INVESTIGATE changepoints."""
+    """Auto-generate questions for Patient 2 about INVESTIGATE changepoints."""
     questions: list[str] = []
     for r in results:
         if r["validation"] != "INVESTIGATE":
@@ -935,7 +935,7 @@ def build_html(
         make_kpi_card("GENUINE", n_genuine, status="info", decimals=0,
                       detail="Clear metric shifts"),
         make_kpi_card("INVESTIGATE", n_investigate, status="warning", decimals=0,
-                      detail="Questions for Mitchell"),
+                      detail="Questions for Patient 2"),
     )
 
     # -- Executive Summary --
@@ -946,19 +946,19 @@ def build_html(
     <div style="color:{TEXT_SECONDARY};line-height:1.8;font-size:14px;">
     <p>Analysis of <strong style="color:{TEXT_PRIMARY};">14 changepoints</strong>
     discovered by the 4-method consensus algorithm across 5 years of Oura Ring data.
-    Mitchell's data spans from early 2021 with significant gaps
+    P2's data spans from early 2021 with significant gaps
     totaling approximately {sum((g[1] - g[0]).days for g in DATA_GAPS)} days of missing data
     across {len(DATA_GAPS)} gap periods.</p>
 
     <p>The highest-consensus changepoint (<strong style="color:{ACCENT_PURPLE};">C={top_cp['consensus']}</strong>
-    on {top_cp['date']}) falls during Mitchell's Australia stay (Dec 2021 - May 2022),
+    on {top_cp['date']}) falls during P2's Australia stay (Dec 2021 - May 2022),
     suggesting genuine physiological adaptation to the timezone shift and environment change.</p>
 
     <p>Of the 14 changepoints: <strong style="color:{ACCENT_GREEN};">{n_validated}</strong> validated
     against known events, <strong style="color:{TEXT_TERTIARY};">{n_artifact}</strong> classified as
     data artifacts (within {GAP_ARTIFACT_THRESHOLD} days of gap boundary),
     <strong style="color:{ACCENT_BLUE};">{n_genuine}</strong> genuine metric shifts, and
-    <strong style="color:{ACCENT_AMBER};">{n_investigate}</strong> requiring follow-up with Mitchell.</p>
+    <strong style="color:{ACCENT_AMBER};">{n_investigate}</strong> requiring follow-up with Patient 2.</p>
     </div>
     """
 
@@ -994,7 +994,7 @@ def build_html(
     if aus_info.get("n_days", 0) > 0:
         aus_content_parts.append(
             f"""<p style="color:{TEXT_SECONDARY};margin-bottom:12px;">
-            Mitchell arrived in Australia on Dec 18, 2021. Data is available for
+            Patient 2 arrived in Australia on Dec 18, 2021. Data is available for
             {aus_info['n_days']} days ({aus_info.get('data_range', 'N/A')}). The red shaded zone
             marks the first 7 days (jet lag recovery window). The amber line marks
             the C=9 changepoint on Jan 23, 2022.</p>"""
@@ -1066,14 +1066,14 @@ def build_html(
         lambda: make_section(
             "Long-Term Trajectory Segmentation",
             f"""<p style="color:{TEXT_SECONDARY};margin-bottom:12px;">
-            Mitchell's biometric data split into wearing segments between gap periods.
+            P2's biometric data split into wearing segments between gap periods.
             Shows baseline shifts across years.</p>"""
             + _trajectory_table(segments),
             section_id="trajectory",
         ),
     )
 
-    # -- Section 7: Questions for Mitchell --
+    # -- Section 7: Questions for Patient 2 --
     if questions:
         q_items = "".join(
             f'<li style="margin:8px 0;color:{TEXT_PRIMARY};">{q}</li>'
@@ -1082,16 +1082,16 @@ def build_html(
         q_html = (
             f"""<p style="color:{TEXT_SECONDARY};margin-bottom:12px;">
             The following changepoints could not be explained by data gaps or known events.
-            Answers from Mitchell would help validate the detection system.</p>
+            Answers from Patient 2 would help validate the detection system.</p>
             <ol style="padding-left:20px;">{q_items}</ol>"""
         )
     else:
         q_html = f'<p style="color:{TEXT_SECONDARY};">No unresolved changepoints require follow-up.</p>'
 
     sec_questions = section_html_or_placeholder(
-        "Questions for Mitchell",
+        "Questions for Patient 2",
         lambda: make_section(
-            "Questions for Mitchell",
+            "Questions for Patient 2",
             q_html,
             section_id="questions",
         ),
@@ -1110,10 +1110,10 @@ def build_html(
     ])
 
     return wrap_html(
-        title="Mitch Changepoint Investigation",
+        title="Patient 2 Changepoint Investigation",
         body_content=body,
         report_id="mitch_changepoints",
-        header_meta="Mitchell — Changepoint Investigation",
+        header_meta="Patient 2 — Changepoint Investigation",
         post_days=0,
     )
 
@@ -1164,11 +1164,11 @@ def export_json(
 # ---------------------------------------------------------------------------
 
 def main() -> int:
-    """Run Mitchell changepoint investigation pipeline."""
+    """Run Patient 2 changepoint investigation pipeline."""
     if not MITCH_DB.exists():
         print("Skipping: mitch.db not found (second patient data not available)")
         return 0
-    logger.info("[1/7] Loading Mitchell data from %s...", MITCH_DB)
+    logger.info("[1/7] Loading P2 data from %s...", MITCH_DB)
     data = load_data()
     daily = _merge_daily(data)
     logger.info("  Loaded %d daily records (%s to %s)",
@@ -1207,7 +1207,7 @@ def main() -> int:
     logger.info("[7/7] Exporting JSON metrics...")
     export_json(results, segments, aus_info, questions)
 
-    logger.info("Mitchell changepoint investigation complete.")
+    logger.info("Patient 2 changepoint investigation complete.")
     return 0
 
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Module 1: Autonomic Recovery Trajectories.
 
-Compares HRV and resting HR recovery patterns between Henrik (post-HSCT)
-and Mitchell (post-stroke), normalized to days-since-their-major-event.
+Compares HRV and resting HR recovery patterns between Patient 1 (post-HSCT)
+and Patient 2 (post-stroke), normalized to days-since-their-major-event.
 
 Outputs:
   - Interactive HTML dashboard: reports/comparative_autonomic_report.html
@@ -657,11 +657,11 @@ def _fig_long_term_context(
     data: dict[str, dict[str, Any]],
     patients: tuple[PatientConfig, PatientConfig],
 ) -> go.Figure:
-    """Fig 5: Mitchell's full HRV timeline with Henrik's window overlaid."""
+    """Fig 5: P2's full HRV timeline with P1's window overlaid."""
     fig = go.Figure()
     patient_map = {p.patient_id: p for p in patients}
 
-    # Mitchell = second patient (longer dataset)
+    # P2 = second patient (longer dataset)
     mitch_pid = patients[1].patient_id
     henrik_pid = patients[0].patient_id
 
@@ -672,7 +672,7 @@ def _fig_long_term_context(
     h_p = patient_map[henrik_pid]
 
     if not m_hrv.empty:
-        # Mitchell: full range scatter
+        # P2: full range scatter
         fig.add_trace(go.Scatter(
             x=m_hrv.index, y=m_hrv.values,
             mode="markers", marker=dict(size=2, color=ACCENT_GREEN, opacity=0.2),
@@ -688,7 +688,7 @@ def _fig_long_term_context(
             ))
 
     if not h_hrv.empty:
-        # Henrik: overlay his window
+        # P1: overlay window
         fig.add_trace(go.Scatter(
             x=h_hrv.index, y=h_hrv.values,
             mode="markers", marker=dict(size=4, color=ACCENT_BLUE, opacity=0.6),
@@ -702,14 +702,14 @@ def _fig_long_term_context(
                 name=f"{h_p.display_name} (7d avg)", legendgroup="henrik",
             ))
 
-        # Shade Henrik's data window
+        # Shade P1's data window
         h_start = h_hrv.index.min()
         h_end = h_hrv.index.max()
         fig.add_vrect(
             x0=h_start, x1=h_end,
             fillcolor=ACCENT_BLUE, opacity=0.06,
             line_width=0,
-            annotation_text="Henrik's window",
+            annotation_text="P1's window",
             annotation_position="top left",
             annotation_font_size=10,
             annotation_font_color=ACCENT_BLUE,
@@ -720,7 +720,7 @@ def _fig_long_term_context(
 
     fig.update_layout(
         height=450,
-        title=dict(text="Long-Term Context: Mitchell's 5-Year HRV with Henrik's Window", font=dict(size=16)),
+        title=dict(text="Long-Term Context: P2's 5-Year HRV with P1's Window", font=dict(size=16)),
         xaxis_title="Date",
         yaxis_title="RMSSD (ms)",
         legend=dict(orientation="h", y=-0.15),
@@ -814,35 +814,35 @@ def build_html(
 
     kpi_row = make_kpi_row(
         make_kpi_card(
-            "HENRIK MEAN HRV", h_hrv_mean, "ms",
+            "P1 MEAN HRV", h_hrv_mean, "ms",
             status="critical",
             detail=f"Below ESC threshold ({ESC_RMSSD_DEFICIENCY}ms)" if h_hrv_mean < ESC_RMSSD_DEFICIENCY else "Above ESC threshold",
             status_label="Severe" if h_hrv_mean < ESC_RMSSD_DEFICIENCY else "Low",
         ),
         make_kpi_card(
-            "MITCHELL MEAN HRV", m_hrv_mean, "ms",
+            "P2 MEAN HRV", m_hrv_mean, "ms",
             status="info",
             detail=f"Pop. percentile: {m_stats.get('hrv', {}).get('population_percentile', 0):.0f}%",
         ),
         make_kpi_card(
-            "HENRIK SLEEP HR", h_hr_mean, "bpm",
+            "P1 SLEEP HR", h_hr_mean, "bpm",
             status="warning" if h_hr_mean > 75 else "normal",
             detail="Elevated" if h_hr_mean > 75 else "Acceptable range",
         ),
         make_kpi_card(
-            "MITCHELL SLEEP HR", m_hr_mean, "bpm",
+            "P2 SLEEP HR", m_hr_mean, "bpm",
             status="normal",
             detail="Athletic range" if m_hr_mean < 55 else "Normal range",
         ),
         make_kpi_card(
             "HRV GAP RATIO", hrv_ratio, "x",
             status="info",
-            detail=f"Mitchell/Henrik ({comp.get('hrv_gap_ms', 0):.0f}ms gap)",
+            detail=f"P2/P1 ({comp.get('hrv_gap_ms', 0):.0f}ms gap)",
         ),
         make_kpi_card(
             "TRAJECTORY", h_trend_dir.title(), "",
             status="normal" if h_trend_dir == "improving" else ("warning" if h_trend_dir == "stable" else "critical"),
-            detail=f"Henrik's 30-day HRV trend",
+            detail=f"P1's 30-day HRV trend",
             status_label=h_trend_dir.title(),
         ),
     )
@@ -912,9 +912,9 @@ def build_html(
     clinical_note = (
         '<p style="color:#9CA3AF;line-height:1.7;">'
         "This report compares two fundamentally different clinical trajectories. "
-        "<strong>Henrik</strong> is 2+ years post-allogeneic HSCT with chronic GVHD and "
+        "<strong>Patient 1</strong> is 2+ years post-allogeneic HSCT with chronic GVHD and "
         "severe autonomic dysfunction (HRV consistently below the ESC 15ms threshold). "
-        "<strong>Mitchell</strong> is ~15 months post-stroke (bilateral carotid/vertebral "
+        "<strong>Patient 2</strong> is ~15 months post-stroke (bilateral carotid/vertebral "
         "artery dissection) with mildly impaired but recovering autonomic function. "
         "Direct HRV magnitude comparison is less meaningful than trajectory shape and "
         "relative changes within each patient's own range.</p>"
@@ -936,7 +936,7 @@ def build_html(
         body_content=body,
         report_id="comp_autonomic",
         subtitle="Module 1: Comparative Autonomic Analysis",
-        header_meta="Henrik (post-HSCT) vs Mitchell (post-Stroke)",
+        header_meta="Patient 1 (post-HSCT) vs Patient 2 (post-Stroke)",
     )
 
 

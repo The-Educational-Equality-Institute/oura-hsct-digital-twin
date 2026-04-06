@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Module 5: Anomaly Pattern Comparison.
 
-Compares how "bad days" manifest differently between Henrik (post-HSCT) and
-Mitchell (post-Stroke).  What is each patient's anomaly "signature"?
+Compares how "bad days" manifest differently between Patient 1 (post-HSCT) and
+Patient 2 (post-Stroke).  What is each patient's anomaly "signature"?
 
 Three anomaly detection methods (z-score threshold, Isolation Forest,
 percentile-based) are ensembled.  Anomaly fingerprints, co-deviation matrices,
@@ -181,7 +181,7 @@ def load_all_metrics(patients: tuple[PatientConfig, PatientConfig]) -> dict[str,
         for tbl in tables_needed:
             raw[tbl] = _load_table(p, tbl)
 
-        # Henrik fallback for hr
+        # P1 fallback for hr
         if p.patient_id == "henrik":
             if "oura_sleep" in raw and not raw["oura_sleep"].empty:
                 raw["oura_sleep"] = _fallback_hr_from_sleep_periods(p, raw["oura_sleep"])
@@ -672,8 +672,8 @@ def cross_patient_comparison(
     n_a = fp_a["n_anomaly_days"]
     n_b = fp_b["n_anomaly_days"]
     comp["narrative_summary"] = (
-        f"Henrik and Mitchell show {similarity_text} "
-        f"(cosine={sim:.2f}). Henrik has {n_a} anomaly days vs Mitchell's {n_b}. "
+        f"Patient 1 and Patient 2 show {similarity_text} "
+        f"(cosine={sim:.2f}). Patient 1 has {n_a} anomaly days vs P2's {n_b}. "
         f"PCA axis similarity is {comp['pca_axis_similarity']:.2f}, suggesting "
         f"{'shared' if comp['pca_axis_similarity'] > 0.5 else 'different'} "
         f"dominant failure modes."
@@ -793,7 +793,7 @@ def _fig_anomaly_timeline(
                 hovertemplate="%{x|%Y-%m-%d}<br>Score: %{y:.3f}<extra></extra>",
             ), row=row_i, col=1)
 
-        # Henrik's Feb 9 event
+        # P1's Feb 9 event
         if pid == "henrik":
             event_ts = pd.Timestamp(KNOWN_EVENT_DATE)
             # plotly yref: row 1 = "y domain", row 2 = "y2 domain"
@@ -1382,9 +1382,9 @@ def _build_methodology() -> str:
         "</ol>"
         "<h3>Limitations</h3>"
         "<ul>"
-        "<li>Henrik has ~81 days of data vs Mitchell's ~518 days. Small sample size limits clustering reliability.</li>"
+        "<li>Patient 1 has ~81 days of data vs P2's ~518 days. Small sample size limits clustering reliability.</li>"
         "<li>Oura Ring consumer-grade sensors; not clinical-grade measurement.</li>"
-        "<li>Temperature delta may show seasonal drift in Mitchell's longer dataset.</li>"
+        "<li>Temperature delta may show seasonal drift in P2's longer dataset.</li>"
         "<li>Isolation Forest contamination rate (10%) is assumed, not empirically derived.</li>"
         "<li>Cosine similarity treats all metrics equally; clinical weighting may differ.</li>"
         "</ul>"
@@ -1499,7 +1499,7 @@ def build_html(
         body_content=body,
         report_id="comp_anomalies",
         subtitle="Module 5: Anomaly Signature Analysis",
-        header_meta="Henrik (post-HSCT) vs Mitchell (post-Stroke)",
+        header_meta="Patient 1 (post-HSCT) vs Patient 2 (post-Stroke)",
     )
 
 
