@@ -1,0 +1,190 @@
+[
+  {
+    "file": "advanced_hrv_analysis.html",
+    "status": "PASS",
+    "charts": 8,
+    "js_errors": [],
+    "notes": ""
+  },
+  {
+    "file": "advanced_sleep_analysis.html",
+    "status": "PASS",
+    "charts": 1,
+    "js_errors": [],
+    "notes": ""
+  },
+  {
+    "file": "anomaly_detection_report.html",
+    "status": "PASS",
+    "charts": 3,
+    "js_errors": [],
+    "notes": ""
+  },
+  {
+    "file": "causal_inference_report.html",
+    "status": "PASS",
+    "charts": 3,
+    "js_errors": [],
+    "notes": ""
+  },
+  {
+    "file": "comparative_activity_recovery_coupling.html",
+    "status": "PASS",
+    "charts": 8,
+    "js_errors": [],
+    "notes": ""
+  },
+  {
+    "file": "comparative_anomaly_report.html",
+    "status": "PASS",
+    "charts": 6,
+    "js_errors": [],
+    "notes": ""
+  },
+  {
+    "file": "comparative_autonomic_report.html",
+    "status": "PASS",
+    "charts": 6,
+    "js_errors": [],
+    "notes": ""
+  },
+  {
+    "file": "comparative_breathing_analysis.html",
+    "status": "PASS",
+    "charts": 5,
+    "js_errors": [],
+    "notes": ""
+  },
+  {
+    "file": "comparative_sleep_analysis.html",
+    "status": "PASS",
+    "charts": 6,
+    "js_errors": [],
+    "notes": ""
+  },
+  {
+    "file": "comparative_temperature_analysis.html",
+    "status": "PASS",
+    "charts": 5,
+    "js_errors": [],
+    "notes": ""
+  },
+  {
+    "file": "comparative_treatment_response.html",
+    "status": "PASS",
+    "charts": 27,
+    "js_errors": [],
+    "notes": ""
+  },
+  {
+    "file": "compare_henrik_mitch.html",
+    "status": "PASS",
+    "charts": 5,
+    "js_errors": [],
+    "notes": ""
+  },
+  {
+    "file": "composite_biomarkers.html",
+    "status": "WARN",
+    "charts": 2,
+    "js_errors": [
+      "Error: <g> attribute transform: Trailing garbage, \"rotate(0,NaN,135.20350000\u2026\".",
+      "Error: <g> attribute transform: Trailing garbage, \"rotate(0,NaN,135.20350000\u2026\".",
+      "Error: <g> attribute transform: Trailing garbage, \"rotate(0,NaN,135.20350000\u2026\".",
+      "Error: <g> attribute transform: Trailing garbage, \"rotate(0,NaN,140.4778)\".",
+      "Error: <g> attribute transform: Trailing garbage, \"rotate(0,NaN,140.4778)\"."
+    ],
+    "notes": "5 JS error(s)"
+  },
+  {
+    "file": "digital_twin_report.html",
+    "status": "PASS",
+    "charts": 6,
+    "js_errors": [],
+    "notes": ""
+  },
+  {
+    "file": "foundation_model_report.html",
+    "status": "PASS",
+    "charts": 1,
+    "js_errors": [],
+    "notes": ""
+  },
+  {
+    "file": "gvhd_prediction_report.html",
+    "status": "PASS",
+    "charts": 3,
+    "js_errors": [],
+    "notes": ""
+  },
+  {
+    "file": "index.html",
+    "status": "PASS",
+    "charts": 0,
+    "js_errors": [],
+    "notes": "No Plotly charts detected"
+  },
+  {
+    "file": "mitch_changepoint_investigation.html",
+    "status": "PASS",
+    "charts": 4,
+    "js_errors": [],
+    "notes": ""
+  },
+  {
+    "file": "oura_3d_dashboard.html",
+    "status": "PASS",
+    "charts": 2,
+    "js_errors": [],
+    "notes": ""
+  },
+  {
+    "file": "oura_full_analysis.html",
+    "status": "PASS",
+    "charts": 8,
+    "js_errors": [],
+    "notes": ""
+  },
+  {
+    "file": "oura_full_analysis_20260331.html",
+    "status": "PASS",
+    "charts": 8,
+    "js_errors": [],
+    "notes": ""
+  },
+  {
+    "file": "oura_full_analysis_20260406.html",
+    "status": "PASS",
+    "charts": 8,
+    "js_errors": [],
+    "notes": ""
+  },
+  {
+    "file": "roadmap.html",
+    "status": "PASS",
+    "charts": 0,
+    "js_errors": [],
+    "notes": "No Plotly charts detected"
+  },
+  {
+    "file": "rux_forecast.html",
+    "status": "PASS",
+    "charts": 4,
+    "js_errors": [],
+    "notes": ""
+  },
+  {
+    "file": "spo2_bos_screening.html",
+    "status": "PASS",
+    "charts": 8,
+    "js_errors": [],
+    "notes": ""
+  },
+  {
+    "file": "weekly_tracker.html",
+    "status": "PASS",
+    "charts": 12,
+    "js_errors": [],
+    "notes": ""
+  }
+]
