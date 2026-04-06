@@ -2,8 +2,8 @@
 """Module 4: Activity-Recovery Coupling.
 
 Analyze whether more activity on day N predicts better or worse sleep/HRV
-on day N+1, and whether this relationship differs between Henrik (post-HSCT)
-and Mitchell (post-stroke).
+on day N+1, and whether this relationship differs between Patient 1 (post-HSCT)
+and Patient 2 (post-stroke).
 
 Outputs:
   - Interactive HTML dashboard: reports/comparative_activity_recovery_coupling.html
@@ -727,8 +727,8 @@ def compare_patients(
         interp = f"Both patients show {h_dir} activity-recovery coupling."
     else:
         interp = (
-            f"Divergent coupling: Henrik shows {h_dir} coupling while "
-            f"Mitchell shows {m_dir} coupling, suggesting different "
+            f"Divergent coupling: Patient 1 shows {h_dir} coupling while "
+            f"Patient 2 shows {m_dir} coupling, suggesting different "
             f"physiological recovery capacity."
         )
 
@@ -1148,9 +1148,9 @@ def build_html(
         f'<p style="color:{TEXT_SECONDARY};line-height:1.7;">'
         f"This report examines whether physical activity on day N predicts "
         f"sleep quality and autonomic recovery on day N+1 for both patients. "
-        f"<strong>Henrik</strong> (post-HSCT, ~2700 steps/day, HRV ~9ms) shows "
+        f"<strong>Patient 1</strong> (post-HSCT, ~2700 steps/day, HRV ~9ms) shows "
         f"<strong>{h_dir}</strong> coupling (r={h_r:.3f}). "
-        f"<strong>Mitchell</strong> (post-stroke, ~10000 steps/day, HRV ~43ms) shows "
+        f"<strong>Patient 2</strong> (post-stroke, ~10000 steps/day, HRV ~43ms) shows "
         f"<strong>{m_dir}</strong> coupling (r={m_r:.3f}).</p>"
         f'<p style="color:{TEXT_SECONDARY};line-height:1.7;margin-top:8px;">{interp}</p>'
     )
@@ -1230,7 +1230,7 @@ def build_html(
         body_content=body,
         report_id="comp_coupling",
         subtitle="Module 4: Comparative Activity-Recovery Analysis",
-        header_meta="Henrik (post-HSCT) vs Mitchell (post-Stroke)",
+        header_meta="Patient 1 (post-HSCT) vs Patient 2 (post-Stroke)",
     )
 
 
@@ -1343,14 +1343,14 @@ def _build_clinical_section(
         f'border:1px solid {BORDER_SUBTLE};">'
         f'<h3 style="margin:0 0 8px 0;color:{ACCENT_AMBER};">Caveats</h3>'
         f'<ul style="color:{TEXT_SECONDARY};line-height:1.8;padding-left:20px;">'
-        f"<li>Henrik has only ~{h_n} usable lag-1 pairs. With small N, "
+        f"<li>Patient 1 has only ~{h_n} usable lag-1 pairs. With small N, "
         f"many true correlations will not reach statistical significance. "
         f"Effect sizes (r values) are more informative than p-values.</li>"
         f"<li>Relaxed significance threshold (p &lt; 0.10) used throughout "
         f"to balance Type I and Type II error with limited data.</li>"
         f"<li>Observational design: correlations do not establish causation. "
         f"Confounders (illness severity, medication, stress) are not controlled.</li>"
-        f"<li>Henrik's extremely low activity level (~2700 steps, ~6 min active) "
+        f"<li>P1's extremely low activity level (~2700 steps, ~6 min active) "
         f"provides limited variance to detect dose-response relationships.</li>"
         f"<li>Oura readiness 'resting_heart_rate' is a 0-100 score, NOT bpm. "
         f"Heart rate values come from sleep_periods only.</li>"

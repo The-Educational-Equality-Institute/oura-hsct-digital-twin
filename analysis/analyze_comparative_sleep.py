@@ -2,7 +2,7 @@
 """Module 3: Sleep Architecture as Health Signal.
 
 Compares deep/REM/light/awake percentages, efficiency, and timing between
-Henrik (post-HSCT) and Mitchell (post-stroke) as markers of recovery quality.
+Patient 1 (post-HSCT) and Patient 2 (post-stroke) as markers of recovery quality.
 
 Outputs:
   - Interactive HTML dashboard: reports/comparative_sleep_analysis.html
@@ -820,7 +820,7 @@ def _fig_stacked_area(
             row=row_idx, col=1,
         )
 
-        # Rux start line for Henrik
+        # Rux start line for P1
         if p.patient_id == "henrik":
             _add_event_vline(fig, pd.Timestamp(TREATMENT_START), "Rux Start", ACCENT_CYAN, row=row_idx, col=1)
 
@@ -974,7 +974,7 @@ def _fig_efficiency(
     _add_reference_line(fig, 75, "Poor (75%)", ACCENT_RED, row=1, col=1)
     _add_reference_line(fig, 85, "Recommended (85%)", ACCENT_GREEN, row=1, col=1)
 
-    # Rux start for Henrik
+    # Rux start for P1
     _add_event_vline(fig, pd.Timestamp(TREATMENT_START), "Rux Start", ACCENT_CYAN, row=1, col=1)
 
     fig.update_yaxes(title_text="Efficiency %", row=1, col=1)
@@ -1262,7 +1262,7 @@ def _fig_recovery_trajectory(
                 opacity=0.9,
             )
 
-    # Henrik: Rux start
+    # P1: Rux start
     _add_event_vline(fig, pd.Timestamp(TREATMENT_START), "Rux Start", ACCENT_CYAN)
 
     # Reference lines
@@ -1325,8 +1325,8 @@ def _build_stat_comparison_table(comparison: dict[str, dict[str, Any]]) -> str:
     <thead>
         <tr>
             <th>Metric</th>
-            <th>Henrik</th>
-            <th>Mitchell</th>
+            <th>Patient 1</th>
+            <th>Patient 2</th>
             <th>p-value</th>
             <th>Cohen's d</th>
             <th>Cliff's \u0394</th>
@@ -1339,7 +1339,7 @@ def _build_stat_comparison_table(comparison: dict[str, dict[str, Any]]) -> str:
     </div>
     <p style="font-size:0.75rem;color:{TEXT_TERTIARY};margin-top:8px">
     * p&lt;0.05, ** p&lt;0.01, *** p&lt;0.001 &middot;
-    CI = bootstrap 95% confidence interval for median difference (Henrik - Mitchell)
+    CI = bootstrap 95% confidence interval for median difference (Patient 1 - Patient 2)
     </p>"""
 
 
@@ -1714,7 +1714,7 @@ def build_html(
         body_content=body,
         report_id="comp_sleep",
         subtitle="Module 3: Comparative Sleep Analysis",
-        header_meta="Henrik (post-HSCT) vs Mitchell (post-Stroke)",
+        header_meta="Patient 1 (post-HSCT) vs Patient 2 (post-Stroke)",
     )
 
 

@@ -2,7 +2,7 @@
 """Comparative Temperature Deviation Analysis.
 
 Systematic temperature deviation analysis for both patients. Validated by
-Mitchell's +13C flight day.  Can flag illness before symptoms appear.
+P2's +13C flight day.  Can flag illness before symptoms appear.
 
 Temperature delta from Oura represents nightly skin temperature deviation
 from the wearer's personal baseline, measured in degrees Celsius.
@@ -414,13 +414,13 @@ def compute_lag_correlations(
 
 
 # ---------------------------------------------------------------------------
-# 6. Pre/Post Ruxolitinib Analysis (Henrik)
+# 6. Pre/Post Ruxolitinib Analysis (Patient 1)
 # ---------------------------------------------------------------------------
 
 def rux_pre_post_analysis(
     data: dict[str, dict[str, pd.DataFrame]],
 ) -> dict[str, Any]:
-    """Compare Henrik temperature variability pre vs post Ruxolitinib."""
+    """Compare Patient 1 temperature variability pre vs post Ruxolitinib."""
     result: dict[str, Any] = {"available": False}
 
     henrik_frames = data.get("henrik")
@@ -682,7 +682,7 @@ def fig_rux_pre_post(
     data: dict[str, dict[str, pd.DataFrame]],
     rux_stats: dict[str, Any],
 ) -> go.Figure:
-    """Box/violin for Henrik pre vs post Ruxolitinib temperature distribution."""
+    """Box/violin for Patient 1 pre vs post Ruxolitinib temperature distribution."""
     fig = go.Figure()
 
     henrik_frames = data.get("henrik")
@@ -739,7 +739,7 @@ def fig_rux_pre_post(
     )
 
     fig.update_layout(
-        title=dict(text="Henrik: Pre vs Post Ruxolitinib Temperature", font=dict(size=16)),
+        title=dict(text="Patient 1: Pre vs Post Ruxolitinib Temperature", font=dict(size=16)),
         yaxis_title="Temperature Delta (C)",
         violinmode="overlay",
         margin=dict(l=60, r=20, t=50, b=40),
@@ -1146,13 +1146,13 @@ def build_html(
                 f'({comp.get("effect_label", "n/a")}). '
             )
             if cross_patient.get("henrik_runs_hotter"):
-                stats_html += "Henrik runs warmer on average. "
+                stats_html += "Patient 1 runs warmer on average. "
             else:
-                stats_html += "Mitchell runs warmer on average. "
+                stats_html += "Patient 2 runs warmer on average. "
             if cross_patient.get("henrik_more_variable"):
-                stats_html += "Henrik shows more temperature variability."
+                stats_html += "Patient 1 shows more temperature variability."
             else:
-                stats_html += "Mitchell shows more temperature variability."
+                stats_html += "Patient 2 shows more temperature variability."
             stats_html += "</div>"
 
         return make_section(
@@ -1183,7 +1183,7 @@ def build_html(
                 f'</div>'
             )
 
-        return make_section("Ruxolitinib Effect (Henrik)", chart + summary, section_id="rux")
+        return make_section("Ruxolitinib Effect (Patient 1)", chart + summary, section_id="rux")
 
     sections.append(section_html_or_placeholder("Ruxolitinib Effect", _rux_section))
 
@@ -1241,7 +1241,7 @@ def build_html(
         h_sd = h_stats.get("std", 0)
         m_sd = m_stats.get("std", 0)
         if h_sd > 0 and m_sd > 0:
-            more_var = "Henrik" if h_sd > m_sd else "Mitchell"
+            more_var = "Patient 1" if h_sd > m_sd else "Patient 2"
             ratio = max(h_sd, m_sd) / min(h_sd, m_sd) if min(h_sd, m_sd) > 0 else 0
             bullets.append(
                 f"<strong>Temperature variability:</strong> {more_var} shows {ratio:.1f}x "
@@ -1280,7 +1280,7 @@ def build_html(
         m_anom_n = len(anomalies.get("mitch", pd.DataFrame()))
         bullets.append(
             f"<strong>Anomalies:</strong> {h_anom_n + m_anom_n} total anomaly days detected "
-            f"(Henrik: {h_anom_n}, Mitchell: {m_anom_n}) using 2-SD threshold."
+            f"(Patient 1: {h_anom_n}, Patient 2: {m_anom_n}) using 2-SD threshold."
         )
 
         content = "<ul>" + "".join(f"<li>{b}</li>" for b in bullets) + "</ul>"
@@ -1330,7 +1330,7 @@ def build_html(
         title="Comparative Temperature Analysis",
         body_content=body,
         report_id="comp_temperature",
-        header_meta="Henrik (post-HSCT) vs Mitchell (post-Stroke)",
+        header_meta="Patient 1 (post-HSCT) vs Patient 2 (post-Stroke)",
         data_end=data_end,
     )
 

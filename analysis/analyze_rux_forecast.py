@@ -1227,7 +1227,7 @@ def main() -> int:
             title="Ruxolitinib Forecast",
             body_content=body,
             report_id="forecast",
-            header_meta="Henrik \u2014 Ruxolitinib Forecast",
+            header_meta="Patient 1 \u2014 Ruxolitinib Forecast",
             extra_css=EXTRA_CSS,
         )
         HTML_OUTPUT.write_text(html_content, encoding="utf-8")

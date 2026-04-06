@@ -940,7 +940,7 @@ def main() -> int:
             body_content=body,
             report_id="weekly",
             subtitle=f"{THIS_WEEK_START} to {THIS_WEEK_END}",
-            header_meta="Henrik \u2014 Weekly Tracker",
+            header_meta="Patient 1 \u2014 Weekly Tracker",
             extra_css=EXTRA_CSS,
         )
         HTML_OUTPUT.write_text(html_content, encoding="utf-8")

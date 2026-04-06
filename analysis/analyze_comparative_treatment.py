@@ -3,7 +3,7 @@
 
 Detects inflection points and changepoints in both patients' biometric data
 using four complementary methods (PELT, CUSUM, BOCPD, Rolling Window).
-For Henrik we split at known treatment date (Rux Mar 16); for Mitchell we
+For Patient 1 we split at known treatment date (Rux Mar 16); for Patient 2 we
 discover changepoints automatically and build a consensus map.
 
 Outputs:
@@ -112,7 +112,7 @@ TREATMENT_METRICS = [
     ("steps", "oura_activity", "steps", "Daily Steps", "steps", True),
 ]
 
-# Henrik known events
+# Patient 1 known events
 HENRIK_EVENTS = [
     (KNOWN_EVENT_DATE, "Acute Episode", ACCENT_RED),
     (TREATMENT_START, "Rux Start", ACCENT_CYAN),
@@ -448,7 +448,7 @@ def run_all_changepoint_methods(
 
 
 # ---------------------------------------------------------------------------
-# [3] Henrik: Pre/Post Treatment Analysis
+# [3] Patient 1: Pre/Post Treatment Analysis
 # ---------------------------------------------------------------------------
 
 def henrik_pre_post_analysis(
@@ -570,11 +570,11 @@ def _effect_label(d: float) -> str:
 
 
 # ---------------------------------------------------------------------------
-# [4] Henrik: Three-Period Analysis (pre-acute / post-acute-pre-rux / post-rux)
+# [4] Patient 1: Three-Period Analysis (pre-acute / post-acute-pre-rux / post-rux)
 # ---------------------------------------------------------------------------
 
 def henrik_three_period(metrics: dict[str, pd.Series]) -> dict[str, dict[str, Any]]:
-    """Three-period comparison for Henrik."""
+    """Three-period comparison for Patient 1."""
     acute_ts = pd.Timestamp(KNOWN_EVENT_DATE)
     rux_ts = pd.Timestamp(TREATMENT_START)
     results: dict[str, dict[str, Any]] = {}
@@ -606,14 +606,14 @@ def henrik_three_period(metrics: dict[str, pd.Series]) -> dict[str, dict[str, An
 
 
 # ---------------------------------------------------------------------------
-# [5] Mitchell: Automatic Changepoint Discovery + Consensus
+# [5] Patient 2: Automatic Changepoint Discovery + Consensus
 # ---------------------------------------------------------------------------
 
 def mitchell_consensus(
     metrics: dict[str, pd.Series],
     tolerance_days: int = 3,
 ) -> dict[str, Any]:
-    """Run all methods on all Mitchell metrics, build consensus map."""
+    """Run all methods on all Patient 2 metrics, build consensus map."""
     all_detections: dict[str, dict[str, list[date]]] = {}
     bocpd_probs: dict[str, np.ndarray] = {}
 
@@ -750,7 +750,7 @@ def _fig_henrik_timeline(
     metric_display: str,
     unit: str,
 ) -> go.Figure:
-    """Henrik annotated timeline: rolling mean + changepoints + vertical event lines."""
+    """Patient 1 annotated timeline: rolling mean + changepoints + vertical event lines."""
     fig = go.Figure()
 
     if series.empty:
@@ -835,12 +835,12 @@ def _fig_henrik_timeline(
                 name=f"CP: {method.upper()}",
             ))
 
-    # Henrik event lines
+    # Patient 1 event lines
     for evt_date, evt_label, evt_color in HENRIK_EVENTS:
         _add_event_vline(fig, pd.Timestamp(evt_date), evt_label, evt_color)
 
     fig.update_layout(
-        title=dict(text=f"Henrik: {metric_display}", font=dict(size=14)),
+        title=dict(text=f"Patient 1: {metric_display}", font=dict(size=14)),
         yaxis_title=f"{metric_display} ({unit})",
         xaxis_title="Date",
         hovermode="x unified",
@@ -910,7 +910,7 @@ def _fig_mitchell_timeline(
     metrics: dict[str, pd.Series],
     consensus_events: list[dict[str, Any]],
 ) -> go.Figure:
-    """Mitchell discovered changepoints timeline."""
+    """Patient 2 discovered changepoints timeline."""
     fig = go.Figure()
 
     # Plot all metrics as z-scores
@@ -939,7 +939,7 @@ def _fig_mitchell_timeline(
             )
 
     fig.update_layout(
-        title=dict(text="Mitchell: Discovered Changepoints (all metrics, z-scored)", font=dict(size=14)),
+        title=dict(text="Patient 2: Discovered Changepoints (all metrics, z-scored)", font=dict(size=14)),
         yaxis_title="Z-Score (14-day rolling)",
         xaxis_title="Date",
         hovermode="x unified",
@@ -1053,16 +1053,16 @@ def build_html(
         henrik_stats, mitchell_result,
     ))
 
-    # -- Henrik: Treatment Response --
+    # -- Patient 1: Treatment Response --
     sections.append(section_html_or_placeholder(
-        "Henrik Treatment Response",
+        "Patient 1 Treatment Response",
         _build_henrik_section,
         data, henrik_stats, henrik_three, henrik_changepoints, patients,
     ))
 
-    # -- Mitchell: Discovered Events --
+    # -- Patient 2: Discovered Events --
     sections.append(section_html_or_placeholder(
-        "Mitchell Discovered Events",
+        "Patient 2 Discovered Events",
         _build_mitchell_section,
         data, mitchell_result, patients,
     ))
@@ -1093,7 +1093,7 @@ def build_html(
         body_content=body,
         report_id="comp_treatment",
         subtitle="Module 2: Comparative Changepoint Analysis",
-        header_meta="Henrik (post-HSCT) vs Mitchell (post-Stroke)",
+        header_meta="Patient 1 (post-HSCT) vs Patient 2 (post-Stroke)",
     )
 
 
@@ -1102,7 +1102,7 @@ def _build_executive_summary(
     mitchell_result: dict[str, Any],
 ) -> str:
     """Executive summary KPI cards."""
-    # Count significant changes for Henrik
+    # Count significant changes for Patient 1
     sig_count = 0
     improved_count = 0
     for m_name, stat in henrik_stats.items():
@@ -1112,7 +1112,7 @@ def _build_executive_summary(
         if comp.get("direction") == "improved":
             improved_count += 1
 
-    # Mitchell high-confidence events
+    # Patient 2 high-confidence events
     mitch_events = [e for e in mitchell_result.get("consensus_events", []) if e.get("high_confidence")]
 
     cards = [
@@ -1121,7 +1121,7 @@ def _build_executive_summary(
             sig_count,
             unit=f"/ {len(henrik_stats)}",
             status="info" if sig_count > 0 else "neutral",
-            detail="Henrik post-Rux (Bonferroni-corrected)",
+            detail="Patient 1 post-Rux (Bonferroni-corrected)",
         ),
         make_kpi_card(
             "IMPROVED METRICS",
@@ -1160,7 +1160,7 @@ def _build_henrik_section(
     henrik_changepoints: dict[str, dict[str, Any]],
     patients: tuple[PatientConfig, PatientConfig],
 ) -> str:
-    """Henrik treatment response: timelines, stat cards, BOCPD."""
+    """Patient 1 treatment response: timelines, stat cards, BOCPD."""
     parts: list[str] = []
 
     # Pre/post stat cards
@@ -1213,7 +1213,7 @@ def _build_henrik_section(
         # BOCPD probability figure
         bocpd_probs = cps.get("bocpd_probabilities", np.array([]))
         if len(bocpd_probs) > 0:
-            fig_bp = _fig_bocpd_probability(series, bocpd_probs, "Henrik", display)
+            fig_bp = _fig_bocpd_probability(series, bocpd_probs, "Patient 1", display)
             timeline_html.append(_embed(fig_bp))
 
     parts.append("\n".join(timeline_html))
@@ -1257,7 +1257,7 @@ def _build_henrik_section(
         parts.append(three_period_html)
 
     return make_section(
-        "Henrik: Treatment Response Analysis",
+        "Patient 1: Treatment Response Analysis",
         "\n".join(parts),
         section_id="henrik-treatment",
     )
@@ -1268,7 +1268,7 @@ def _build_mitchell_section(
     mitchell_result: dict[str, Any],
     patients: tuple[PatientConfig, PatientConfig],
 ) -> str:
-    """Mitchell discovered events section."""
+    """Patient 2 discovered events section."""
     parts: list[str] = []
 
     mitch_metrics = data.get("mitch", {})
@@ -1312,20 +1312,20 @@ def _build_mitchell_section(
         parts.append(table_html)
     else:
         parts.append(
-            '<p style="color:#9CA3AF;">No consensus changepoints detected for Mitchell.</p>'
+            '<p style="color:#9CA3AF;">No consensus changepoints detected for Patient 2.</p>'
         )
 
-    # BOCPD probability charts for Mitchell
+    # BOCPD probability charts for Patient 2
     bocpd_probs = mitchell_result.get("bocpd_probs", {})
     for m_name, _, _, display, _, _ in TREATMENT_METRICS:
         probs = bocpd_probs.get(m_name, np.array([]))
         series = mitch_metrics.get(m_name, pd.Series(dtype=float))
         if len(probs) > 0 and not series.empty:
-            fig_bp = _fig_bocpd_probability(series, probs, "Mitchell", display)
+            fig_bp = _fig_bocpd_probability(series, probs, "Patient 2", display)
             parts.append(_embed(fig_bp))
 
     return make_section(
-        "Mitchell: Discovered Changepoints",
+        "Patient 2: Discovered Changepoints",
         "\n".join(parts),
         section_id="mitchell-changepoints",
     )
@@ -1358,7 +1358,7 @@ def _build_convergence_section(
     for pid, z_df in convergence.items():
         if z_df.empty:
             continue
-        display_name = "Henrik" if pid == "henrik" else "Mitchell"
+        display_name = "Patient 1" if pid == "henrik" else "Patient 2"
         fig = _fig_convergence_heatmap(z_df, display_name)
         parts.append(_embed(fig))
 
@@ -1401,7 +1401,7 @@ def _build_methods_appendix() -> str:
 
     <p><strong style="color:#EC4899;">BOCPD (Bayesian Online Change Point Detection)</strong>:
     Implements Adams & MacKay (2007) with Normal-Gamma conjugate prior. Hazard rate
-    set to 1/30 for Henrik (shorter observation window) and 1/50 for Mitchell
+    set to 1/30 for Patient 1 (shorter observation window) and 1/50 for Patient 2
     (longer data span). Changepoints where posterior probability exceeds 0.3.</p>
 
     <p><strong style="color:#06B6D4;">Rolling Window Comparison</strong>:
@@ -1415,7 +1415,7 @@ def _build_methods_appendix() -> str:
     Effect size: Cohen's d with pooled standard deviation. Confidence intervals:
     bootstrap with 1,000 iterations.</p>
 
-    <p><strong>Consensus Scoring</strong>: For Mitchell, all (method x metric) detections
+    <p><strong>Consensus Scoring</strong>: For Patient 2, all (method x metric) detections
     are clustered within a 3-day tolerance window. The consensus score counts the
     number of unique methods and metrics detecting each cluster.
     High confidence = score >= 3.</p>
@@ -1461,7 +1461,7 @@ def export_json(
             ],
         }
 
-    # Build Henrik changepoints for JSON (strip numpy arrays)
+    # Build Patient 1 changepoints for JSON (strip numpy arrays)
     henrik_cp_json: dict[str, Any] = {}
     for m_name, cp in henrik_changepoints.items():
         henrik_cp_json[m_name] = {
@@ -1527,15 +1527,15 @@ def main() -> int:
         return 0
     data = load_data(patients)
 
-    # -- Henrik analyses --
-    logger.info("[2/9] Henrik: pre/post treatment analysis...")
+    # -- Patient 1 analyses --
+    logger.info("[2/9] Patient 1: pre/post treatment analysis...")
     henrik_metrics = data.get("henrik", {})
     henrik_stats = henrik_pre_post_analysis(henrik_metrics, TREATMENT_START)
 
-    logger.info("[3/9] Henrik: three-period comparison...")
+    logger.info("[3/9] Patient 1: three-period comparison...")
     henrik_three = henrik_three_period(henrik_metrics)
 
-    logger.info("[4/9] Henrik: changepoint detection (4 methods)...")
+    logger.info("[4/9] Patient 1: changepoint detection (4 methods)...")
     henrik_changepoints: dict[str, dict[str, Any]] = {}
     for m_name, _, _, display, _, _ in TREATMENT_METRICS:
         series = henrik_metrics.get(m_name, pd.Series(dtype=float))
@@ -1550,12 +1550,12 @@ def main() -> int:
         total_cp = sum(len(cp[k]) for k in ["pelt", "cusum", "bocpd", "rolling_window"])
         logger.info("  %s: %d changepoints detected across methods", display, total_cp)
 
-    # -- Mitchell analyses --
-    logger.info("[5/9] Mitchell: automatic changepoint discovery...")
+    # -- Patient 2 analyses --
+    logger.info("[5/9] Patient 2: automatic changepoint discovery...")
     mitch_metrics = data.get("mitch", {})
     mitchell_result = mitchell_consensus(mitch_metrics)
     n_high = sum(1 for e in mitchell_result.get("consensus_events", []) if e.get("high_confidence"))
-    logger.info("  Mitchell: %d high-confidence consensus events", n_high)
+    logger.info("  Patient 2: %d high-confidence consensus events", n_high)
 
     # -- Convergence --
     logger.info("[6/9] Computing multi-metric convergence...")
