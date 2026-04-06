@@ -43,6 +43,11 @@ SCRIPTS = [
     "analyze_comparative_sleep.py",
     "analyze_comparative_coupling.py",
     "analyze_comparative_anomalies.py",
+    "analyze_comparative_breathing.py",
+    "analyze_comparative_temperature.py",
+    "analyze_mitch_changepoints.py",
+    "analyze_weekly_tracker.py",
+    "analyze_rux_forecast.py",
     "generate_roadmap.py",
     "generate_index.py",
 ]
@@ -65,6 +70,11 @@ SEND_BUNDLE_HTML = [
     "comparative_sleep_analysis.html",
     "comparative_activity_recovery_coupling.html",
     "comparative_anomaly_report.html",
+    "comparative_breathing_analysis.html",
+    "comparative_temperature_analysis.html",
+    "mitch_changepoint_investigation.html",
+    "weekly_tracker.html",
+    "rux_forecast.html",
     "roadmap.html",
 ]
 
@@ -85,6 +95,11 @@ SEND_BUNDLE_JSON = [
     "comparative_sleep_metrics.json",
     "comparative_activity_recovery_coupling.json",
     "comparative_anomaly_metrics.json",
+    "comparative_breathing_metrics.json",
+    "comparative_temperature_metrics.json",
+    "mitch_changepoint_metrics.json",
+    "weekly_tracker.json",
+    "rux_forecast.json",
 ]
 
 

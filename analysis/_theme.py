@@ -58,6 +58,11 @@ REPORT_REGISTRY = [
     {"id": "comp_sleep", "file": "comparative_sleep_analysis.html", "title": "Sleep Architecture", "group": "Comparative"},
     {"id": "comp_coupling", "file": "comparative_activity_recovery_coupling.html", "title": "Activity-Recovery", "group": "Comparative"},
     {"id": "comp_anomalies", "file": "comparative_anomaly_report.html", "title": "Anomaly Patterns", "group": "Comparative"},
+    {"id": "comp_breathing", "file": "comparative_breathing_analysis.html", "title": "Breathing Analysis", "group": "Comparative"},
+    {"id": "comp_temperature", "file": "comparative_temperature_analysis.html", "title": "Temperature Analysis", "group": "Comparative"},
+    {"id": "mitch_changepoints", "file": "mitch_changepoint_investigation.html", "title": "Mitch Changepoints", "group": "Comparative"},
+    {"id": "weekly", "file": "weekly_tracker.html", "title": "Weekly Tracker", "group": "Core"},
+    {"id": "forecast", "file": "rux_forecast.html", "title": "Rux Forecast", "group": "Clinical"},
 ]
 
 # ---------------------------------------------------------------------------
