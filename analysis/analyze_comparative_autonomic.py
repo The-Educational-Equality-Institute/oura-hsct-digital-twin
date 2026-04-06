@@ -825,12 +825,12 @@ def build_html(
             detail=f"Pop. percentile: {m_stats.get('hrv', {}).get('population_percentile', 0):.0f}%",
         ),
         make_kpi_card(
-            "HENRIK SLEEP HR", h_hr_mean, "bpm",
+            "P1 SLEEP HR", h_hr_mean, "bpm",
             status="warning" if h_hr_mean > 75 else "normal",
             detail="Elevated" if h_hr_mean > 75 else "Acceptable range",
         ),
         make_kpi_card(
-            "MITCHELL SLEEP HR", m_hr_mean, "bpm",
+            "P2 SLEEP HR", m_hr_mean, "bpm",
             status="normal",
             detail="Athletic range" if m_hr_mean < 55 else "Normal range",
         ),

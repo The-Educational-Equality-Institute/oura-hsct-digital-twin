@@ -797,19 +797,19 @@ def build_html(
 
     kpi_row = make_kpi_row(
         make_kpi_card(
-            "HENRIK MEAN BREATH", h_mean, "brpm",
+            "P1 MEAN BREATH", h_mean, "brpm",
             status=h_status,
             detail=f"Range: {BREATH_NORMAL_LOW}-{BREATH_NORMAL_HIGH} brpm normal",
             explainer="Average nighttime breathing rate",
         ),
         make_kpi_card(
-            "MITCHELL MEAN BREATH", m_mean, "brpm",
+            "P2 MEAN BREATH", m_mean, "brpm",
             status=m_status,
             detail="Reference (no respiratory comorbidity)",
             explainer="Average nighttime breathing rate",
         ),
         make_kpi_card(
-            "HENRIK TREND", h_trend_dir.title(), "",
+            "P1 TREND", h_trend_dir.title(), "",
             status=trend_status,
             detail=f"Slope: {bos_stats.get('trend', {}).get('slope_per_day', 0):.4f}/day",
             status_label=h_trend_dir.title(),

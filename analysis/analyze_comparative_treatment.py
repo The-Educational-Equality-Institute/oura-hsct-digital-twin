@@ -1131,7 +1131,7 @@ def _build_executive_summary(
             detail="Direction of change post-treatment",
         ),
         make_kpi_card(
-            "MITCHELL EVENTS",
+            "P2 EVENTS",
             len(mitch_events),
             unit="detected",
             status="info" if mitch_events else "neutral",

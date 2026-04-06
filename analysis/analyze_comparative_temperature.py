@@ -86,6 +86,8 @@ from _hardening import section_html_or_placeholder
 
 pio.templates.default = "clinical_dark"
 
+PID_LABEL = {"henrik": "P1", "mitch": "P2"}
+
 HTML_OUTPUT = REPORTS_DIR / "comparative_temperature_analysis.html"
 JSON_OUTPUT = REPORTS_DIR / "comparative_temperature_metrics.json"
 
@@ -950,7 +952,7 @@ def _build_event_table(events: list[dict[str, Any]]) -> str:
 
         rows_html += (
             f"<tr>"
-            f"<td>{ev['patient'].title()}</td>"
+            f"<td>{PID_LABEL.get(ev['patient'], ev['patient'])}</td>"
             f"<td>{ev['date']}</td>"
             f"<td>{ev['event']}</td>"
             f"<td>{ev.get('expected_delta', 'N/A')}</td>"
@@ -990,7 +992,7 @@ def _build_lag_table(lag_corrs: dict[str, dict[str, Any]]) -> str:
                 sig_color = ACCENT_GREEN if p_val < 0.05 else TEXT_SECONDARY
                 rows_html += (
                     f"<tr>"
-                    f"<td>{pid.title()}</td>"
+                    f"<td>{PID_LABEL.get(pid, pid)}</td>"
                     f"<td>{target_label}</td>"
                     f"<td>{lag_key.replace('lag_', '')}</td>"
                     f"<td>{rho:.3f}</td>"
@@ -1029,7 +1031,7 @@ def _build_spikes_table(
             color = ACCENT_RED if cls == "fever" else ACCENT_AMBER
             rows_html += (
                 f"<tr>"
-                f"<td>{pid.title()}</td>"
+                f"<td>{PID_LABEL.get(pid, pid)}</td>"
                 f"<td>{dt.strftime('%Y-%m-%d')}</td>"
                 f'<td style="color:{color}">{delta:+.2f} C</td>'
                 f"<td>{cls.replace('_', ' ').title()}</td>"
@@ -1079,21 +1081,21 @@ def build_html(
 
         cards = [
             make_kpi_card(
-                "HENRIK MEAN TEMP",
+                "P1 MEAN TEMP",
                 h_mean if not np.isnan(h_mean) else "N/A",
                 unit="C",
                 status="normal" if abs(h_mean) < 0.5 and not np.isnan(h_mean) else "warning",
                 detail=f"n={h_stats.get('n_days', 0)} days",
             ),
             make_kpi_card(
-                "MITCHELL MEAN TEMP",
+                "P2 MEAN TEMP",
                 m_mean if not np.isnan(m_mean) else "N/A",
                 unit="C",
                 status="normal" if abs(m_mean) < 0.5 and not np.isnan(m_mean) else "warning",
                 detail=f"n={m_stats.get('n_days', 0)} days",
             ),
             make_kpi_card(
-                "HENRIK TEMP SD",
+                "P1 TEMP SD",
                 h_sd if not np.isnan(h_sd) else "N/A",
                 unit="C",
                 decimals=3,
@@ -1101,7 +1103,7 @@ def build_html(
                 detail=f"IQR={h_stats.get('iqr', 0):.3f}",
             ),
             make_kpi_card(
-                "MITCHELL TEMP SD",
+                "P2 TEMP SD",
                 m_sd if not np.isnan(m_sd) else "N/A",
                 unit="C",
                 decimals=3,
@@ -1270,7 +1272,7 @@ def build_html(
                 rho = lag1["rho"]
                 direction = "negative" if rho < 0 else "positive"
                 bullets.append(
-                    f"<strong>Early warning ({pid.title()}):</strong> Significant {direction} "
+                    f"<strong>Early warning ({PID_LABEL.get(pid, pid)}):</strong> Significant {direction} "
                     f"lag-1 correlation (rho={rho:.3f}) between temperature and next-day readiness, "
                     f"suggesting temperature deviations may predict readiness changes 24 hours in advance."
                 )

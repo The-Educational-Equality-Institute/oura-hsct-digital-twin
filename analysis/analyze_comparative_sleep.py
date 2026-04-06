@@ -1584,34 +1584,34 @@ def build_html(
 
     kpi_row = make_kpi_row(
         make_kpi_card(
-            "HENRIK AVG SLEEP", h_total, "hrs",
+            "P1 AVG SLEEP", h_total, "hrs",
             status="critical" if h_total < 6 else ("warning" if h_total < 7 else "normal"),
             detail=f"Target: 7-9 hrs",
             status_label="Short" if h_total < 6 else ("Below target" if h_total < 7 else "Adequate"),
         ),
         make_kpi_card(
-            "MITCHELL AVG SLEEP", m_total, "hrs",
+            "P2 AVG SLEEP", m_total, "hrs",
             status="warning" if m_total < 7 else "normal",
             detail=f"Target: 7-9 hrs",
             status_label="Below target" if m_total < 7 else "Adequate",
         ),
         make_kpi_card(
-            "HENRIK EFFICIENCY", h_eff_mean, "%",
+            "P1 EFFICIENCY", h_eff_mean, "%",
             status="critical" if h_eff_mean < 75 else ("warning" if h_eff_mean < 85 else "normal"),
             detail=f"{h_eff.get('pct_below_75', 0):.0f}% nights below 75%",
         ),
         make_kpi_card(
-            "MITCHELL EFFICIENCY", m_eff_mean, "%",
+            "P2 EFFICIENCY", m_eff_mean, "%",
             status="critical" if m_eff_mean < 75 else ("warning" if m_eff_mean < 85 else "normal"),
             detail=f"{m_eff.get('pct_below_75', 0):.0f}% nights below 75%",
         ),
         make_kpi_card(
-            "HENRIK DEEP SLEEP", h_deep, "%",
+            "P1 DEEP SLEEP", h_deep, "%",
             status="warning" if h_deep < 13 else "normal",
             detail=f"Norm: 13-23%",
         ),
         make_kpi_card(
-            "MITCHELL DEEP SLEEP", m_deep, "%",
+            "P2 DEEP SLEEP", m_deep, "%",
             status="warning" if m_deep < 13 else "normal",
             detail=f"Norm: 13-23%",
         ),

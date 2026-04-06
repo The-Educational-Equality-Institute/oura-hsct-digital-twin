@@ -1101,7 +1101,7 @@ def build_html(
 
     kpi_row = make_kpi_row(
         make_kpi_card(
-            "HENRIK COUPLING r",
+            "P1 COUPLING r",
             h_r,
             detail=f"Steps vs HRV (lag 1, n={h_coup.get('primary_n', 0)})",
             status=_coupling_status(h_coup.get("coupling_direction", "absent")),
@@ -1109,7 +1109,7 @@ def build_html(
             decimals=3,
         ),
         make_kpi_card(
-            "MITCHELL COUPLING r",
+            "P2 COUPLING r",
             m_r,
             detail=f"Steps vs HRV (lag 1, n={m_coup.get('primary_n', 0)})",
             status=_coupling_status(m_coup.get("coupling_direction", "absent")),
@@ -1125,13 +1125,13 @@ def build_html(
             decimals=3,
         ),
         make_kpi_card(
-            "HENRIK RECOVERY",
+            "P1 RECOVERY",
             h_rating.replace("_", " ").title(),
             detail=f"{h_coup.get('strength', 'unknown')} {h_coup.get('coupling_direction', '')}",
             status=_coupling_status(h_coup.get("coupling_direction", "absent")),
         ),
         make_kpi_card(
-            "MITCHELL RECOVERY",
+            "P2 RECOVERY",
             m_rating.replace("_", " ").title(),
             detail=f"{m_coup.get('strength', 'unknown')} {m_coup.get('coupling_direction', '')}",
             status=_coupling_status(m_coup.get("coupling_direction", "absent")),
