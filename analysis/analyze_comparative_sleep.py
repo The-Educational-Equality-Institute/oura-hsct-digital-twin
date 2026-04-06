@@ -1787,6 +1787,9 @@ def main() -> int:
     """Run comparative sleep analysis pipeline."""
     logger.info("[1/7] Loading patient data...")
     patients = default_patients()
+    if patients[1] is None:
+        print("Skipping: mitch.db not found (second patient data not available)")
+        return 0
     data = load_sleep_data(patients)
     sleep_balance = load_readiness_sleep_balance(patients)
 

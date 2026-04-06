@@ -162,8 +162,8 @@ def _fallback_hr_from_sleep_periods(patient: PatientConfig, df_sleep: pd.DataFra
         if need_hr_avg and "average_heart_rate" in sp.columns:
             fill = sp["average_heart_rate"].reindex(df_sleep.index)
             df_sleep["hr_average"] = df_sleep["hr_average"].fillna(fill)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("HR fallback from sleep_periods failed for %s: %s", patient.patient_id, exc)
 
     return df_sleep
 
@@ -1616,6 +1616,9 @@ def main() -> int:
     """Run comparative anomaly analysis pipeline."""
     logger.info("[1/8] Loading patient data...")
     patients = default_patients()
+    if patients[1] is None:
+        print("Skipping: mitch.db not found (second patient data not available)")
+        return 0
     raw_data = load_all_metrics(patients)
 
     for pid, df in raw_data.items():
