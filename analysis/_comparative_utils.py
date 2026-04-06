@@ -97,8 +97,11 @@ COMPARABLE_METRICS = [
 ]
 
 
-def default_patients() -> tuple[PatientConfig, PatientConfig]:
-    """Build PatientConfig for Henrik and Mitch from profiles.py."""
+def default_patients() -> tuple[PatientConfig, Optional[PatientConfig]]:
+    """Build PatientConfig for Henrik and Mitch from profiles.py.
+
+    Returns (henrik, mitch) where mitch is None if mitch.db doesn't exist.
+    """
     h = PROFILES["henrik"]
     m = PROFILES["mitch"]
     henrik = PatientConfig(
@@ -109,10 +112,13 @@ def default_patients() -> tuple[PatientConfig, PatientConfig]:
         event_label=h["major_event_label"],
         color=ACCENT_BLUE,
     )
+    mitch_db = Path(m["database"])
+    if not mitch_db.exists():
+        return henrik, None
     mitch = PatientConfig(
         patient_id="mitch",
         display_name=f"Mitchell (post-{m['major_event_label']})",
-        db_path=Path(m["database"]),
+        db_path=mitch_db,
         event_date=m["major_event_date"],
         event_label=m["major_event_label"],
         color=ACCENT_GREEN,

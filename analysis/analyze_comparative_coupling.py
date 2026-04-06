@@ -1438,6 +1438,9 @@ def main() -> int:
     """Run comparative activity-recovery coupling analysis pipeline."""
     logger.info("[1/7] Loading patient data...")
     patients = default_patients()
+    if patients[1] is None:
+        print("Skipping: mitch.db not found (second patient data not available)")
+        return 0
     data = load_data(patients)
 
     for pid, df in data.items():

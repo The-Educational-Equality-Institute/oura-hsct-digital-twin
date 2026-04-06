@@ -1144,6 +1144,9 @@ def main() -> int:
     """Run comparative breathing analysis pipeline."""
     logger.info("[1/7] Loading patient data...")
     patients = default_patients()
+    if patients[1] is None:
+        print("Skipping: mitch.db not found (second patient data not available)")
+        return 0
     raw_data = load_data(patients)
 
     logger.info("[2/7] Computing rolling metrics...")

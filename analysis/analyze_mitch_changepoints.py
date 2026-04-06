@@ -70,7 +70,7 @@ pio.templates.default = "clinical_dark"
 HTML_OUTPUT = REPORTS_DIR / "mitch_changepoint_investigation.html"
 JSON_OUTPUT = REPORTS_DIR / "mitch_changepoint_metrics.json"
 
-MITCH_DB = PROFILES["mitch"]["database"]
+MITCH_DB = Path(PROFILES["mitch"]["database"])
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -1165,6 +1165,9 @@ def export_json(
 
 def main() -> int:
     """Run Mitchell changepoint investigation pipeline."""
+    if not MITCH_DB.exists():
+        print("Skipping: mitch.db not found (second patient data not available)")
+        return 0
     logger.info("[1/7] Loading Mitchell data from %s...", MITCH_DB)
     data = load_data()
     daily = _merge_daily(data)

@@ -1397,6 +1397,9 @@ def main() -> int:
     """Run comparative temperature analysis pipeline."""
     logger.info("[1/9] Loading patient data...")
     patients = default_patients()
+    if patients[1] is None:
+        print("Skipping: mitch.db not found (second patient data not available)")
+        return 0
     data = load_data(patients)
 
     logger.info("[2/9] Computing baseline statistics...")
