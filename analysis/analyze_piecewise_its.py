@@ -723,6 +723,141 @@ def _methodology_section() -> str:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Sensitivity analysis: BB intervention date ±N days
+# ---------------------------------------------------------------------------
+
+BB_SENSITIVITY_OFFSETS = [-3, -2, -1, 0, +1, +2, +3]
+
+
+def _build_its_matrix_with_bb(daily: pd.DataFrame, bb_date: date) -> pd.DataFrame:
+    """Build ITS design matrix with a custom beta-blocker date."""
+    df = daily.copy()
+    df["date_dt"] = pd.to_datetime(df["date"])
+    data_start_dt = pd.Timestamp(str(DATA_START))
+    jakavi_dt = pd.Timestamp(str(TREATMENT_START))
+    bb_dt = pd.Timestamp(str(bb_date))
+
+    df["time"] = (df["date_dt"] - data_start_dt).dt.days
+    df["jakavi"] = (df["date_dt"] >= jakavi_dt).astype(int)
+    df["time_since_jakavi"] = np.where(
+        df["date_dt"] >= jakavi_dt, (df["date_dt"] - jakavi_dt).dt.days, 0,
+    )
+    df["bb"] = (df["date_dt"] >= bb_dt).astype(int)
+    df["time_since_bb"] = np.where(
+        df["date_dt"] >= bb_dt, (df["date_dt"] - bb_dt).dt.days, 0,
+    )
+    return df
+
+
+def run_bb_sensitivity(daily: pd.DataFrame) -> dict[str, Any]:
+    """Re-fit ITS at shifted BB dates and return coefficient stability table."""
+    results: dict[str, list[dict[str, Any]]] = {m: [] for m in METRICS}
+
+    for offset in BB_SENSITIVITY_OFFSETS:
+        bb_shifted = BETA_BLOCKER_START + pd.Timedelta(days=offset)
+        df = _build_its_matrix_with_bb(daily, bb_shifted)
+
+        for metric in METRICS:
+            fit = fit_its_glsar(df, metric)
+            if fit is None:
+                results[metric].append({"offset": offset, "error": True})
+                continue
+            # Extract bb level (b4) and bb slope (b5) coefficients
+            coeffs = {c["name"]: c for c in fit["coefficients"]}
+            b4 = coeffs.get("bb", {})
+            b5 = coeffs.get("time_since_bb", {})
+            results[metric].append({
+                "offset": offset,
+                "bb_date": str(bb_shifted.date() if hasattr(bb_shifted, 'date') else bb_shifted),
+                "b4_estimate": b4.get("estimate"),
+                "b4_pvalue": b4.get("p_value"),
+                "b4_significant": b4.get("significant"),
+                "b5_estimate": b5.get("estimate"),
+                "b5_pvalue": b5.get("p_value"),
+                "b5_significant": b5.get("significant"),
+                "r_squared": fit["r_squared"],
+                "error": False,
+            })
+
+    return results
+
+
+def _build_sensitivity_section(sensitivity: dict[str, Any]) -> str:
+    """Build HTML section for BB date sensitivity analysis."""
+    rows_per_metric: list[str] = []
+
+    for metric, entries in sensitivity.items():
+        label = METRICS[metric][0]
+        unit = METRICS[metric][1]
+        color = METRIC_COLORS.get(metric, ACCENT_BLUE)
+
+        table_rows = []
+        for e in entries:
+            if e.get("error"):
+                table_rows.append(
+                    f'<tr><td>{e["offset"]:+d}</td><td colspan="5" style="color:{ACCENT_RED}">fit failed</td></tr>'
+                )
+                continue
+
+            is_actual = e["offset"] == 0
+            row_style = f'font-weight:600;background:{BG_ELEVATED}' if is_actual else ''
+            marker = " (actual)" if is_actual else ""
+
+            b4_sig = f'<span style="color:{ACCENT_GREEN}">*</span>' if e.get("b4_significant") else ""
+            b5_sig = f'<span style="color:{ACCENT_GREEN}">*</span>' if e.get("b5_significant") else ""
+
+            b4_est = f'{e["b4_estimate"]:+.2f}' if e.get("b4_estimate") is not None else "—"
+            b5_est = f'{e["b5_estimate"]:+.3f}' if e.get("b5_estimate") is not None else "—"
+            b4_p = format_p_value(e["b4_pvalue"]) if e.get("b4_pvalue") is not None else "—"
+            b5_p = format_p_value(e["b5_pvalue"]) if e.get("b5_pvalue") is not None else "—"
+
+            table_rows.append(
+                f'<tr style="{row_style}">'
+                f'<td>{e["offset"]:+d}d{marker}</td>'
+                f'<td>{e["bb_date"]}</td>'
+                f'<td>{b4_est} {unit} {b4_sig}</td><td>{b4_p}</td>'
+                f'<td>{b5_est} {unit}/day {b5_sig}</td><td>{b5_p}</td>'
+                f'<td>{e["r_squared"]:.3f}</td></tr>'
+            )
+
+        # Assess robustness: how many offsets keep b5 significant?
+        sig_count = sum(1 for e in entries if not e.get("error") and e.get("b5_significant"))
+        total = sum(1 for e in entries if not e.get("error"))
+        robust = sig_count >= (total - 1)  # at most 1 non-significant
+        badge = (f'<span style="color:{ACCENT_GREEN};font-weight:600">ROBUST ({sig_count}/{total})</span>'
+                 if robust
+                 else f'<span style="color:{ACCENT_AMBER};font-weight:600">SENSITIVE ({sig_count}/{total})</span>')
+
+        rows_per_metric.append(f"""
+        <div style="margin:20px 0">
+          <div style="font-weight:600;color:{color};font-size:1rem">{label} — {badge}</div>
+          <table style="width:100%;border-collapse:collapse;font-size:0.85rem;margin-top:8px">
+            <thead><tr style="border-bottom:2px solid {BORDER_DEFAULT}">
+              <th style="padding:8px;color:{TEXT_PRIMARY}">Offset</th>
+              <th style="padding:8px;color:{TEXT_PRIMARY}">BB Date</th>
+              <th style="padding:8px;color:{TEXT_PRIMARY}">Level (b4)</th>
+              <th style="padding:8px;color:{TEXT_PRIMARY}">p</th>
+              <th style="padding:8px;color:{TEXT_PRIMARY}">Slope (b5)</th>
+              <th style="padding:8px;color:{TEXT_PRIMARY}">p</th>
+              <th style="padding:8px;color:{TEXT_PRIMARY}">R²</th>
+            </tr></thead>
+            <tbody>{"".join(table_rows)}</tbody>
+          </table>
+        </div>""")
+
+    method_note = (
+        f'<div style="color:{TEXT_SECONDARY};font-size:0.85rem;margin-bottom:12px">'
+        f'<strong>Method:</strong> The ITS model is re-fitted with the beta-blocker date '
+        f'shifted by -3 to +3 days. If the slope coefficient (b5) remains significant '
+        f'across shifts, the finding is robust to date uncertainty. '
+        f'Highlighted row = actual date ({BETA_BLOCKER_START}). '
+        f'* = p &lt; 0.05.</div>'
+    )
+
+    return method_note + "".join(rows_per_metric)
+
+
 def main() -> None:
     print("=" * 60)
     print("Piecewise ITS Regression with AR(1) Errors")
@@ -747,6 +882,14 @@ def main() -> None:
         print("ERROR: No metrics could be fitted. Exiting.", file=sys.stderr)
         sys.exit(1)
 
+    # Sensitivity analysis: BB date ±3 days
+    print("\n[SENSITIVITY] Re-fitting with BB date shifted ±3 days...")
+    sensitivity = run_bb_sensitivity(daily)
+    for metric, entries in sensitivity.items():
+        sig_count = sum(1 for e in entries if not e.get("error") and e.get("b5_significant"))
+        total = sum(1 for e in entries if not e.get("error"))
+        print(f"  {METRICS[metric][0]}: b5 significant in {sig_count}/{total} shifts")
+
     # Build HTML report
     print("\n[REPORT] Generating HTML report...")
     chart_data: dict[str, str] = {}
@@ -756,6 +899,12 @@ def main() -> None:
 
     for result in all_results:
         body += _build_metric_section(result, chart_data)
+
+    body += make_section(
+        "Sensitivity Analysis: BB Intervention Date ±3 Days",
+        _build_sensitivity_section(sensitivity),
+        section_id="sensitivity",
+    )
 
     html = wrap_html(
         title="Piecewise ITS Regression",
@@ -805,6 +954,12 @@ def main() -> None:
                 for c in result["coefficients"]
             },
         }
+
+    # Add sensitivity results (strip error-only entries)
+    json_metrics["bb_date_sensitivity"] = {
+        metric: [e for e in entries if not e.get("error")]
+        for metric, entries in sensitivity.items()
+    }
 
     JSON_OUTPUT.write_text(json.dumps(json_metrics, indent=2), encoding="utf-8")
     print(f"  JSON saved: {JSON_OUTPUT}")
