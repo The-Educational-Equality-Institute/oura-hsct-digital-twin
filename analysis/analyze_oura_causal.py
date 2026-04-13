@@ -92,6 +92,7 @@ from config import (
     REPORTS_DIR,
     TRANSPLANT_DATE,
     TREATMENT_START,
+    BETA_BLOCKER_START,
     KNOWN_EVENT_DATE,
     PATIENT_AGE,
     PATIENT_LABEL,
@@ -3213,11 +3214,11 @@ def _build_mediation_summary(mediation_results: dict[str, Any]) -> str:
         html_parts.append(f"""
         <div class="causal-grid">
             <div class="causal-stat">
-                <div class="value">{total.get('effect', 0):+.1f}</div>
+                <div class="value">{(total.get('effect') or 0):+.1f}</div>
                 <div class="label">Total effect (readiness score)</div>
             </div>
             <div class="causal-stat">
-                <div class="value">{total.get('pre_mean', 0):.1f} -> {total.get('post_mean', 0):.1f}</div>
+                <div class="value">{(total.get('pre_mean') or 0):.1f} -> {(total.get('post_mean') or 0):.1f}</div>
                 <div class="label">Pre -> Post average</div>
             </div>
             <div class="causal-stat">

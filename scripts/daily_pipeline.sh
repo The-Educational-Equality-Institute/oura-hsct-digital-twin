@@ -17,6 +17,13 @@ LOGFILE="${LOGFILE:-/tmp/oura_daily_pipeline.log}"
 # NODE_BIN="$HOME/.nvm/versions/node/v22.21.1/bin"
 
 # --- Setup ---
+# Source secrets (.env has OURA_ACCESS_TOKEN etc.)
+if [ -f "$DIGITAL_TWIN/.env" ]; then
+  set -a
+  source "$DIGITAL_TWIN/.env"
+  set +a
+fi
+
 exec >> "$LOGFILE" 2>&1
 echo ""
 echo "========================================"

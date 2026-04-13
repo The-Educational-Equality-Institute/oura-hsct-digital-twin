@@ -210,7 +210,7 @@ def crossing_date(
     if slope == 0:
         return None
     days_to_target = (target - intercept) / slope
-    if days_to_target < 0:
+    if days_to_target < 0 or days_to_target > 365 * 10:
         return None
     # For HR (direction='below'): slope must be negative
     if direction == "below" and slope >= 0:
