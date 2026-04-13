@@ -223,6 +223,16 @@ def _make_ci_failure_result(
     }
 
 
+def _make_causalimpact_input(ts: pd.DataFrame, target_col: str) -> pd.DataFrame:
+    """Build a pycausalimpact-safe single-target frame.
+
+    pycausalimpact still accesses summary stats as `series[0]`, which fails
+    under pandas 2+ when the target column label is a string. A numeric target
+    label preserves library expectations without changing downstream analysis.
+    """
+    return pd.DataFrame({0: ts[target_col].to_numpy()}, index=ts.index)
+
+
 def _check_convergence(
     actual_post: np.ndarray,
     pred_post: np.ndarray,
@@ -580,6 +590,7 @@ def run_causal_impact(daily: pd.DataFrame) -> dict[str, Any]:
         ts[stream_name] = ts[stream_name].interpolate(method="linear", limit=3)
         # Drop any remaining NaN at edges
         ts = ts.dropna()
+        ts_ci = _make_causalimpact_input(ts, stream_name)
 
         if len(ts) < 10:
             print(f"    Skipping after reindex - only {len(ts)} points")
@@ -608,7 +619,7 @@ def run_causal_impact(daily: pd.DataFrame) -> dict[str, Any]:
 
         try:
             ci = CausalImpact(
-                ts, [pre_start, pre_end], [post_start, post_end],
+                ts_ci, [pre_start, pre_end], [post_start, post_end],
                 niter=5000, nseasons=[{"period": 7}],
             )
 
@@ -908,9 +919,10 @@ def run_placebo_tests(daily: pd.DataFrame, ci_results: dict[str, Any]) -> dict[s
             try:
                 # Trim series to end at post_end (exclude real post-intervention data)
                 ts_trimmed = ts.loc[:pd.Timestamp(post_end_str)].copy()
+                ts_trimmed_ci = _make_causalimpact_input(ts_trimmed, metric_key)
 
                 ci = CausalImpact(
-                    ts_trimmed,
+                    ts_trimmed_ci,
                     [pre_start_str, pre_end_str],
                     [post_start_str, post_end_str],
                     niter=5000, nseasons=[{"period": 7}],

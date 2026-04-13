@@ -242,7 +242,7 @@ def _compute_zscore(value: float, norm_range: tuple[float, float]) -> float:
 # ---------------------------------------------------------------------------
 
 def load_sleep_data(
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> dict[str, pd.DataFrame]:
     """Load sleep architecture data for both patients from oura_sleep_periods.
 
@@ -332,7 +332,7 @@ def load_sleep_data(
 
 
 def load_readiness_sleep_balance(
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> dict[str, pd.Series]:
     """Load sleep_balance score from oura_readiness."""
     result: dict[str, pd.Series] = {}
@@ -540,7 +540,7 @@ def compute_timing_stats(
 
 def compute_inter_patient_comparison(
     data: dict[str, pd.DataFrame],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> dict[str, dict[str, Any]]:
     """Mann-Whitney U, Cohen's d, Cliff's delta, bootstrap CI for key metrics."""
     pids = [p.patient_id for p in patients]
@@ -627,7 +627,7 @@ def _cohens_d_label(d: float) -> str:
 def compute_benchmarks(
     arch_stats: dict[str, dict[str, Any]],
     eff_stats: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> dict[str, dict[str, Any]]:
     """Z-scores relative to population norms, post-HSCT norms, post-stroke norms."""
     result: dict[str, dict[str, Any]] = {}
@@ -770,13 +770,14 @@ def compute_recovery_indicators(
 
 def _fig_stacked_area(
     data: dict[str, pd.DataFrame],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> go.Figure:
-    """Two-panel stacked area of nightly architecture percentages."""
+    """N-panel stacked area of nightly architecture percentages."""
+    n = len(patients)
     fig = make_subplots(
-        rows=2, cols=1,
+        rows=n, cols=1,
         shared_xaxes=False,
-        vertical_spacing=0.12,
+        vertical_spacing=0.12 if n <= 3 else 0.08,
         subplot_titles=[p.display_name for p in patients],
     )
 
@@ -824,12 +825,12 @@ def _fig_stacked_area(
         if p.patient_id == "henrik":
             _add_event_vline(fig, pd.Timestamp(TREATMENT_START), "Rux Start", ACCENT_CYAN, row=row_idx, col=1)
 
-    fig.update_yaxes(title_text="% of Total", range=[0, 100], row=1, col=1)
-    fig.update_yaxes(title_text="% of Total", range=[0, 100], row=2, col=1)
-    fig.update_xaxes(title_text="Date", row=2, col=1)
+    for row_i in range(1, n + 1):
+        fig.update_yaxes(title_text="% of Total", range=[0, 100], row=row_i, col=1)
+    fig.update_xaxes(title_text="Date", row=n, col=1)
 
     fig.update_layout(
-        height=700,
+        height=350 * n,
         title=dict(text="Sleep Architecture Over Time (7-day Rolling)", font=dict(size=16)),
         legend=dict(orientation="h", y=-0.08),
         margin=dict(l=60, r=20, t=60, b=50),
@@ -844,7 +845,7 @@ def _fig_stacked_area(
 
 def _fig_arch_distributions(
     data: dict[str, pd.DataFrame],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> go.Figure:
     """2x2 grid of overlapping violin plots per sleep stage."""
     fig = make_subplots(
@@ -908,7 +909,7 @@ def _fig_arch_distributions(
 
 def _fig_efficiency(
     data: dict[str, pd.DataFrame],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
     eff_stats: dict[str, dict[str, Any]],
 ) -> go.Figure:
     """Dual line chart (nightly + rolling) + overlapping KDE."""
@@ -998,7 +999,7 @@ def _fig_efficiency(
 
 def _fig_timing(
     data: dict[str, pd.DataFrame],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> go.Figure:
     """Scatter of bedtime hour over time + box plots of midpoint variability."""
     fig = make_subplots(
@@ -1079,7 +1080,7 @@ def _fig_benchmark_radar(
     eff_stats: dict[str, dict[str, Any]],
     sleep_balance: dict[str, pd.Series],
     timing_stats: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> go.Figure:
     """6-axis radar: deep%, REM%, efficiency, total hours, regularity, sleep balance."""
     categories = [
@@ -1184,7 +1185,7 @@ def _hex_to_rgb(hex_color: str) -> str:
 def _fig_recovery_trajectory(
     data: dict[str, pd.DataFrame],
     eff_stats: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> go.Figure:
     """Efficiency trend with linear fit, annotated slope/R^2/Spearman."""
     fig = go.Figure()
@@ -1347,7 +1348,7 @@ def _build_benchmark_table(
     benchmarks: dict[str, dict[str, Any]],
     arch_stats: dict[str, dict[str, Any]],
     eff_stats: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> str:
     """Build HTML table comparing patients against population norms."""
     rows_html = ""
@@ -1379,6 +1380,7 @@ def _build_benchmark_table(
 
         rows_html += f"<tr>{row}</tr>"
 
+    patient_headers = "".join(f"<th>{p.display_name}</th>" for p in patients)
     return f"""
     <div style="overflow-x:auto">
     <table class="odt-table" style="width:100%;font-size:0.85rem">
@@ -1386,8 +1388,7 @@ def _build_benchmark_table(
         <tr>
             <th>Metric</th>
             <th>General Norms</th>
-            <th>{patients[0].display_name}</th>
-            <th>{patients[1].display_name}</th>
+            {patient_headers}
         </tr>
     </thead>
     <tbody>{rows_html}</tbody>
@@ -1401,7 +1402,7 @@ def _build_clinical_interpretation(
     timing_stats: dict[str, dict[str, Any]],
     recovery: dict[str, dict[str, Any]],
     comparison: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> str:
     """Auto-generated clinical interpretation bullet points."""
     bullets: list[str] = []
@@ -1562,61 +1563,38 @@ def build_html(
     benchmarks: dict[str, dict[str, Any]],
     recovery: dict[str, dict[str, Any]],
     sleep_balance: dict[str, pd.Series],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> str:
     """Build the full HTML report."""
     sections: list[str] = []
 
-    # -- KPI Row (Executive Summary) --
-    h_arch = arch_stats.get(patients[0].patient_id, {}).get("stages", {})
-    m_arch = arch_stats.get(patients[1].patient_id, {}).get("stages", {})
-    h_eff = eff_stats.get(patients[0].patient_id, {})
-    m_eff = eff_stats.get(patients[1].patient_id, {})
-    h_rec = recovery.get(patients[0].patient_id, {})
-    m_rec = recovery.get(patients[1].patient_id, {})
-
-    h_total = h_arch.get("total_hours", {}).get("mean", 0)
-    m_total = m_arch.get("total_hours", {}).get("mean", 0)
-    h_eff_mean = h_eff.get("mean", 0)
-    m_eff_mean = m_eff.get("mean", 0)
-    h_deep = h_arch.get("deep_pct", {}).get("mean", 0)
-    m_deep = m_arch.get("deep_pct", {}).get("mean", 0)
-
-    kpi_row = make_kpi_row(
-        make_kpi_card(
-            "P1 AVG SLEEP", h_total, "hrs",
-            status="critical" if h_total < 6 else ("warning" if h_total < 7 else "normal"),
-            detail=f"Target: 7-9 hrs",
-            status_label="Short" if h_total < 6 else ("Below target" if h_total < 7 else "Adequate"),
-        ),
-        make_kpi_card(
-            "P2 AVG SLEEP", m_total, "hrs",
-            status="warning" if m_total < 7 else "normal",
-            detail=f"Target: 7-9 hrs",
-            status_label="Below target" if m_total < 7 else "Adequate",
-        ),
-        make_kpi_card(
-            "P1 EFFICIENCY", h_eff_mean, "%",
-            status="critical" if h_eff_mean < 75 else ("warning" if h_eff_mean < 85 else "normal"),
-            detail=f"{h_eff.get('pct_below_75', 0):.0f}% nights below 75%",
-        ),
-        make_kpi_card(
-            "P2 EFFICIENCY", m_eff_mean, "%",
-            status="critical" if m_eff_mean < 75 else ("warning" if m_eff_mean < 85 else "normal"),
-            detail=f"{m_eff.get('pct_below_75', 0):.0f}% nights below 75%",
-        ),
-        make_kpi_card(
-            "P1 DEEP SLEEP", h_deep, "%",
-            status="warning" if h_deep < 13 else "normal",
-            detail=f"Norm: 13-23%",
-        ),
-        make_kpi_card(
-            "P2 DEEP SLEEP", m_deep, "%",
-            status="warning" if m_deep < 13 else "normal",
-            detail=f"Norm: 13-23%",
-        ),
-    )
-    sections.append(kpi_row)
+    # -- KPI Row (Executive Summary) -- iterate all patients
+    kpi_cards: list[str] = []
+    for i, p in enumerate(patients):
+        pid = p.patient_id
+        p_arch = arch_stats.get(pid, {}).get("stages", {})
+        p_eff = eff_stats.get(pid, {})
+        label = f"P{i + 1}"
+        total = p_arch.get("total_hours", {}).get("mean", 0)
+        eff_mean = p_eff.get("mean", 0)
+        deep = p_arch.get("deep_pct", {}).get("mean", 0)
+        kpi_cards.append(make_kpi_card(
+            f"{label} AVG SLEEP", total, "hrs",
+            status="critical" if total < 6 else ("warning" if total < 7 else "normal"),
+            detail="Target: 7-9 hrs",
+            status_label="Short" if total < 6 else ("Below target" if total < 7 else "Adequate"),
+        ))
+        kpi_cards.append(make_kpi_card(
+            f"{label} EFFICIENCY", eff_mean, "%",
+            status="critical" if eff_mean < 75 else ("warning" if eff_mean < 85 else "normal"),
+            detail=f"{p_eff.get('pct_below_75', 0):.0f}% nights below 75%",
+        ))
+        kpi_cards.append(make_kpi_card(
+            f"{label} DEEP SLEEP", deep, "%",
+            status="warning" if deep < 13 else "normal",
+            detail="Norm: 13-23%",
+        ))
+    sections.append(make_kpi_row(*kpi_cards))
 
     # -- Disclaimer --
     sections.append(disclaimer_banner())
@@ -1729,7 +1707,7 @@ def export_json(
     comparison: dict[str, dict[str, Any]],
     benchmarks: dict[str, dict[str, Any]],
     recovery: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> None:
     """Write structured metrics JSON."""
 
@@ -1787,9 +1765,10 @@ def main() -> int:
     """Run comparative sleep analysis pipeline."""
     logger.info("[1/7] Loading patient data...")
     patients = default_patients()
-    if patients[1] is None:
-        print("Skipping: mitch.db not found (second patient data not available)")
+    if len(patients) < 2:
+        print("Skipping: need at least 2 patient databases for comparative analysis")
         return 0
+    patient_map = {p.patient_id: p for p in patients}
     data = load_sleep_data(patients)
     sleep_balance = load_readiness_sleep_balance(patients)
 

@@ -168,7 +168,7 @@ def _fallback_hr_from_sleep_periods(patient: PatientConfig, df_sleep: pd.DataFra
     return df_sleep
 
 
-def load_all_metrics(patients: tuple[PatientConfig, PatientConfig]) -> dict[str, pd.DataFrame]:
+def load_all_metrics(patients: list[PatientConfig]) -> dict[str, pd.DataFrame]:
     """Load all metrics for both patients into per-patient DataFrames aligned by date.
 
     Returns dict[patient_id -> DataFrame] where columns are metric keys and index is date.
@@ -729,16 +729,16 @@ def _top_anomaly_table(
 def _fig_anomaly_timeline(
     anomaly_data: dict[str, pd.DataFrame],
     cluster_data: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> go.Figure:
-    """Two-row timeline: ensemble score over time, anomaly days colored by cluster."""
+    """N-row timeline: ensemble score over time, anomaly days colored by cluster."""
+    n = len(patients)
     fig = make_subplots(
-        rows=2, cols=1,
+        rows=n, cols=1,
         shared_xaxes=False,
-        vertical_spacing=0.12,
+        vertical_spacing=0.12 if n <= 3 else 0.08,
         subplot_titles=[
-            f"{patients[0].display_name} \u2014 Anomaly Timeline",
-            f"{patients[1].display_name} \u2014 Anomaly Timeline",
+            f"{p.display_name} \u2014 Anomaly Timeline" for p in patients
         ],
     )
 
@@ -814,12 +814,12 @@ def _fig_anomaly_timeline(
                 row=row_i, col=1,
             )
 
-    fig.update_yaxes(title_text="Ensemble Score", row=1, col=1)
-    fig.update_yaxes(title_text="Ensemble Score", row=2, col=1)
-    fig.update_xaxes(title_text="Date", row=2, col=1)
+    for row_idx in range(1, n + 1):
+        fig.update_yaxes(title_text="Ensemble Score", row=row_idx, col=1)
+    fig.update_xaxes(title_text="Date", row=n, col=1)
 
     fig.update_layout(
-        height=600,
+        height=300 * n,
         title=dict(text="Anomaly Detection Timeline", font=dict(size=16)),
         legend=dict(orientation="h", y=-0.08),
         margin=dict(l=60, r=20, t=70, b=50),
@@ -832,12 +832,13 @@ def _fig_anomaly_timeline(
 
 def _fig_radar(
     fingerprints: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> go.Figure:
     """Side-by-side Scatterpolar: mean anomaly fingerprint."""
+    n = len(patients)
     fig = make_subplots(
-        rows=1, cols=2,
-        specs=[[{"type": "polar"}, {"type": "polar"}]],
+        rows=1, cols=n,
+        specs=[[{"type": "polar"}] * n],
         subplot_titles=[p.display_name for p in patients],
     )
 
@@ -865,18 +866,17 @@ def _fig_radar(
             opacity=0.8,
         ), row=1, col=col_i)
 
+    # Configure all polar axes
+    polar_config = dict(radialaxis=dict(visible=True, range=[0, None]), bgcolor=BG_SURFACE)
+    layout_kwargs = {"polar": polar_config}
+    for i in range(2, n + 1):
+        layout_kwargs[f"polar{i}"] = polar_config
+
     fig.update_layout(
         height=500,
         title=dict(text="Mean Anomaly Fingerprint (|z-score|)", font=dict(size=16)),
         margin=dict(l=80, r=80, t=80, b=40),
-        polar=dict(
-            radialaxis=dict(visible=True, range=[0, None]),
-            bgcolor=BG_SURFACE,
-        ),
-        polar2=dict(
-            radialaxis=dict(visible=True, range=[0, None]),
-            bgcolor=BG_SURFACE,
-        ),
+        **layout_kwargs,
     )
     return fig
 
@@ -885,13 +885,14 @@ def _fig_radar(
 
 def _fig_co_deviation(
     fingerprints: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> go.Figure:
     """Side-by-side annotated heatmaps of metric co-occurrence on anomaly days."""
+    n = len(patients)
     fig = make_subplots(
-        rows=1, cols=2,
+        rows=1, cols=n,
         subplot_titles=[p.display_name for p in patients],
-        horizontal_spacing=0.12,
+        horizontal_spacing=0.12 if n <= 3 else 0.08,
     )
 
     display_labels = [METRIC_DISPLAY.get(k, k) for k in METRIC_KEYS]
@@ -929,7 +930,7 @@ def _fig_co_deviation(
             x=display_labels,
             y=display_labels,
             colorscale="Viridis",
-            showscale=(col_i == 2),
+            showscale=(col_i == n),
             zmin=0, zmax=1,
             hovertemplate="%{y} vs %{x}: %{z:.2f}<extra></extra>",
         ), row=1, col=col_i)
@@ -949,7 +950,7 @@ def _fig_co_deviation(
 def _fig_pca_biplot(
     fingerprints: dict[str, dict[str, Any]],
     cluster_data: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> go.Figure:
     """Anomaly days in PC1-PC2 space, colored by patient, shaped by cluster. Loading arrows."""
     from sklearn.decomposition import PCA
@@ -1064,7 +1065,7 @@ def _fig_pca_biplot(
 
 def _fig_metric_rank_bars(
     comparison: dict[str, Any],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> go.Figure:
     """Grouped horizontal bar chart: mean |z| on anomaly days."""
     mean_abs = comparison.get("mean_abs_z_anomaly", {})
@@ -1110,7 +1111,7 @@ def _fig_metric_rank_bars(
 
 def _fig_cluster_profiles(
     cluster_data: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> go.Figure:
     """Per cluster per patient: bar chart of centroid z-scores across metrics."""
     # Collect all clusters
@@ -1211,7 +1212,7 @@ def _build_executive_summary(
     anomaly_data: dict[str, pd.DataFrame],
     fingerprints: dict[str, dict[str, Any]],
     comparison: dict[str, Any],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> str:
     """Build executive summary section."""
     cards = []
@@ -1293,7 +1294,7 @@ def _build_clinical_implications(
     fingerprints: dict[str, dict[str, Any]],
     cluster_data: dict[str, dict[str, Any]],
     comparison: dict[str, Any],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> str:
     """Generate clinical implications narrative."""
     parts = []
@@ -1398,7 +1399,7 @@ def build_html(
     fingerprints: dict[str, dict[str, Any]],
     cluster_data: dict[str, dict[str, Any]],
     comparison: dict[str, Any],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> str:
     """Assemble full HTML report."""
     sections: list[str] = []
@@ -1542,7 +1543,7 @@ def export_json(
     fingerprints: dict[str, dict[str, Any]],
     cluster_data: dict[str, dict[str, Any]],
     comparison: dict[str, Any],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> None:
     """Write structured metrics JSON."""
     output: dict[str, Any] = {
@@ -1616,9 +1617,10 @@ def main() -> int:
     """Run comparative anomaly analysis pipeline."""
     logger.info("[1/8] Loading patient data...")
     patients = default_patients()
-    if patients[1] is None:
-        print("Skipping: mitch.db not found (second patient data not available)")
+    if len(patients) < 2:
+        print("Skipping: need at least 2 patient databases for comparative analysis")
         return 0
+    patient_map = {p.patient_id: p for p in patients}
     raw_data = load_all_metrics(patients)
 
     for pid, df in raw_data.items():

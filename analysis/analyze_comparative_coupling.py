@@ -215,7 +215,7 @@ def _adaptive_bins(n: int) -> int:
 # ---------------------------------------------------------------------------
 
 def load_data(
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> dict[str, pd.DataFrame]:
     """Load and merge activity + recovery data for both patients.
 
@@ -618,7 +618,7 @@ def compute_correlation_matrix(
 
 def assess_coupling(
     lag_corrs: dict[str, list[dict]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> dict[str, dict]:
     """Clinical assessment of coupling per patient.
 
@@ -688,7 +688,7 @@ def compare_patients(
     coupling: dict[str, dict],
     lag_corrs: dict[str, list[dict]],
     dose_response: dict[str, dict],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> dict:
     """Cross-patient comparison using Fisher r-to-z test."""
     pids = [p.patient_id for p in patients]
@@ -754,7 +754,7 @@ def compare_patients(
 
 def _fig_dual_scatter(
     data: dict[str, pd.DataFrame],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
     act_col: str = "steps",
     rec_col: str = "hrv_average",
     act_label: str = "Steps (day N)",
@@ -821,7 +821,7 @@ def _fig_dual_scatter(
 
 def _fig_cross_correlation(
     xcorr: dict[str, dict[str, list[dict]]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
     pair_key: str = "steps_vs_hrv_average",
     title_suffix: str = "Steps vs HRV",
 ) -> go.Figure:
@@ -881,7 +881,7 @@ def _fig_cross_correlation(
 
 def _fig_dose_response(
     dose_response: dict[str, dict],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
     title: str = "Dose-Response: Steps vs Next-Day HRV",
 ) -> go.Figure:
     """Fig 3: Grouped bar chart with error bars for dose-response."""
@@ -993,7 +993,7 @@ def _fig_correlation_heatmap(
 
 def _fig_lagged_heatmap(
     data: dict[str, pd.DataFrame],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
     recovery_cols: list[str] | None = None,
     max_lag: int = 3,
 ) -> go.Figure:
@@ -1075,11 +1075,12 @@ def build_html(
     corr_matrices: dict[str, dict[str, pd.DataFrame]],
     coupling: dict[str, dict],
     comparison: dict,
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> str:
     """Assemble the full HTML report."""
     sections: list[str] = []
-    h, m = patients
+    primary_patients = patients[:2]
+    h, m = primary_patients
 
     # --- KPI Row ---
     h_coup = coupling.get(h.patient_id, {})
@@ -1165,9 +1166,9 @@ def build_html(
         "Scatter Plots",
         lambda: make_section(
             "Activity vs Next-Day Recovery",
-            _embed(_fig_dual_scatter(data, patients, "steps", "hrv_average",
+            _embed(_fig_dual_scatter(data, primary_patients, "steps", "hrv_average",
                                      "Steps (day N)", "HRV (day N+1)"))
-            + _embed(_fig_dual_scatter(data, patients, "steps", "readiness_score",
+            + _embed(_fig_dual_scatter(data, primary_patients, "steps", "readiness_score",
                                        "Steps (day N)", "Readiness Score (day N+1)")),
             section_id="scatter-plots",
         ),
@@ -1178,8 +1179,8 @@ def build_html(
         "Cross-Correlation",
         lambda: make_section(
             "Cross-Correlation Functions",
-            _embed(_fig_cross_correlation(xcorr, patients, "steps_vs_hrv_average", "Steps vs HRV"))
-            + _embed(_fig_cross_correlation(xcorr, patients, "steps_vs_readiness_score", "Steps vs Readiness"))
+            _embed(_fig_cross_correlation(xcorr, primary_patients, "steps_vs_hrv_average", "Steps vs HRV"))
+            + _embed(_fig_cross_correlation(xcorr, primary_patients, "steps_vs_readiness_score", "Steps vs Readiness"))
             + f'<p style="color:{TEXT_TERTIARY};margin-top:12px;">'
             f"Positive lags = activity leads recovery (causal direction). "
             f"Negative lags = recovery leads activity (reverse check). "
@@ -1213,7 +1214,7 @@ def build_html(
         "Lagged Heatmap",
         lambda: make_section(
             "Steps vs Recovery Across Lags",
-            _embed(_fig_lagged_heatmap(data, patients)),
+            _embed(_fig_lagged_heatmap(data, primary_patients)),
             section_id="lagged-heatmap",
         ),
     ))
@@ -1221,7 +1222,7 @@ def build_html(
     # --- Clinical Interpretation ---
     sections.append(section_html_or_placeholder(
         "Clinical Interpretation",
-        lambda: _build_clinical_section(coupling, comparison, patients),
+        lambda: _build_clinical_section(coupling, comparison, primary_patients),
     ))
 
     body = "\n".join(sections)
@@ -1236,7 +1237,7 @@ def build_html(
 
 def _build_dose_response_section(
     dose_response: dict[str, dict],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> str:
     """Build the dose-response section with stats table."""
     fig_html = _embed(_fig_dose_response(dose_response, patients))
@@ -1279,7 +1280,7 @@ def _build_dose_response_section(
 def _build_clinical_section(
     coupling: dict[str, dict],
     comparison: dict,
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> str:
     """Build the clinical interpretation section."""
     h, m = patients
@@ -1438,9 +1439,10 @@ def main() -> int:
     """Run comparative activity-recovery coupling analysis pipeline."""
     logger.info("[1/7] Loading patient data...")
     patients = default_patients()
-    if patients[1] is None:
-        print("Skipping: mitch.db not found (second patient data not available)")
+    if len(patients) < 2:
+        print("Skipping: need at least 2 patient databases for comparative analysis")
         return 0
+    patient_map = {p.patient_id: p for p in patients}
     data = load_data(patients)
 
     for pid, df in data.items():

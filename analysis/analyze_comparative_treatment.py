@@ -195,7 +195,7 @@ def _sanitize(obj: Any) -> Any:
 # ---------------------------------------------------------------------------
 
 def load_data(
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> dict[str, dict[str, pd.Series]]:
     """Load all 6 treatment metrics for both patients."""
     result: dict[str, dict[str, pd.Series]] = {}
@@ -952,7 +952,7 @@ def _fig_mitchell_timeline(
 
 def _fig_comparative_violin(
     data: dict[str, dict[str, pd.Series]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
     metric_name: str,
     display_name: str,
 ) -> go.Figure:
@@ -1041,7 +1041,7 @@ def build_html(
     henrik_changepoints: dict[str, dict[str, Any]],
     mitchell_result: dict[str, Any],
     convergence: dict[str, pd.DataFrame],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> str:
     """Assemble the complete HTML report."""
     sections: list[str] = []
@@ -1158,7 +1158,7 @@ def _build_henrik_section(
     henrik_stats: dict[str, dict[str, Any]],
     henrik_three: dict[str, dict[str, Any]],
     henrik_changepoints: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> str:
     """Patient 1 treatment response: timelines, stat cards, BOCPD."""
     parts: list[str] = []
@@ -1266,7 +1266,7 @@ def _build_henrik_section(
 def _build_mitchell_section(
     data: dict[str, dict[str, pd.Series]],
     mitchell_result: dict[str, Any],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> str:
     """Patient 2 discovered events section."""
     parts: list[str] = []
@@ -1333,7 +1333,7 @@ def _build_mitchell_section(
 
 def _build_comparative_section(
     data: dict[str, dict[str, pd.Series]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> str:
     """Comparative distributions (violin plots)."""
     parts: list[str] = []
@@ -1522,9 +1522,10 @@ def main() -> int:
     """Run comparative treatment response analysis pipeline."""
     logger.info("[1/9] Loading patient data...")
     patients = default_patients()
-    if patients[1] is None:
-        print("Skipping: mitch.db not found (second patient data not available)")
+    if len(patients) < 2:
+        print("Skipping: need at least 2 patient databases for comparative analysis")
         return 0
+    patient_map = {p.patient_id: p for p in patients}
     data = load_data(patients)
 
     # -- Patient 1 analyses --
@@ -1550,19 +1551,26 @@ def main() -> int:
         total_cp = sum(len(cp[k]) for k in ["pelt", "cusum", "bocpd", "rolling_window"])
         logger.info("  %s: %d changepoints detected across methods", display, total_cp)
 
-    # -- Patient 2 analyses --
-    logger.info("[5/9] Patient 2: automatic changepoint discovery...")
-    mitch_metrics = data.get("mitch", {})
-    mitchell_result = mitchell_consensus(mitch_metrics)
-    n_high = sum(1 for e in mitchell_result.get("consensus_events", []) if e.get("high_confidence"))
-    logger.info("  Patient 2: %d high-confidence consensus events", n_high)
+    # -- Non-Henrik patient analyses (automatic changepoint discovery) --
+    logger.info("[5/9] Non-Henrik patients: automatic changepoint discovery...")
+    non_henrik_results: dict[str, dict[str, Any]] = {}
+    for p in patients:
+        if p.patient_id == "henrik":
+            continue
+        pid_metrics = data.get(p.patient_id, {})
+        result = mitchell_consensus(pid_metrics)
+        non_henrik_results[p.patient_id] = result
+        n_high = sum(1 for e in result.get("consensus_events", []) if e.get("high_confidence"))
+        logger.info("  %s: %d high-confidence consensus events", p.display_name, n_high)
+    # Keep backward compat alias for build_html
+    mitchell_result = non_henrik_results.get("mitch", {})
 
     # -- Convergence --
     logger.info("[6/9] Computing multi-metric convergence...")
     convergence: dict[str, pd.DataFrame] = {}
-    for pid in ["henrik", "mitch"]:
-        metrics = data.get(pid, {})
-        convergence[pid] = compute_convergence(metrics, pid)
+    for p in patients:
+        metrics = data.get(p.patient_id, {})
+        convergence[p.patient_id] = compute_convergence(metrics, p.patient_id)
 
     # -- HTML --
     logger.info("[7/9] Generating HTML report...")

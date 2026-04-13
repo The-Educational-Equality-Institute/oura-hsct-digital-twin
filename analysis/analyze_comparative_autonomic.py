@@ -192,7 +192,7 @@ def _add_event_vline(
 # ---------------------------------------------------------------------------
 
 def load_data(
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> dict[str, dict[str, pd.Series]]:
     """Load HRV and HR data for both patients.
 
@@ -230,7 +230,7 @@ def load_data(
 
 def normalize_timelines(
     data: dict[str, dict[str, pd.Series]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> dict[str, dict[str, Any]]:
     """Add days_since_event to each patient's data."""
     patient_map = {p.patient_id: p for p in patients}
@@ -322,7 +322,7 @@ def compute_normalized(
 
 def compute_trends_and_comparison(
     data: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> dict[str, Any]:
     """Compute per-patient trends and cross-patient comparison metrics."""
     patient_map = {p.patient_id: p for p in patients}
@@ -341,8 +341,13 @@ def compute_trends_and_comparison(
         hrv_trend = _compute_linear_trend(hrv_last30)
         hr_trend = _compute_linear_trend(hr_last30)
 
-        dse = metrics.get("days_since_event", pd.Series(dtype=int))
-        dse_range = [int(dse.min()), int(dse.max())] if not dse.empty else [0, 0]
+        dse = metrics.get("days_since_event", pd.Series(dtype=float))
+        dse_valid = dse.dropna()
+        dse_range = (
+            [int(dse_valid.min()), int(dse_valid.max())]
+            if not dse_valid.empty
+            else [0, 0]
+        )
 
         pct_below_esc = (
             float((hrv < ESC_RMSSD_DEFICIENCY).sum() / len(hrv) * 100)
@@ -420,7 +425,7 @@ def compute_trends_and_comparison(
 
 def _fig_hrv_trajectory(
     data: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> go.Figure:
     """Fig 1: HRV Trajectory -- dual panel: raw (log y) + z-score."""
     fig = make_subplots(
@@ -491,7 +496,7 @@ def _fig_hrv_trajectory(
 
 def _fig_hr_trajectory(
     data: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> go.Figure:
     """Fig 2: Heart Rate Trajectory -- dual panel: raw + z-score."""
     fig = make_subplots(
@@ -556,7 +561,7 @@ def _fig_hr_trajectory(
 
 def _fig_pct_baseline(
     data: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> go.Figure:
     """Fig 3: Percent-of-Baseline HRV."""
     fig = go.Figure()
@@ -603,7 +608,7 @@ def _fig_pct_baseline(
 
 def _fig_hrv_distribution(
     data: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> go.Figure:
     """Fig 4: HRV Distribution -- overlapping violins with population band."""
     fig = go.Figure()
@@ -623,9 +628,7 @@ def _fig_hrv_distribution(
             marker_color=color,
             box_visible=True,
             meanline_visible=True,
-            opacity=0.8,
-            side="positive" if pid == patients[0].patient_id else "negative",
-            scalegroup=pid,
+            opacity=0.7,
         ))
 
     # Population reference band
@@ -655,72 +658,48 @@ def _fig_hrv_distribution(
 
 def _fig_long_term_context(
     data: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> go.Figure:
-    """Fig 5: P2's full HRV timeline with P1's window overlaid."""
+    """Fig 5: All patients' HRV timeline overlaid, longest dataset as background."""
     fig = go.Figure()
     patient_map = {p.patient_id: p for p in patients}
 
-    # P2 = second patient (longer dataset)
-    mitch_pid = patients[1].patient_id
-    henrik_pid = patients[0].patient_id
+    # Sort patients by data length (longest first) for background layering
+    sorted_pids = sorted(data.keys(), key=lambda pid: len(data[pid].get("hrv", pd.Series(dtype=float))), reverse=True)
 
-    m_hrv = data[mitch_pid]["hrv"]
-    h_hrv = data[henrik_pid]["hrv"]
+    for i, pid in enumerate(sorted_pids):
+        p = patient_map.get(pid)
+        if p is None:
+            continue
+        color = PATIENT_COLORS.get(pid, ACCENT_PURPLE)
+        hrv = data[pid]["hrv"]
+        if hrv.empty:
+            continue
 
-    m_p = patient_map[mitch_pid]
-    h_p = patient_map[henrik_pid]
-
-    if not m_hrv.empty:
-        # P2: full range scatter
+        # Daily scatter
         fig.add_trace(go.Scatter(
-            x=m_hrv.index, y=m_hrv.values,
-            mode="markers", marker=dict(size=2, color=ACCENT_GREEN, opacity=0.2),
-            name=f"{m_p.display_name} (daily)", legendgroup="mitch", showlegend=False,
+            x=hrv.index, y=hrv.values,
+            mode="markers",
+            marker=dict(size=2 if i == 0 else 4, color=color, opacity=0.2 if i == 0 else 0.6),
+            name=f"{p.display_name} (daily)", legendgroup=pid, showlegend=False,
         ))
-        # 30-day rolling
-        if len(m_hrv) >= 30:
-            rolling = m_hrv.rolling(30, min_periods=15).mean()
+        # Rolling average
+        roll_window = 30 if i == 0 else 7
+        min_per = roll_window // 2
+        if len(hrv) >= roll_window:
+            rolling = hrv.rolling(roll_window, min_periods=min_per).mean()
             fig.add_trace(go.Scatter(
                 x=rolling.index, y=rolling.values,
-                mode="lines", line=dict(color=ACCENT_GREEN, width=2.5),
-                name=f"{m_p.display_name} (30d avg)", legendgroup="mitch",
+                mode="lines", line=dict(color=color, width=2.5),
+                name=f"{p.display_name} ({roll_window}d avg)", legendgroup=pid,
             ))
-
-    if not h_hrv.empty:
-        # P1: overlay window
-        fig.add_trace(go.Scatter(
-            x=h_hrv.index, y=h_hrv.values,
-            mode="markers", marker=dict(size=4, color=ACCENT_BLUE, opacity=0.6),
-            name=f"{h_p.display_name} (daily)", legendgroup="henrik", showlegend=False,
-        ))
-        if len(h_hrv) >= 7:
-            rolling = h_hrv.rolling(7, min_periods=4).mean()
-            fig.add_trace(go.Scatter(
-                x=rolling.index, y=rolling.values,
-                mode="lines", line=dict(color=ACCENT_BLUE, width=3),
-                name=f"{h_p.display_name} (7d avg)", legendgroup="henrik",
-            ))
-
-        # Shade P1's data window
-        h_start = h_hrv.index.min()
-        h_end = h_hrv.index.max()
-        fig.add_vrect(
-            x0=h_start, x1=h_end,
-            fillcolor=ACCENT_BLUE, opacity=0.06,
-            line_width=0,
-            annotation_text="P1's window",
-            annotation_position="top left",
-            annotation_font_size=10,
-            annotation_font_color=ACCENT_BLUE,
-        )
 
     _add_reference_line(fig, ESC_RMSSD_DEFICIENCY, f"ESC ({ESC_RMSSD_DEFICIENCY}ms)", ACCENT_RED)
     _add_reference_line(fig, POPULATION_RMSSD_MEDIAN, f"Pop. Median ({POPULATION_RMSSD_MEDIAN}ms)", ACCENT_AMBER)
 
     fig.update_layout(
         height=450,
-        title=dict(text="Long-Term Context: P2's 5-Year HRV with P1's Window", font=dict(size=16)),
+        title=dict(text="Long-Term HRV Context: All Patients", font=dict(size=16)),
         xaxis_title="Date",
         yaxis_title="RMSSD (ms)",
         legend=dict(orientation="h", y=-0.15),
@@ -732,7 +711,7 @@ def _fig_long_term_context(
 
 def _fig_autonomic_coupling(
     data: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> go.Figure:
     """Fig 6: Autonomic Coupling -- HR vs HRV scatter."""
     fig = go.Figure()
@@ -795,58 +774,40 @@ def _fig_autonomic_coupling(
 def build_html(
     data: dict[str, dict[str, Any]],
     stats_result: dict[str, Any],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> str:
     """Build the full HTML report."""
     sections: list[str] = []
 
-    # -- KPI Row --
-    h_stats = stats_result["patients"].get(patients[0].patient_id, {})
-    m_stats = stats_result["patients"].get(patients[1].patient_id, {})
+    # -- KPI Row -- one card per patient for HRV and HR
     comp = stats_result.get("comparison", {})
-
-    h_hrv_mean = h_stats.get("hrv", {}).get("mean", 0)
-    m_hrv_mean = m_stats.get("hrv", {}).get("mean", 0)
-    h_hr_mean = h_stats.get("heart_rate", {}).get("mean_sleep_hr", 0)
-    m_hr_mean = m_stats.get("heart_rate", {}).get("mean_sleep_hr", 0)
-    hrv_ratio = comp.get("hrv_ratio", 0)
+    kpi_cards: list[str] = []
+    for i, p in enumerate(patients):
+        pid = p.patient_id
+        p_stats = stats_result["patients"].get(pid, {})
+        hrv_mean = p_stats.get("hrv", {}).get("mean", 0)
+        hr_mean = p_stats.get("heart_rate", {}).get("mean_sleep_hr", 0)
+        label = f"P{i + 1}"
+        kpi_cards.append(make_kpi_card(
+            f"{label} MEAN HRV", hrv_mean, "ms",
+            status="critical" if hrv_mean < ESC_RMSSD_DEFICIENCY else "info",
+            detail=f"Below ESC threshold ({ESC_RMSSD_DEFICIENCY}ms)" if hrv_mean < ESC_RMSSD_DEFICIENCY else f"Pop. percentile: {p_stats.get('hrv', {}).get('population_percentile', 0):.0f}%",
+        ))
+        kpi_cards.append(make_kpi_card(
+            f"{label} SLEEP HR", hr_mean, "bpm",
+            status="warning" if hr_mean > 75 else "normal",
+            detail="Elevated" if hr_mean > 75 else "Normal range",
+        ))
+    # Henrik-specific trajectory card
+    h_stats = stats_result["patients"].get("henrik", {})
     h_trend_dir = h_stats.get("hrv", {}).get("trend_direction", "N/A")
-
-    kpi_row = make_kpi_row(
-        make_kpi_card(
-            "P1 MEAN HRV", h_hrv_mean, "ms",
-            status="critical",
-            detail=f"Below ESC threshold ({ESC_RMSSD_DEFICIENCY}ms)" if h_hrv_mean < ESC_RMSSD_DEFICIENCY else "Above ESC threshold",
-            status_label="Severe" if h_hrv_mean < ESC_RMSSD_DEFICIENCY else "Low",
-        ),
-        make_kpi_card(
-            "P2 MEAN HRV", m_hrv_mean, "ms",
-            status="info",
-            detail=f"Pop. percentile: {m_stats.get('hrv', {}).get('population_percentile', 0):.0f}%",
-        ),
-        make_kpi_card(
-            "P1 SLEEP HR", h_hr_mean, "bpm",
-            status="warning" if h_hr_mean > 75 else "normal",
-            detail="Elevated" if h_hr_mean > 75 else "Acceptable range",
-        ),
-        make_kpi_card(
-            "P2 SLEEP HR", m_hr_mean, "bpm",
-            status="normal",
-            detail="Athletic range" if m_hr_mean < 55 else "Normal range",
-        ),
-        make_kpi_card(
-            "HRV GAP RATIO", hrv_ratio, "x",
-            status="info",
-            detail=f"P2/P1 ({comp.get('hrv_gap_ms', 0):.0f}ms gap)",
-        ),
-        make_kpi_card(
-            "TRAJECTORY", h_trend_dir.title(), "",
-            status="normal" if h_trend_dir == "improving" else ("warning" if h_trend_dir == "stable" else "critical"),
-            detail=f"P1's 30-day HRV trend",
-            status_label=h_trend_dir.title(),
-        ),
-    )
-    sections.append(kpi_row)
+    kpi_cards.append(make_kpi_card(
+        "TRAJECTORY", h_trend_dir.title(), "",
+        status="normal" if h_trend_dir == "improving" else ("warning" if h_trend_dir == "stable" else "critical"),
+        detail="P1's 30-day HRV trend",
+        status_label=h_trend_dir.title(),
+    ))
+    sections.append(make_kpi_row(*kpi_cards))
 
     # -- Section 1: HRV Trajectory --
     sections.append(section_html_or_placeholder(
@@ -936,7 +897,7 @@ def build_html(
         body_content=body,
         report_id="comp_autonomic",
         subtitle="Module 1: Comparative Autonomic Analysis",
-        header_meta="Patient 1 (post-HSCT) vs Patient 2 (post-Stroke)",
+        header_meta=" vs ".join(p.display_name for p in patients),
     )
 
 
@@ -981,9 +942,10 @@ def main() -> int:
     """Run comparative autonomic analysis pipeline."""
     logger.info("[1/7] Loading patient data...")
     patients = default_patients()
-    if patients[1] is None:
-        print("Skipping: mitch.db not found (second patient data not available)")
+    if len(patients) < 2:
+        print("Skipping: need at least 2 patient databases for comparative analysis")
         return 0
+    patient_map = {p.patient_id: p for p in patients}
     raw_data = load_data(patients)
 
     logger.info("[2/7] Normalizing timelines...")

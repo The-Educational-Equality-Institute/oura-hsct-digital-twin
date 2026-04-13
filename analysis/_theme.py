@@ -26,6 +26,7 @@ import sqlite3
 import sys
 from datetime import date, datetime
 from functools import lru_cache
+from html import escape
 from pathlib import Path
 
 import plotly.graph_objects as go
@@ -60,9 +61,23 @@ REPORT_REGISTRY = [
     {"id": "comp_anomalies", "file": "comparative_anomaly_report.html", "title": "Anomaly Patterns", "group": "Comparative"},
     {"id": "comp_breathing", "file": "comparative_breathing_analysis.html", "title": "Breathing Analysis", "group": "Comparative"},
     {"id": "comp_temperature", "file": "comparative_temperature_analysis.html", "title": "Temperature Analysis", "group": "Comparative"},
+    {"id": "mitch_standalone", "file": "mitch_standalone_report.html", "title": "P2 Dashboard", "group": "Individual"},
+    {"id": "wenche_standalone", "file": "wenche_standalone_report.html", "title": "P3 Dashboard", "group": "Individual"},
     {"id": "mitch_changepoints", "file": "mitch_changepoint_investigation.html", "title": "P2 Changepoints", "group": "Comparative"},
     {"id": "weekly", "file": "weekly_tracker.html", "title": "Weekly Tracker", "group": "Core"},
     {"id": "forecast", "file": "rux_forecast.html", "title": "Rux Forecast", "group": "Clinical"},
+    {"id": "piecewise_its", "file": "piecewise_regression.html", "title": "Piecewise ITS", "group": "Statistical"},
+    {"id": "sequential_ci", "file": "sequential_causal_impact.html", "title": "Sequential CI", "group": "Statistical"},
+    {"id": "placebo", "file": "placebo_calibration.html", "title": "Placebo Tests", "group": "Statistical"},
+    {"id": "tau_u", "file": "tau_u_effects.html", "title": "Tau-U Effects", "group": "Statistical"},
+]
+
+NAV_PRIMARY_IDS = [
+    "home",
+    "weekly",
+    "full_analysis",
+    "comp_treatment",
+    "piecewise_its",
 ]
 
 # ---------------------------------------------------------------------------
@@ -519,9 +534,10 @@ body {{
   box-shadow: 0 1px 12px rgba(0, 0, 0, 0.2);
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 0 28px;
   height: var(--nav-height);
-  gap: 20px;
+  gap: 16px;
 }}
 .odt-nav-brand {{
   font-size: var(--text-base);
@@ -555,54 +571,152 @@ body {{
 .odt-nav-links {{
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-end;
+}}
+.odt-nav-primary {{
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+  flex: 1;
 }}
-.odt-nav-links::-webkit-scrollbar {{ display: none; }}
-.odt-nav-group {{
-  font-size: 0.5625rem;
+.odt-nav-primary::-webkit-scrollbar {{ display: none; }}
+.odt-nav-current {{
+  flex-shrink: 0;
+  font-size: var(--text-2xs);
   font-weight: 700;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
   color: var(--text-tertiary);
-  padding: 0 8px 0 16px;
+  padding: 0 2px;
   white-space: nowrap;
-  position: relative;
 }}
-.odt-nav-group::before {{
-  content: '';
-  position: absolute;
-  left: 4px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: var(--border-subtle);
-}}
-.odt-nav-group:first-child::before {{ display: none; }}
 .odt-nav-link {{
   font-size: var(--text-xs);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-secondary);
   text-decoration: none;
-  padding: 16px 10px;
-  border-bottom: 2px solid transparent;
+  padding: 9px 12px;
+  border: 1px solid transparent;
   white-space: nowrap;
-  transition: color var(--duration-fast) ease, border-color var(--duration-normal) ease, background var(--duration-fast) ease;
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  transition: color var(--duration-fast) ease, border-color var(--duration-normal) ease, background var(--duration-fast) ease, transform var(--duration-fast) ease;
+  border-radius: 999px;
 }}
 .odt-nav-link:hover {{
   color: var(--text-primary);
   background: rgba(255, 255, 255, 0.04);
+  transform: translateY(-1px);
 }}
 .odt-nav-link.active {{
   color: var(--accent-blue);
-  border-bottom-color: var(--accent-blue);
-  background: rgba(59, 130, 246, 0.06);
-  box-shadow: 0 1px 0 0 var(--accent-blue);
+  border-color: rgba(59, 130, 246, 0.25);
+  background: rgba(59, 130, 246, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.12);
+}}
+.odt-nav-browse {{
+  position: relative;
+  flex-shrink: 0;
+}}
+.odt-nav-browse summary {{
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  padding: 9px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.03);
+  transition: border-color var(--duration-fast) ease, background var(--duration-fast) ease;
+}}
+.odt-nav-browse summary::-webkit-details-marker {{ display: none; }}
+.odt-nav-browse summary::after {{
+  content: '▾';
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+  transition: transform var(--duration-fast) ease;
+}}
+.odt-nav-browse summary:hover,
+.odt-nav-browse[open] summary {{
+  border-color: rgba(59, 130, 246, 0.22);
+  background: rgba(59, 130, 246, 0.08);
+}}
+.odt-nav-browse[open] summary::after {{
+  transform: rotate(180deg);
+}}
+.odt-nav-panel {{
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(860px, calc(100vw - 32px));
+  padding: 18px;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(18, 22, 32, 0.97);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+}}
+.odt-nav-panel-header {{
+  margin-bottom: 14px;
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}}
+.odt-nav-panel-grid {{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}}
+.odt-nav-panel-group {{
+  min-width: 0;
+}}
+.odt-nav-group {{
+  display: block;
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-tertiary);
+  margin-bottom: 8px;
+}}
+.odt-nav-panel-links {{
+  display: grid;
+  gap: 6px;
+}}
+.odt-nav-panel-link {{
+  display: block;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-decoration: none;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  transition: color var(--duration-fast) ease, background var(--duration-fast) ease, border-color var(--duration-fast) ease;
+}}
+.odt-nav-panel-link:hover {{
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.04);
+}}
+.odt-nav-panel-link.active {{
+  color: var(--accent-blue);
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.18);
 }}
 .odt-nav-toggle {{
   display: none;
@@ -1027,6 +1141,13 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
 }}
 
 /* === Responsive === */
+@media (max-width: 1200px) {{
+  .odt-nav-current {{ display: none; }}
+  .odt-nav {{
+    padding: 0 20px;
+    gap: 12px;
+  }}
+}}
 @media (max-width: 900px) {{
   .odt-nav {{
     flex-wrap: wrap;
@@ -1038,13 +1159,41 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
     display: none;
     width: 100%;
     flex-direction: column;
-    padding: var(--space-sm) 0;
+    align-items: stretch;
+    padding: var(--space-sm) 0 4px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
   }}
   .odt-nav-links.open {{ display: flex; }}
-  .odt-nav-link {{ padding: var(--space-sm) 0; border-bottom: none; }}
-  .odt-nav-link.active {{ background: rgba(59, 130, 246, 0.08); border-radius: var(--radius-sm); padding: var(--space-sm) 10px; }}
-  .odt-nav-group {{ padding: var(--space-sm) 0 var(--space-xs); }}
-  .odt-nav-group::before {{ display: none; }}
+  .odt-nav-primary {{
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    overflow: visible;
+  }}
+  .odt-nav-link {{
+    padding: 10px 12px;
+    border-color: var(--border-subtle);
+    background: rgba(255, 255, 255, 0.02);
+  }}
+  .odt-nav-link.active {{
+    background: rgba(59, 130, 246, 0.12);
+    border-radius: 999px;
+    padding: 10px 12px;
+  }}
+  .odt-nav-current {{ display: none; }}
+  .odt-nav-browse {{ width: 100%; }}
+  .odt-nav-browse summary {{
+    width: 100%;
+    justify-content: space-between;
+  }}
+  .odt-nav-panel {{
+    position: static;
+    width: 100%;
+    margin-top: 10px;
+    max-height: none;
+    box-shadow: none;
+  }}
+  .odt-nav-panel-grid {{ grid-template-columns: 1fr; max-height: none; }}
   .odt-context-strip {{ padding: var(--space-sm) 16px; gap: var(--space-sm); flex-direction: column; }}
   .odt-context-strip .odt-ctx-dot {{ display: none; }}
   .odt-container {{ padding: 20px 16px 32px; }}
@@ -1065,6 +1214,7 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
 }}
 @media (max-width: 480px) {{
   .odt-kpi-row {{ grid-template-columns: 1fr; }}
+  .odt-nav-primary {{ grid-template-columns: 1fr; }}
   .odt-header h1 {{ font-size: 1.625rem; }}
   .odt-kpi-head {{
     flex-direction: column;
@@ -1792,25 +1942,51 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
 
 
 def get_navigation_html(current_report_id: str) -> str:
-    """Sticky top navigation bar with grouped report links."""
+    """Sticky top navigation bar with curated primary links and grouped browse menu."""
     groups: dict[str, list[dict]] = {}
     for r in REPORT_REGISTRY:
         groups.setdefault(r["group"], []).append(r)
 
-    links = []
-    preferred_group_order = ["Core", "Clinical", "Advanced", "Context"]
+    report_lookup = {r["id"]: r for r in REPORT_REGISTRY}
+    current_report = report_lookup.get(current_report_id, report_lookup.get("home"))
+
+    def _is_active(report: dict) -> bool:
+        return report["id"] == current_report_id
+
+    primary_links = []
+    for report_id in NAV_PRIMARY_IDS:
+        report = report_lookup.get(report_id)
+        if report is None:
+            continue
+        active = " active" if _is_active(report) else ""
+        primary_links.append(
+            f'<a class="odt-nav-link{active}" data-nav-report-id="{escape(report["id"])}" '
+            f'href="{report["file"]}">{escape(report["title"])}</a>'
+        )
+
+    group_blocks = []
+    preferred_group_order = ["Core", "Clinical", "Advanced", "Comparative", "Statistical", "Context"]
     ordered_group_names = [g for g in preferred_group_order if g in groups]
     ordered_group_names.extend(g for g in groups if g not in ordered_group_names)
 
     for group_name in ordered_group_names:
         reports = groups[group_name]
-        links.append(f'<span class="odt-nav-group">{group_name}</span>')
+        panel_links = []
         for r in reports:
-            active = " active" if r["id"] == current_report_id else ""
-            links.append(
-                f'<a class="odt-nav-link{active}" href="{r["file"]}">'
-                f'{r["title"]}</a>'
+            active = " active" if _is_active(r) else ""
+            panel_links.append(
+                f'<a class="odt-nav-panel-link{active}" data-nav-report-id="{escape(r["id"])}" href="{r["file"]}">'
+                f'{escape(r["title"])}</a>'
             )
+        group_blocks.append(
+            f'<div class="odt-nav-panel-group">'
+            f'<span class="odt-nav-group">{escape(group_name)}</span>'
+            f'<div class="odt-nav-panel-links">{"".join(panel_links)}</div>'
+            f'</div>'
+        )
+
+    current_label = escape(current_report["title"]) if current_report is not None else "Dashboard"
+    total_reports = sum(1 for report in REPORT_REGISTRY if report["id"] != "home")
 
     return (
         '<nav class="odt-nav">\n'
@@ -1821,7 +1997,17 @@ def get_navigation_html(current_report_id: str) -> str:
         "onclick=\"let n=this.nextElementSibling;n.classList.toggle('open');"
         "this.setAttribute('aria-expanded',n.classList.contains('open'))\" "
         'aria-label="Menu" aria-expanded="false">&#9776;</button>\n'
-        f'  <div class="odt-nav-links">{"".join(links)}</div>\n'
+        f'  <div class="odt-nav-links">'
+        f'<div class="odt-nav-primary">{"".join(primary_links)}</div>'
+        f'<div class="odt-nav-current" data-default-label="{current_label}">Viewing: {current_label}</div>'
+        f'<details class="odt-nav-browse">'
+        f'<summary>Browse reports</summary>'
+        f'<div class="odt-nav-panel">'
+        f'<div class="odt-nav-panel-header">All reports · {total_reports} destinations</div>'
+        f'<div class="odt-nav-panel-grid">{"".join(group_blocks)}</div>'
+        f'</div>'
+        f'</details>'
+        f'</div>\n'
         '</nav>'
     )
 
@@ -2105,6 +2291,29 @@ const observer = new IntersectionObserver((entries) => {{
 document.querySelectorAll('.chart-box').forEach(el => observer.observe(el));
 </script>"""
 
+    nav_hash_script = """
+<script>
+const syncRoadmapNavState = () => {
+  const path = window.location.pathname || "";
+  if (!path.endsWith("/roadmap.html") && !path.endsWith("roadmap.html")) return;
+
+  const activeId = window.location.hash === "#honest" ? "about" : "roadmap";
+  const currentLabel = activeId === "about" ? "About" : "Next Steps";
+
+  document.querySelectorAll("[data-nav-report-id='about'], [data-nav-report-id='roadmap']").forEach((el) => {
+    el.classList.toggle("active", el.dataset.navReportId === activeId);
+  });
+
+  const current = document.querySelector(".odt-nav-current");
+  if (current) {
+    current.textContent = `Viewing: ${currentLabel}`;
+  }
+};
+
+window.addEventListener("DOMContentLoaded", syncRoadmapNavState);
+window.addEventListener("hashchange", syncRoadmapNavState);
+</script>"""
+
     extra_script = f"\n<script>\n{extra_js}\n</script>" if extra_js else ""
 
     return f"""<!DOCTYPE html>
@@ -2139,6 +2348,6 @@ document.querySelectorAll('.chart-box').forEach(el => observer.observe(el));
   <div class="odt-footer-fine">Updated daily at 06:15 CET &middot; Last generated: {generated}</div>
   <div class="odt-footer-fine">This project is not affiliated with, endorsed by, or sponsored by Oura Health Oy. Oura&reg; is a registered trademark of Oura Health Oy.</div>
 </div>
-{get_plotly_enhancer_js()}{chart_js}{extra_script}
+{get_plotly_enhancer_js()}{chart_js}{nav_hash_script}{extra_script}
 </body>
 </html>"""

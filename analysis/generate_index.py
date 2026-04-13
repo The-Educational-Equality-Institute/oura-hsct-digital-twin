@@ -8,6 +8,8 @@ Must run AFTER all other analysis scripts so JSON metrics exist.
 """
 import json
 import sys
+from datetime import date
+from html import escape
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -56,7 +58,7 @@ REPORT_META: dict[str, dict] = {
         "icon": "&#9829;",  # heart
     },
     "biomarkers": {
-        "desc": "Composite biomarker indices combining multiple Oura signals into clinical-grade scores.",
+        "desc": "Composite biomarker indices combining multiple Oura signals into research-use summary scores.",
         "icon": "&#9733;",  # star
     },
     "sleep": {
@@ -123,7 +125,202 @@ REPORT_META: dict[str, dict] = {
         "desc": "Anomaly fingerprinting and clustering: how do bad days manifest differently?",
         "icon": "&#9889;",
     },
+    "comp_breathing": {
+        "desc": "Respiratory-rate trends, week-over-week shifts, and outlier nights against recent baseline.",
+        "icon": "&#8767;",
+    },
+    "comp_temperature": {
+        "desc": "Temperature deviation tracking, excursion alerts, and post-treatment change patterns.",
+        "icon": "&#9788;",
+    },
+    "mitch_standalone": {
+        "desc": "Post-stroke patient (P2): HRV, HR, sleep, and activity dashboard.",
+        "icon": "&#9829;",
+    },
+    "wenche_standalone": {
+        "desc": "Healthy control (P3): baseline HRV, HR, sleep, and activity reference.",
+        "icon": "&#9829;",
+    },
+    "mitch_changepoints": {
+        "desc": "Patient 2 changepoint scan of HRV, sleep, and recovery markers around key timeline events.",
+        "icon": "&#10697;",
+    },
+    "weekly": {
+        "desc": "One-page weekly tracker with watchpoints, week-over-week deltas, and clinician-style summary text.",
+        "icon": "&#128197;",
+    },
+    "forecast": {
+        "desc": "Near-term HRV and heart-rate recovery forecast from the current post-treatment trajectory.",
+        "icon": "&#128200;",
+    },
+    "piecewise_its": {
+        "desc": "Piecewise ITS regression with AR(1) errors: two-intervention model with BB date sensitivity analysis.",
+        "icon": "&#8982;",  # segmented bar
+    },
+    "sequential_ci": {
+        "desc": "Sequential Bayesian CausalImpact isolating Jakavi and beta-blocker effects in separate runs.",
+        "icon": "&#8623;",  # branching arrow
+    },
+    "placebo": {
+        "desc": "Falsification tests at 20 random pre-treatment dates to calibrate false positive rates.",
+        "icon": "&#9746;",  # x-mark
+    },
+    "tau_u": {
+        "desc": "Tau-U and NAP effect sizes for single-case experimental design with baseline trend correction.",
+        "icon": "&#964;",  # tau
+    },
 }
+
+GROUP_SUMMARIES: dict[str, str] = {
+    "Core": "Daily-use entry points for current status, longitudinal trends, and the interactive 3D overview.",
+    "Clinical": "Treatment-response, risk-screening, and forecasting reports most relevant for direct follow-up.",
+    "Advanced": "Model-heavy analyses for latent state tracking, anomaly detection, and higher-order physiology.",
+    "Individual": "Per-patient standalone dashboards for P2 (post-stroke) and P3 (healthy control).",
+    "Comparative": "Cross-patient and cross-domain comparisons that add benchmark context to the primary case.",
+    "Statistical": "Inference and falsification modules testing whether intervention timing holds up under scrutiny.",
+    "Context": "Method notes, limitations, and roadmap material for interpreting the rest of the dashboard responsibly.",
+}
+
+START_HERE_REPORTS: list[dict[str, str]] = [
+    {
+        "id": "weekly",
+        "eyebrow": "Current status",
+        "reason": "Fastest way to see this week's watchpoints, deltas, and ruxolitinib day count.",
+    },
+    {
+        "id": "full_analysis",
+        "eyebrow": "Full context",
+        "reason": "Best overview of baseline, trend, and burden across the full observation window.",
+    },
+    {
+        "id": "piecewise_its",
+        "eyebrow": "Intervention effect",
+        "reason": "Most direct test of Jakavi and beta-blocker timing, including sensitivity analysis.",
+    },
+]
+
+
+def _format_date(value: str | None) -> str:
+    """Return a readable date label, preserving unknown inputs."""
+    if not value:
+        return "Unknown"
+    try:
+        return date.fromisoformat(value).strftime("%b %d, %Y")
+    except ValueError:
+        return value
+
+
+def _report_count(group: str | None = None) -> int:
+    """Count reports shown on the homepage, optionally within one group."""
+    return sum(
+        1
+        for report in REPORT_REGISTRY
+        if report["id"] != "home" and (group is None or report["group"] == group)
+    )
+
+
+def _report_lookup(report_id: str) -> dict | None:
+    """Resolve a report entry from the registry."""
+    for report in REPORT_REGISTRY:
+        if report["id"] == report_id:
+            return report
+    return None
+
+
+def _fallback_description(report: dict) -> str:
+    """Provide a reasonable description when card metadata is missing."""
+    return (
+        f"{report['title']} report in the {report['group'].lower()} section."
+    )
+
+
+def hero_overview() -> str:
+    """Landing-page overview with current watchpoints and quick facts."""
+    full = _load_json("oura_full_analysis.json")
+    weekly = _load_json("weekly_tracker.json")
+
+    data_start = full.get("data_start") or full.get("data_range", {}).get("start")
+    data_end = full.get("data_end") or full.get("data_range", {}).get("end")
+    n_days = full.get("data_range", {}).get("n_days")
+    total_reports = _report_count()
+    days_on_rux = weekly.get("days_on_ruxolitinib")
+
+    badges = [
+        f'<span class="idx-badge">Exploratory decision support</span>',
+        f'<span class="idx-badge">Consumer wearable data</span>',
+        f'<span class="idx-badge">{total_reports} linked reports</span>',
+    ]
+    if days_on_rux is not None:
+        badges.append(
+            f'<span class="idx-badge">Day {int(days_on_rux)} on ruxolitinib</span>'
+        )
+
+    facts = [
+        (
+            "Window",
+            f"{_format_date(data_start)} to {_format_date(data_end)}"
+            if data_start and data_end
+            else "Unavailable",
+        ),
+        ("Coverage", f"{int(n_days)} days" if n_days is not None else "Unavailable"),
+        ("Latest sync", _format_date(data_end)),
+        ("Reports live", str(total_reports)),
+    ]
+
+    fact_html = "".join(
+        f'<div class="idx-fact-card">'
+        f'<div class="idx-fact-label">{escape(label)}</div>'
+        f'<div class="idx-fact-value">{escape(value)}</div>'
+        f'</div>'
+        for label, value in facts
+    )
+
+    watchpoints = weekly.get("doctor_summary") or []
+    if watchpoints:
+        watch_html = "".join(
+            f'<li>{escape(item)}</li>' for item in watchpoints[:4]
+        )
+    else:
+        watch_html = (
+            "<li>Weekly tracker summary is not available yet. Re-run the report suite to populate live watchpoints.</li>"
+        )
+
+    mean_hr = full.get("hr_daily_mean")
+    sleep_hours = full.get("sleep_duration_avg_hrs")
+    quick_lines = []
+    if mean_hr is not None:
+        quick_lines.append(f"Mean HR {float(mean_hr):.1f} bpm across the full window.")
+    if sleep_hours is not None:
+        quick_lines.append(f"Average sleep duration {float(sleep_hours):.1f} h/night.")
+    if not quick_lines:
+        quick_lines.append("Full-window summary metrics are not available yet.")
+
+    quick_html = "".join(f"<li>{escape(line)}</li>" for line in quick_lines)
+
+    return (
+        f'<section class="idx-hero">'
+        f'<div class="idx-hero-main">'
+        f'<div class="idx-hero-kicker">Oura Digital Twin</div>'
+        f'<h1 class="idx-hero-title">Start with the signal, then drill into treatment response and causal evidence.</h1>'
+        f'<p class="idx-hero-copy">'
+        f'This dashboard organizes Oura ring time-series into a single review surface for weekly status, longitudinal context, intervention follow-up, and statistical stress tests. '
+        f'It is designed for exploratory monitoring and hypothesis generation, not as a clinical-grade device.'
+        f'</p>'
+        f'<div class="idx-badge-row">{"".join(badges)}</div>'
+        f'</div>'
+        f'<div class="idx-fact-grid">{fact_html}</div>'
+        f'</section>'
+        f'<div class="idx-summary-grid">'
+        f'<div class="idx-panel">'
+        f'<div class="idx-panel-label">Current watchpoints</div>'
+        f'<ul class="idx-panel-list">{watch_html}</ul>'
+        f'</div>'
+        f'<div class="idx-panel">'
+        f'<div class="idx-panel-label">Quick context</div>'
+        f'<ul class="idx-panel-list">{quick_html}</ul>'
+        f'</div>'
+        f'</div>'
+    )
 
 
 def hero_kpis() -> str:
@@ -207,8 +404,15 @@ def hero_kpis() -> str:
 # Treatment response highlight
 # ---------------------------------------------------------------------------
 
-# Metric keys that showed statistical significance, in display order
-_SIGNIFICANT_METRICS = ["hrv_average", "hr_lowest", "hr_average", "efficiency"]
+# Metric display order for the treatment-response summary
+_TREATMENT_METRIC_ORDER = [
+    "hrv_average",
+    "hr_lowest",
+    "hr_average",
+    "efficiency",
+    "deep_sleep_hours",
+    "steps",
+]
 
 # Trajectory metrics to show in the three-period table
 _TRAJECTORY_METRICS = ["hrv_average", "hr_lowest", "hr_average"]
@@ -224,12 +428,18 @@ def treatment_response_summary() -> str:
     if not metrics:
         return ""
 
-    # Build KPI cards for the 4 significant metrics
-    sig_cards = []
-    for key in _SIGNIFICANT_METRICS:
-        m = metrics.get(key)
-        if m is None:
+    significant_metrics = []
+    for key in _TREATMENT_METRIC_ORDER:
+        metric = metrics.get(key)
+        if metric is None:
             continue
+        comparison = metric.get("comparison", {})
+        if comparison.get("significant_corrected"):
+            significant_metrics.append((key, metric))
+
+    # Build KPI cards for corrected-significant metrics only
+    sig_cards = []
+    for key, m in significant_metrics:
         comp = m.get("comparison", {})
         if not comp:
             continue
@@ -304,7 +514,7 @@ def treatment_response_summary() -> str:
         f'<div class="tx-summary-box">'
         f'<p class="tx-intro">'
         f'3-week post-ruxolitinib assessment &mdash; '
-        f'4 of 6 biometric metrics show statistically significant improvement '
+        f'{len(significant_metrics)} of {len(metrics)} biometric metrics show statistically significant improvement '
         f'(Mann-Whitney U, Bonferroni-corrected)'
         f'</p>'
         f'<div class="tx-kpi-row">{"".join(sig_cards)}</div>'
@@ -318,6 +528,34 @@ def treatment_response_summary() -> str:
     return make_section("Treatment Response: Ruxolitinib", inner)
 
 
+def start_here_section() -> str:
+    """Curated entry points so the landing page feels navigable."""
+    cards = []
+    for item in START_HERE_REPORTS:
+        report = _report_lookup(item["id"])
+        if report is None:
+            continue
+        meta = REPORT_META.get(report["id"], {})
+        desc = meta.get("desc") or _fallback_description(report)
+        icon = meta.get("icon", "&#9654;")
+        cards.append(
+            f'<a href="{report["file"]}" class="idx-priority-card">'
+            f'<div class="idx-priority-eyebrow">{escape(item["eyebrow"])}</div>'
+            f'<div class="idx-priority-head">'
+            f'<div class="idx-priority-icon">{icon}</div>'
+            f'<div class="idx-priority-title">{escape(report["title"])}</div>'
+            f'</div>'
+            f'<div class="idx-priority-reason">{escape(item["reason"])}</div>'
+            f'<div class="idx-priority-desc">{escape(desc)}</div>'
+            f'</a>'
+        )
+
+    if not cards:
+        return ""
+
+    return make_section("Start Here", f'<div class="idx-priority-grid">{"".join(cards)}</div>')
+
+
 def report_cards() -> str:
     """Grid of cards linking to each report, grouped by category."""
     groups: dict[str, list[dict]] = {}
@@ -326,7 +564,7 @@ def report_cards() -> str:
             continue
         groups.setdefault(r["group"], []).append(r)
 
-    preferred_order = ["Core", "Clinical", "Advanced", "Comparative", "Context"]
+    preferred_order = ["Core", "Clinical", "Advanced", "Comparative", "Statistical", "Context"]
     ordered = [g for g in preferred_order if g in groups]
     ordered.extend(g for g in groups if g not in ordered)
 
@@ -335,6 +573,7 @@ def report_cards() -> str:
         "Clinical": ACCENT_RED,
         "Advanced": ACCENT_PURPLE,
         "Comparative": ACCENT_CYAN,
+        "Statistical": ACCENT_AMBER,
         "Context": ACCENT_GREEN,
     }
 
@@ -342,11 +581,18 @@ def report_cards() -> str:
     for group_name in ordered:
         reports = groups[group_name]
         color = group_colors.get(group_name, ACCENT_AMBER)
+        group_summary = GROUP_SUMMARIES.get(group_name, "Supporting reports in this section.")
+        intro = (
+            f'<div class="idx-group-intro">'
+            f'<div class="idx-group-copy">{escape(group_summary)}</div>'
+            f'<div class="idx-group-chip">{_report_count(group_name)} reports</div>'
+            f'</div>'
+        )
 
         cards_html = []
         for r in reports:
             meta = REPORT_META.get(r["id"], {})
-            desc = meta.get("desc", "")
+            desc = meta.get("desc") or _fallback_description(r)
             icon = meta.get("icon", "&#9654;")
 
             cards_html.append(
@@ -361,33 +607,227 @@ def report_cards() -> str:
                 f'</a>'
             )
 
-        section_html = f'<div class="idx-card-grid">{"".join(cards_html)}</div>'
+        section_html = intro + f'<div class="idx-card-grid">{"".join(cards_html)}</div>'
         html_parts.append(make_section(group_name, section_html))
 
     return "\n".join(html_parts)
 
 
 EXTRA_CSS = f"""
-/* Dashboard card grid */
+/* Homepage hero */
+.idx-hero {{
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 1fr);
+  gap: 18px;
+  padding: 22px 24px;
+  margin-bottom: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(34, 211, 238, 0.10), transparent 36%),
+    linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(16, 185, 129, 0.04)),
+    {BG_ELEVATED};
+  border: 1px solid {BORDER_SUBTLE};
+  border-radius: 16px;
+}}
+.idx-hero-kicker {{
+  color: {ACCENT_CYAN};
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}}
+.idx-hero-title {{
+  margin: 0 0 10px 0;
+  font-size: clamp(1.7rem, 2.5vw, 2.4rem);
+  line-height: 1.12;
+}}
+.idx-hero-copy {{
+  margin: 0;
+  max-width: 740px;
+  color: {TEXT_SECONDARY};
+  font-size: 0.97rem;
+  line-height: 1.7;
+}}
+.idx-badge-row {{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}}
+.idx-badge {{
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(34, 211, 238, 0.18);
+  background: rgba(15, 23, 42, 0.42);
+  color: {TEXT_PRIMARY};
+  font-size: 0.78rem;
+}}
+.idx-fact-grid {{
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}}
+.idx-fact-card {{
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.35);
+  border: 1px solid {BORDER_SUBTLE};
+}}
+.idx-fact-label {{
+  color: {TEXT_TERTIARY};
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 6px;
+}}
+.idx-fact-value {{
+  color: {TEXT_PRIMARY};
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.45;
+}}
+.idx-summary-grid {{
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 10px;
+}}
+.idx-panel {{
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: {BG_ELEVATED};
+  border: 1px solid {BORDER_SUBTLE};
+}}
+.idx-panel-label {{
+  margin-bottom: 10px;
+  color: {TEXT_PRIMARY};
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}}
+.idx-panel-list {{
+  margin: 0;
+  padding-left: 18px;
+  color: {TEXT_SECONDARY};
+}}
+.idx-panel-list li {{
+  margin-bottom: 8px;
+  line-height: 1.55;
+}}
+
+/* Start-here cards */
+.idx-priority-grid {{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 14px;
+}}
+.idx-priority-card {{
+  display: block;
+  padding: 18px 18px 20px 18px;
+  border-radius: 14px;
+  border: 1px solid {BORDER_SUBTLE};
+  background:
+    linear-gradient(180deg, rgba(59, 130, 246, 0.06), rgba(15, 23, 42, 0)),
+    {BG_ELEVATED};
+  text-decoration: none;
+  color: {TEXT_PRIMARY};
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}}
+.idx-priority-card:hover,
+.idx-priority-card:focus-visible {{
+  transform: translateY(-3px);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.28);
+  border-color: rgba(59, 130, 246, 0.35);
+}}
+.idx-priority-eyebrow {{
+  color: {ACCENT_BLUE};
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 10px;
+}}
+.idx-priority-head {{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}}
+.idx-priority-icon {{
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: rgba(59, 130, 246, 0.12);
+  color: {ACCENT_CYAN};
+  font-size: 1.2rem;
+}}
+.idx-priority-title {{
+  font-size: 1.05rem;
+  font-weight: 700;
+}}
+.idx-priority-reason {{
+  color: {TEXT_PRIMARY};
+  font-size: 0.92rem;
+  line-height: 1.55;
+  margin-bottom: 8px;
+}}
+.idx-priority-desc {{
+  color: {TEXT_SECONDARY};
+  font-size: 0.82rem;
+  line-height: 1.5;
+}}
+
+/* Group summaries and report cards */
+.idx-group-intro {{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}}
+.idx-group-copy {{
+  color: {TEXT_SECONDARY};
+  font-size: 0.85rem;
+  line-height: 1.55;
+  max-width: 780px;
+}}
+.idx-group-chip {{
+  flex-shrink: 0;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.10);
+  border: 1px solid {BORDER_SUBTLE};
+  color: {TEXT_TERTIARY};
+  font-size: 0.76rem;
+}}
 .idx-card-grid {{
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  gap: 14px;
 }}
 .idx-card {{
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 14px;
   padding: 16px 18px;
   background: {BG_ELEVATED};
+  border: 1px solid {BORDER_SUBTLE};
   border-radius: 10px;
   text-decoration: none;
   color: {TEXT_PRIMARY};
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }}
-.idx-card:hover {{
-  transform: translateY(-2px);
-  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.15);
+.idx-card:hover,
+.idx-card:focus-visible {{
+  transform: translateY(-3px);
+  box-shadow: 0 8px 22px rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.28);
 }}
 .idx-card-icon {{
   font-size: 1.6rem;
@@ -413,13 +853,6 @@ EXTRA_CSS = f"""
   font-size: 1.4rem;
   color: {TEXT_TERTIARY};
   flex-shrink: 0;
-}}
-.idx-hero-text {{
-  color: {TEXT_SECONDARY};
-  font-size: 0.9rem;
-  line-height: 1.6;
-  max-width: 720px;
-  margin-bottom: 8px;
 }}
 
 /* Treatment response summary */
@@ -517,6 +950,23 @@ EXTRA_CSS = f"""
 .tx-link:hover {{
   text-decoration: underline;
 }}
+
+@media (max-width: 920px) {{
+  .idx-hero,
+  .idx-summary-grid {{
+    grid-template-columns: 1fr;
+  }}
+}}
+
+@media (max-width: 720px) {{
+  .idx-group-intro {{
+    flex-direction: column;
+    align-items: flex-start;
+  }}
+  .idx-fact-grid {{
+    grid-template-columns: 1fr;
+  }}
+}}
 """
 
 
@@ -525,16 +975,13 @@ def main() -> None:
     post_days = full.get("post_days")
     data_end = full.get("data_end") or full.get("data_range", {}).get("end")
 
-    hero_text = (
-        '<div class="idx-hero-text">'
-        "Continuous wearable monitoring via Oura Gen 3. "
-        "12 analysis modules run daily, producing interactive HTML reports "
-        "with clinical-grade signal processing, causal inference, "
-        "and predictive modeling."
-        "</div>"
+    body = (
+        hero_overview()
+        + hero_kpis()
+        + start_here_section()
+        + treatment_response_summary()
+        + report_cards()
     )
-
-    body = hero_text + hero_kpis() + treatment_response_summary() + report_cards()
 
     html = wrap_html(
         title="Dashboard",

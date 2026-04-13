@@ -41,4 +41,15 @@ PROFILES = {
         "refresh_env": "MITCH_OURA_REFRESH_TOKEN",
         "ring_gen": 3,
     },
+    "wenche": {
+        "label": "Healthy Control",
+        "age": 61,
+        "condition": "Healthy (no known cardiovascular or immunological conditions)",
+        "database": PROJECT_ROOT / "data" / "wenche.db",
+        "data_start": date(2026, 3, 24),
+        # No major event — healthy control
+        "token_env": "WENCHE_OURA_ACCESS_TOKEN",
+        "refresh_env": "WENCHE_OURA_REFRESH_TOKEN",
+        "ring_gen": 4,
+    },
 }

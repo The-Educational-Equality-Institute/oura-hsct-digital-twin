@@ -802,6 +802,148 @@ def run_bb_sensitivity(daily: pd.DataFrame) -> dict[str, Any]:
     return results
 
 
+def _summarize_bb_sensitivity_entries(entries: list[dict[str, Any]]) -> dict[str, int]:
+    """Summarize support and significance across shifted BB dates."""
+    attempted_total = len(entries)
+    successful_entries = [e for e in entries if not e.get("error")]
+    supported_entries = [e for e in successful_entries if e.get("support_status") == "supported"]
+    underpowered_entries = [e for e in successful_entries if e.get("support_status") != "supported"]
+    failed_entries = [e for e in entries if e.get("error")]
+
+    return {
+        "attempted_total": attempted_total,
+        "successful_total": len(successful_entries),
+        "supported_total": len(supported_entries),
+        "underpowered_total": len(underpowered_entries),
+        "failed_total": len(failed_entries),
+        "supported_sig_total": sum(1 for e in supported_entries if e.get("b5_significant")),
+        "successful_sig_total": sum(1 for e in successful_entries if e.get("b5_significant")),
+        "supported_offsets": [e["offset"] for e in supported_entries],
+        "underpowered_offsets": [e["offset"] for e in underpowered_entries],
+        "failed_offsets": [e["offset"] for e in failed_entries],
+    }
+
+
+def _classify_bb_sensitivity_summary(summary: dict[str, Any]) -> tuple[str, str]:
+    """Classify BB-date sensitivity robustness and return label + detail."""
+    underpowered_offsets = summary["underpowered_offsets"]
+    forward_limited = bool(underpowered_offsets) and all(offset > 0 for offset in underpowered_offsets)
+
+    if summary["supported_total"] == 0:
+        return "INSUFFICIENT SUPPORT", "0 supported shifts"
+
+    if summary["supported_sig_total"] == summary["supported_total"]:
+        if summary["underpowered_total"] == 0 and summary["failed_total"] == 0:
+            return "FULLY ROBUST", f'{summary["supported_sig_total"]}/{summary["attempted_total"]} attempted'
+        if forward_limited and summary["failed_total"] == 0:
+            return (
+                "FORWARD-LIMITED",
+                f'{summary["supported_sig_total"]}/{summary["supported_total"]} supported; '
+                f'{summary["underpowered_total"]}/{summary["attempted_total"]} forward shift(s) underpowered',
+            )
+        return (
+            "SUPPORTED ONLY",
+            f'{summary["supported_sig_total"]}/{summary["supported_total"]} supported; '
+            f'{summary["underpowered_total"]} underpowered, {summary["failed_total"]} failed',
+        )
+
+    if summary["supported_sig_total"] == 0:
+        return "SENSITIVE", f'0/{summary["supported_total"]} supported'
+
+    return "MIXED", f'{summary["supported_sig_total"]}/{summary["supported_total"]} supported'
+
+
+def _format_offset_list(offsets: list[int]) -> str:
+    """Format integer day offsets for compact prose."""
+    if not offsets:
+        return "none"
+    return ", ".join(f"{offset:+d}d" for offset in offsets)
+
+
+def _build_sensitivity_interpretation_payload(sensitivity: dict[str, Any]) -> dict[str, Any]:
+    """Plain-text interpretation payload for report prose and JSON export."""
+    overall = [
+        "The beta-blocker date sensitivity analysis should not be described as a symmetric ±3-day robustness check.",
+        f"Several future-shifted models fall near the end of the time series and therefore have fewer than {MIN_POST_BB_DAYS} post-beta-blocker observations.",
+        "Those forward shifts are still shown for transparency, but they are treated as support-limited rather than equal-weight evidence.",
+    ]
+
+    per_metric: dict[str, str] = {}
+    for metric, entries in sensitivity.items():
+        label = METRICS[metric][0]
+        summary = _summarize_bb_sensitivity_entries(entries)
+        status, _detail = _classify_bb_sensitivity_summary(summary)
+        supported_offsets = summary["supported_offsets"]
+        underpowered_offsets = summary["underpowered_offsets"]
+
+        if status == "FULLY ROBUST":
+            sentence = (
+                f"{label}: the beta-blocker slope term remained significant across all attempted shifts "
+                f"({_format_offset_list(supported_offsets)}), so this metric is fully robust to the tested date perturbation."
+            )
+        elif status == "FORWARD-LIMITED":
+            sentence = (
+                f"{label}: the beta-blocker slope term remained significant in every supported re-fit "
+                f"({_format_offset_list(supported_offsets)}). Later forward shifts "
+                f"({_format_offset_list(underpowered_offsets)}) were underpowered because the post-beta-blocker window "
+                f"was shorter than {MIN_POST_BB_DAYS} observations, so this should be described as forward-limited rather than fully robust."
+            )
+        elif status == "SUPPORTED ONLY":
+            sentence = (
+                f"{label}: all supported shifts remained significant, but underpowered or failed shifts "
+                f"({_format_offset_list(underpowered_offsets + summary['failed_offsets'])}) limit how strongly date robustness can be claimed."
+            )
+        elif status == "MIXED":
+            sentence = (
+                f"{label}: supported shifts showed mixed significance, so the estimated beta-blocker slope is sensitive to plausible date changes."
+            )
+        elif status == "SENSITIVE":
+            sentence = (
+                f"{label}: none of the supported shifts remained significant, so the estimated beta-blocker slope is not robust to plausible date changes."
+            )
+        else:
+            sentence = (
+                f"{label}: the post-beta-blocker window is too short to support a meaningful date sensitivity claim."
+            )
+
+        per_metric[metric] = sentence
+
+    manuscript_text = (
+        "Suggested manuscript wording: "
+        "\"The beta-blocker sensitivity analysis supported the observed post-beta-blocker slope effect in all adequately "
+        "supported re-fits, but forward-shifted models near the series end were underpowered because they contained fewer "
+        f"than {MIN_POST_BB_DAYS} post-beta-blocker observations. We therefore describe the analysis as forward-limited "
+        "rather than fully robust to symmetric ±3-day date uncertainty.\""
+    )
+
+    return {
+        "overall": overall,
+        "per_metric": per_metric,
+        "manuscript_wording": manuscript_text,
+    }
+
+
+def _build_sensitivity_interpretation_section(sensitivity: dict[str, Any]) -> str:
+    """Reviewer-safe narrative interpretation for the BB-date sensitivity analysis."""
+    payload = _build_sensitivity_interpretation_payload(sensitivity)
+    metric_lines = [
+        f"<li>{sentence}</li>"
+        for sentence in payload["per_metric"].values()
+    ]
+
+    content = f"""
+    <div style="color:{TEXT_SECONDARY};line-height:1.7;font-size:0.9rem;">
+      <p>{payload["overall"][0]}</p>
+      <p>{payload["overall"][1]} {payload["overall"][2]}</p>
+      <ul style="margin:12px 0 12px 18px;padding:0;">
+        {"".join(metric_lines)}
+      </ul>
+      <p><strong>{payload["manuscript_wording"]}</strong></p>
+    </div>
+    """
+    return content
+
+
 def _build_sensitivity_section(sensitivity: dict[str, Any]) -> str:
     """Build HTML section for BB date sensitivity analysis."""
     rows_per_metric: list[str] = []
@@ -810,6 +952,16 @@ def _build_sensitivity_section(sensitivity: dict[str, Any]) -> str:
         label = METRICS[metric][0]
         unit = METRICS[metric][1]
         color = METRIC_COLORS.get(metric, ACCENT_BLUE)
+        summary = _summarize_bb_sensitivity_entries(entries)
+        underpowered_offsets = summary["underpowered_offsets"]
+        failed_offsets = summary["failed_offsets"]
+        badge_label, badge_detail = _classify_bb_sensitivity_summary(summary)
+        if badge_label == "FULLY ROBUST":
+            badge_color = ACCENT_GREEN
+        elif badge_label in {"FORWARD-LIMITED", "SUPPORTED ONLY", "MIXED"}:
+            badge_color = ACCENT_AMBER
+        else:
+            badge_color = ACCENT_RED
 
         table_rows = []
         for e in entries:
@@ -818,7 +970,7 @@ def _build_sensitivity_section(sensitivity: dict[str, Any]) -> str:
                 table_rows.append(
                     f'<tr><td>{e["offset"]:+d}</td><td>{e.get("bb_date", "?")}</td>'
                     f'<td>{n_post_str}</td>'
-                    f'<td colspan="5" style="color:{ACCENT_RED}">fit failed</td></tr>'
+                    f'<td colspan="6" style="color:{ACCENT_RED}">fit failed</td></tr>'
                 )
                 continue
 
@@ -826,6 +978,8 @@ def _build_sensitivity_section(sensitivity: dict[str, Any]) -> str:
             row_style = f'font-weight:600;background:{BG_ELEVATED}' if is_actual else ''
             marker = " (actual)" if is_actual else ""
             underpowered = e.get("underpowered", False)
+            support_label = "supported" if e.get("support_status") == "supported" else f"underpowered (&lt;{MIN_POST_BB_DAYS})"
+            support_color = ACCENT_GREEN if e.get("support_status") == "supported" else ACCENT_AMBER
 
             b4_sig = f'<span style="color:{ACCENT_GREEN}">*</span>' if e.get("b4_significant") else ""
             b5_sig = f'<span style="color:{ACCENT_GREEN}">*</span>' if e.get("b5_significant") else ""
@@ -843,50 +997,45 @@ def _build_sensitivity_section(sensitivity: dict[str, Any]) -> str:
                 f'<td>{e["offset"]:+d}d{marker}</td>'
                 f'<td>{e["bb_date"]}</td>'
                 f'<td>{n_post}{n_post_warn}</td>'
+                f'<td style="color:{support_color}">{support_label}</td>'
                 f'<td>{b4_est} {unit} {b4_sig}</td><td>{b4_p}</td>'
                 f'<td>{b5_est} {unit}/day {b5_sig}</td><td>{b5_p}</td>'
                 f'<td>{e["r_squared"]:.3f}</td></tr>'
             )
 
-        # Assess robustness — count all attempted shifts (including failures)
-        total = len(entries)
-        fitted = [e for e in entries if not e.get("error")]
-        failed_count = total - len(fitted)
-        sig_count = sum(1 for e in fitted if e.get("b5_significant"))
-        adequately_powered = [e for e in fitted if not e.get("underpowered")]
-        sig_powered = sum(1 for e in adequately_powered if e.get("b5_significant"))
-        n_powered = len(adequately_powered)
-
-        # Tiered badge: ROBUST = all adequately-powered shifts significant
-        # MODERATE = most significant, SENSITIVE = fewer than half
-        if n_powered == 0:
-            badge = f'<span style="color:{ACCENT_RED};font-weight:600">INSUFFICIENT DATA</span>'
-        elif sig_powered == n_powered and failed_count == 0:
-            badge = f'<span style="color:{ACCENT_GREEN};font-weight:600">ROBUST ({sig_powered}/{n_powered})</span>'
-        elif sig_powered >= n_powered * 0.7:
-            badge = f'<span style="color:{ACCENT_AMBER};font-weight:600">MODERATE ({sig_powered}/{n_powered})</span>'
+        if summary["supported_total"] == 0:
+            badge = f'<span style="color:{badge_color};font-weight:600">{badge_label}</span>'
         else:
-            badge = f'<span style="color:{ACCENT_RED};font-weight:600">SENSITIVE ({sig_powered}/{n_powered})</span>'
+            badge = f'<span style="color:{badge_color};font-weight:600">{badge_label} ({badge_detail})</span>'
 
-        # Add context if some shifts are underpowered or failed
-        badge_notes = []
-        n_underpowered = len(fitted) - n_powered
-        if n_underpowered > 0:
-            badge_notes.append(f'{n_underpowered} shift(s) have &lt;{MIN_POST_BB_DAYS} post-BB days')
-        if failed_count > 0:
-            badge_notes.append(f'{failed_count} fit(s) failed')
-        badge_note_html = ""
-        if badge_notes:
-            badge_note_html = f' <span style="color:{TEXT_TERTIARY};font-size:0.8rem">({"; ".join(badge_notes)})</span>'
+        support_tail = []
+        if underpowered_offsets:
+            offsets = ", ".join(f"{offset:+d}" for offset in underpowered_offsets)
+            support_tail.append(f'underpowered offsets: {offsets}')
+        if failed_offsets:
+            offsets = ", ".join(f"{offset:+d}" for offset in failed_offsets)
+            support_tail.append(f'failed offsets: {offsets}')
+        support_tail_html = ""
+        if support_tail:
+            support_tail_html = " " + "; ".join(support_tail) + "."
+
+        support_note = (
+            f'Support threshold: at least {MIN_POST_BB_DAYS} non-missing post-BB observations. '
+            f'{summary["supported_total"]}/{summary["attempted_total"]} shifted dates met the threshold; '
+            f'{summary["underpowered_total"]} were underpowered and {summary["failed_total"]} fit(s) failed.'
+            f'{support_tail_html}'
+        )
 
         rows_per_metric.append(f"""
         <div style="margin:20px 0">
-          <div style="font-weight:600;color:{color};font-size:1rem">{label} — {badge}{badge_note_html}</div>
+          <div style="font-weight:600;color:{color};font-size:1rem">{label} — {badge}</div>
+          <div style="color:{TEXT_SECONDARY};font-size:0.82rem;margin-top:4px">{support_note}</div>
           <table style="width:100%;border-collapse:collapse;font-size:0.85rem;margin-top:8px">
             <thead><tr style="border-bottom:2px solid {BORDER_DEFAULT}">
               <th style="padding:8px;color:{TEXT_PRIMARY}">Offset</th>
               <th style="padding:8px;color:{TEXT_PRIMARY}">BB Date</th>
-              <th style="padding:8px;color:{TEXT_PRIMARY}">n post</th>
+              <th style="padding:8px;color:{TEXT_PRIMARY}">Post-BB n</th>
+              <th style="padding:8px;color:{TEXT_PRIMARY}">Support</th>
               <th style="padding:8px;color:{TEXT_PRIMARY}">Level (b4)</th>
               <th style="padding:8px;color:{TEXT_PRIMARY}">p</th>
               <th style="padding:8px;color:{TEXT_PRIMARY}">Slope (b5)</th>
@@ -900,12 +1049,14 @@ def _build_sensitivity_section(sensitivity: dict[str, Any]) -> str:
     method_note = (
         f'<div style="color:{TEXT_SECONDARY};font-size:0.85rem;margin-bottom:12px">'
         f'<strong>Method:</strong> The ITS model is re-fitted with the beta-blocker date '
-        f'shifted by -3 to +3 days. ROBUST = b5 significant in all adequately-powered shifts '
-        f'(n<sub>post</sub> &ge; {MIN_POST_BB_DAYS}); MODERATE = &ge;70%; SENSITIVE = &lt;70%. '
-        f'Forward shifts have fewer post-BB observations, reducing statistical power — '
-        f'shifts with &lt;{MIN_POST_BB_DAYS} post-BB days are flagged (&#9888;) and excluded from '
-        f'the robustness count. Highlighted row = actual date ({BETA_BLOCKER_START}). '
-        f'* = p &lt; 0.05.</div>'
+        f'shifted by -3 to +3 days. FULLY ROBUST = all attempted shifts fit and all supported '
+        f'shifts are significant. FORWARD-LIMITED = all supported shifts are significant, but one or more '
+        f'future-shifted fits have &lt;{MIN_POST_BB_DAYS} post-BB observations. SUPPORTED ONLY = supported shifts '
+        f'are significant, but support gaps or failed fits remain. MIXED = only some supported shifts are significant; '
+        f'SENSITIVE = no supported shifts are significant. Shifts with &lt;{MIN_POST_BB_DAYS} '
+        f'post-BB days are flagged (&#9888;) and excluded from the significance denominator, but still listed for transparency. '
+        f'Highlighted row = actual date ({BETA_BLOCKER_START}). '
+        f'Post-BB n = non-missing metric days after the shifted BB date. * = p &lt; 0.05.</div>'
     )
 
     return method_note + "".join(rows_per_metric)
@@ -939,9 +1090,13 @@ def main() -> None:
     print("\n[SENSITIVITY] Re-fitting with BB date shifted ±3 days...")
     sensitivity = run_bb_sensitivity(daily)
     for metric, entries in sensitivity.items():
-        sig_count = sum(1 for e in entries if not e.get("error") and e.get("b5_significant"))
-        total = sum(1 for e in entries if not e.get("error"))
-        print(f"  {METRICS[metric][0]}: b5 significant in {sig_count}/{total} shifts")
+        summary = _summarize_bb_sensitivity_entries(entries)
+        status, detail = _classify_bb_sensitivity_summary(summary)
+        print(
+            f"  {METRICS[metric][0]}: {status} "
+            f"({detail}) "
+            f"[{summary['underpowered_total']} underpowered, {summary['failed_total']} failed]"
+        )
 
     # Build HTML report
     print("\n[REPORT] Generating HTML report...")
@@ -952,6 +1107,12 @@ def main() -> None:
 
     for result in all_results:
         body += _build_metric_section(result, chart_data)
+
+    body += make_section(
+        "Sensitivity Interpretation",
+        _build_sensitivity_interpretation_section(sensitivity),
+        section_id="sensitivity-interpretation",
+    )
 
     body += make_section(
         "Sensitivity Analysis: BB Intervention Date ±3 Days",
@@ -1008,10 +1169,19 @@ def main() -> None:
             },
         }
 
-    # Add sensitivity results (all entries including failures for auditability)
+    # Add sensitivity results and support summaries for auditability.
     json_metrics["bb_date_sensitivity"] = {
         metric: entries
         for metric, entries in sensitivity.items()
+    }
+    json_metrics["bb_date_sensitivity_summary"] = {
+        metric: _summarize_bb_sensitivity_entries(entries)
+        for metric, entries in sensitivity.items()
+    }
+    json_metrics["bb_date_sensitivity_interpretation"] = _build_sensitivity_interpretation_payload(sensitivity)
+    json_metrics["bb_date_sensitivity_meta"] = {
+        "min_post_bb_days": MIN_POST_BB_DAYS,
+        "offsets": BB_SENSITIVITY_OFFSETS,
     }
 
     JSON_OUTPUT.write_text(json.dumps(json_metrics, indent=2), encoding="utf-8")

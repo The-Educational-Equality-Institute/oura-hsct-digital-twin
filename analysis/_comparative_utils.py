@@ -7,7 +7,7 @@ All 5 comparative analysis scripts import from this module.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Optional
@@ -63,9 +63,9 @@ class PatientConfig:
     patient_id: str
     display_name: str
     db_path: Path
-    event_date: date
-    event_label: str
     color: str
+    event_date: Optional[date] = None
+    event_label: str = "Baseline"
 
 
 @dataclass
@@ -97,33 +97,39 @@ COMPARABLE_METRICS = [
 ]
 
 
-def default_patients() -> tuple[PatientConfig, Optional[PatientConfig]]:
-    """Build PatientConfig for P1 and P2 from profiles.py.
+def default_patients() -> list[PatientConfig]:
+    """Build PatientConfig for all patients in profiles.py.
 
-    Returns (henrik, mitch) where mitch is None if mitch.db doesn't exist.
+    Skips any patient whose DB file does not exist (graceful degradation).
+    Returns a list ordered by profile definition order.
+
+    Backward-compatible: when only 2 patients have DBs, list[0] is Henrik
+    and list[1] is Mitch, so ``patients[1]`` still works in existing scripts.
+    When a patient has no DB, the list simply omits them.
     """
-    h = PROFILES["henrik"]
-    m = PROFILES["mitch"]
-    henrik = PatientConfig(
-        patient_id="henrik",
-        display_name=f"Patient 1 (post-{h['major_event_label']})",
-        db_path=Path(h["database"]),
-        event_date=h["major_event_date"],
-        event_label=h["major_event_label"],
-        color=ACCENT_BLUE,
-    )
-    mitch_db = Path(m["database"])
-    if not mitch_db.exists():
-        return henrik, None
-    mitch = PatientConfig(
-        patient_id="mitch",
-        display_name=f"Patient 2 (post-{m['major_event_label']})",
-        db_path=mitch_db,
-        event_date=m["major_event_date"],
-        event_label=m["major_event_label"],
-        color=ACCENT_GREEN,
-    )
-    return henrik, mitch
+    _color_map = PATIENT_COLORS
+    _counter = 0
+    result: list[PatientConfig] = []
+    for pid, prof in PROFILES.items():
+        db_path = Path(prof["database"])
+        if not db_path.exists():
+            continue
+        _counter += 1
+        event_date = prof.get("major_event_date")
+        event_label = prof.get("major_event_label", "Baseline")
+        if event_date and event_label:
+            display = f"Patient {_counter} (post-{event_label})"
+        else:
+            display = f"Patient {_counter} ({prof.get('label', pid)})"
+        result.append(PatientConfig(
+            patient_id=pid,
+            display_name=display,
+            db_path=db_path,
+            color=_color_map.get(pid, ACCENT_PURPLE),
+            event_date=event_date,
+            event_label=event_label,
+        ))
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -168,11 +174,11 @@ def load_patient_data(
 
 
 def load_both_patients(
-    patients: Optional[tuple[PatientConfig, PatientConfig]] = None,
+    patients: Optional[list[PatientConfig]] = None,
     table: str = "oura_sleep",
     columns: str = "*",
 ) -> dict[str, pd.DataFrame]:
-    """Load from both patient databases."""
+    """Load from all patient databases."""
     if patients is None:
         patients = default_patients()
     return {
@@ -185,9 +191,9 @@ def load_metric(
     metric_name: str,
     table: str,
     column: str,
-    patients: Optional[tuple[PatientConfig, PatientConfig]] = None,
+    patients: Optional[list[PatientConfig]] = None,
 ) -> dict[str, pd.Series]:
-    """Load a single metric for both patients as Series."""
+    """Load a single metric for all patients as Series."""
     if patients is None:
         patients = default_patients()
     result = {}
@@ -299,13 +305,15 @@ def days_since_event(dates: pd.DatetimeIndex, event_date: date) -> pd.Series:
 
 def align_by_event(
     data: dict[str, pd.Series],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> dict[str, pd.Series]:
-    """Re-index both patients by days-since-event."""
+    """Re-index patients by days-since-event; skip those with no event_date."""
     patient_map = {p.patient_id: p for p in patients}
     result = {}
     for pid, series in data.items():
         p = patient_map[pid]
+        if p.event_date is None:
+            continue
         dse = days_since_event(series.index, p.event_date)
         aligned = series.copy()
         aligned.index = dse.values
@@ -418,11 +426,14 @@ def compare_distributions(
 PATIENT_COLORS = {
     "henrik": ACCENT_BLUE,
     "mitch": ACCENT_GREEN,
+    "wenche": ACCENT_PURPLE,
 }
 
 
 def _add_event_line(fig: go.Figure, patient: PatientConfig, y_range=None):
     """Add vertical event line using shape + annotation (never add_vline with annotation_text)."""
+    if patient.event_date is None:
+        return
     event_ts = pd.Timestamp(patient.event_date)
     color = PATIENT_COLORS.get(patient.patient_id, ACCENT_PURPLE)
 
@@ -443,7 +454,7 @@ def _add_event_line(fig: go.Figure, patient: PatientConfig, y_range=None):
 
 def dual_patient_timeseries(
     data: dict[str, pd.Series],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
     title: str = "",
     y_label: str = "",
     show_rolling: int = 7,
@@ -513,7 +524,7 @@ def dual_patient_timeseries(
 
 def dual_patient_distribution(
     data: dict[str, pd.Series],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
     title: str = "",
     kind: str = "violin",
 ) -> go.Figure:
@@ -562,7 +573,7 @@ def dual_patient_distribution(
 
 def event_aligned_comparison(
     data: dict[str, pd.Series],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
     title: str = "",
     window: tuple[int, int] = (-30, 365),
     y_label: str = "",
