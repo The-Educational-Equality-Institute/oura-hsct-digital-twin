@@ -750,6 +750,9 @@ def _build_its_matrix_with_bb(daily: pd.DataFrame, bb_date: date) -> pd.DataFram
     return df
 
 
+MIN_POST_BB_DAYS = 5  # Minimum post-BB observations for a credible slope estimate
+
+
 def run_bb_sensitivity(daily: pd.DataFrame) -> dict[str, Any]:
     """Re-fit ITS at shifted BB dates and return coefficient stability table."""
     results: dict[str, list[dict[str, Any]]] = {m: [] for m in METRICS}
@@ -759,9 +762,21 @@ def run_bb_sensitivity(daily: pd.DataFrame) -> dict[str, Any]:
         df = _build_its_matrix_with_bb(daily, bb_shifted)
 
         for metric in METRICS:
+            # Count post-BB observations for this metric
+            subset = df[df["bb"] == 1][metric].dropna()
+            n_post = len(subset)
+            support_status = "supported" if n_post >= MIN_POST_BB_DAYS else "underpowered"
+
             fit = fit_its_glsar(df, metric)
             if fit is None:
-                results[metric].append({"offset": offset, "error": True})
+                results[metric].append({
+                    "offset": offset,
+                    "bb_date": str(bb_shifted.date() if hasattr(bb_shifted, 'date') else bb_shifted),
+                    "n_post": n_post,
+                    "support_status": "fit_failed",
+                    "supported": False,
+                    "error": True,
+                })
                 continue
             # Extract bb level (b4) and bb slope (b5) coefficients
             coeffs = {c["name"]: c for c in fit["coefficients"]}
@@ -770,6 +785,9 @@ def run_bb_sensitivity(daily: pd.DataFrame) -> dict[str, Any]:
             results[metric].append({
                 "offset": offset,
                 "bb_date": str(bb_shifted.date() if hasattr(bb_shifted, 'date') else bb_shifted),
+                "n_post": n_post,
+                "support_status": support_status,
+                "supported": support_status == "supported",
                 "b4_estimate": b4.get("estimate"),
                 "b4_pvalue": b4.get("p_value"),
                 "b4_significant": b4.get("significant"),
@@ -777,6 +795,7 @@ def run_bb_sensitivity(daily: pd.DataFrame) -> dict[str, Any]:
                 "b5_pvalue": b5.get("p_value"),
                 "b5_significant": b5.get("significant"),
                 "r_squared": fit["r_squared"],
+                "underpowered": n_post < MIN_POST_BB_DAYS,
                 "error": False,
             })
 
@@ -795,14 +814,18 @@ def _build_sensitivity_section(sensitivity: dict[str, Any]) -> str:
         table_rows = []
         for e in entries:
             if e.get("error"):
+                n_post_str = str(e.get("n_post", "?"))
                 table_rows.append(
-                    f'<tr><td>{e["offset"]:+d}</td><td colspan="5" style="color:{ACCENT_RED}">fit failed</td></tr>'
+                    f'<tr><td>{e["offset"]:+d}</td><td>{e.get("bb_date", "?")}</td>'
+                    f'<td>{n_post_str}</td>'
+                    f'<td colspan="5" style="color:{ACCENT_RED}">fit failed</td></tr>'
                 )
                 continue
 
             is_actual = e["offset"] == 0
             row_style = f'font-weight:600;background:{BG_ELEVATED}' if is_actual else ''
             marker = " (actual)" if is_actual else ""
+            underpowered = e.get("underpowered", False)
 
             b4_sig = f'<span style="color:{ACCENT_GREEN}">*</span>' if e.get("b4_significant") else ""
             b5_sig = f'<span style="color:{ACCENT_GREEN}">*</span>' if e.get("b5_significant") else ""
@@ -812,30 +835,58 @@ def _build_sensitivity_section(sensitivity: dict[str, Any]) -> str:
             b4_p = format_p_value(e["b4_pvalue"]) if e.get("b4_pvalue") is not None else "—"
             b5_p = format_p_value(e["b5_pvalue"]) if e.get("b5_pvalue") is not None else "—"
 
+            n_post = e.get("n_post", "?")
+            n_post_warn = f' <span style="color:{ACCENT_AMBER}" title="&lt;{MIN_POST_BB_DAYS} post-BB days">&#9888;</span>' if underpowered else ""
+
             table_rows.append(
                 f'<tr style="{row_style}">'
                 f'<td>{e["offset"]:+d}d{marker}</td>'
                 f'<td>{e["bb_date"]}</td>'
+                f'<td>{n_post}{n_post_warn}</td>'
                 f'<td>{b4_est} {unit} {b4_sig}</td><td>{b4_p}</td>'
                 f'<td>{b5_est} {unit}/day {b5_sig}</td><td>{b5_p}</td>'
                 f'<td>{e["r_squared"]:.3f}</td></tr>'
             )
 
-        # Assess robustness: how many offsets keep b5 significant?
-        sig_count = sum(1 for e in entries if not e.get("error") and e.get("b5_significant"))
-        total = sum(1 for e in entries if not e.get("error"))
-        robust = sig_count >= (total - 1)  # at most 1 non-significant
-        badge = (f'<span style="color:{ACCENT_GREEN};font-weight:600">ROBUST ({sig_count}/{total})</span>'
-                 if robust
-                 else f'<span style="color:{ACCENT_AMBER};font-weight:600">SENSITIVE ({sig_count}/{total})</span>')
+        # Assess robustness — count all attempted shifts (including failures)
+        total = len(entries)
+        fitted = [e for e in entries if not e.get("error")]
+        failed_count = total - len(fitted)
+        sig_count = sum(1 for e in fitted if e.get("b5_significant"))
+        adequately_powered = [e for e in fitted if not e.get("underpowered")]
+        sig_powered = sum(1 for e in adequately_powered if e.get("b5_significant"))
+        n_powered = len(adequately_powered)
+
+        # Tiered badge: ROBUST = all adequately-powered shifts significant
+        # MODERATE = most significant, SENSITIVE = fewer than half
+        if n_powered == 0:
+            badge = f'<span style="color:{ACCENT_RED};font-weight:600">INSUFFICIENT DATA</span>'
+        elif sig_powered == n_powered and failed_count == 0:
+            badge = f'<span style="color:{ACCENT_GREEN};font-weight:600">ROBUST ({sig_powered}/{n_powered})</span>'
+        elif sig_powered >= n_powered * 0.7:
+            badge = f'<span style="color:{ACCENT_AMBER};font-weight:600">MODERATE ({sig_powered}/{n_powered})</span>'
+        else:
+            badge = f'<span style="color:{ACCENT_RED};font-weight:600">SENSITIVE ({sig_powered}/{n_powered})</span>'
+
+        # Add context if some shifts are underpowered or failed
+        badge_notes = []
+        n_underpowered = len(fitted) - n_powered
+        if n_underpowered > 0:
+            badge_notes.append(f'{n_underpowered} shift(s) have &lt;{MIN_POST_BB_DAYS} post-BB days')
+        if failed_count > 0:
+            badge_notes.append(f'{failed_count} fit(s) failed')
+        badge_note_html = ""
+        if badge_notes:
+            badge_note_html = f' <span style="color:{TEXT_TERTIARY};font-size:0.8rem">({"; ".join(badge_notes)})</span>'
 
         rows_per_metric.append(f"""
         <div style="margin:20px 0">
-          <div style="font-weight:600;color:{color};font-size:1rem">{label} — {badge}</div>
+          <div style="font-weight:600;color:{color};font-size:1rem">{label} — {badge}{badge_note_html}</div>
           <table style="width:100%;border-collapse:collapse;font-size:0.85rem;margin-top:8px">
             <thead><tr style="border-bottom:2px solid {BORDER_DEFAULT}">
               <th style="padding:8px;color:{TEXT_PRIMARY}">Offset</th>
               <th style="padding:8px;color:{TEXT_PRIMARY}">BB Date</th>
+              <th style="padding:8px;color:{TEXT_PRIMARY}">n post</th>
               <th style="padding:8px;color:{TEXT_PRIMARY}">Level (b4)</th>
               <th style="padding:8px;color:{TEXT_PRIMARY}">p</th>
               <th style="padding:8px;color:{TEXT_PRIMARY}">Slope (b5)</th>
@@ -849,9 +900,11 @@ def _build_sensitivity_section(sensitivity: dict[str, Any]) -> str:
     method_note = (
         f'<div style="color:{TEXT_SECONDARY};font-size:0.85rem;margin-bottom:12px">'
         f'<strong>Method:</strong> The ITS model is re-fitted with the beta-blocker date '
-        f'shifted by -3 to +3 days. If the slope coefficient (b5) remains significant '
-        f'across shifts, the finding is robust to date uncertainty. '
-        f'Highlighted row = actual date ({BETA_BLOCKER_START}). '
+        f'shifted by -3 to +3 days. ROBUST = b5 significant in all adequately-powered shifts '
+        f'(n<sub>post</sub> &ge; {MIN_POST_BB_DAYS}); MODERATE = &ge;70%; SENSITIVE = &lt;70%. '
+        f'Forward shifts have fewer post-BB observations, reducing statistical power — '
+        f'shifts with &lt;{MIN_POST_BB_DAYS} post-BB days are flagged (&#9888;) and excluded from '
+        f'the robustness count. Highlighted row = actual date ({BETA_BLOCKER_START}). '
         f'* = p &lt; 0.05.</div>'
     )
 
@@ -955,9 +1008,9 @@ def main() -> None:
             },
         }
 
-    # Add sensitivity results (strip error-only entries)
+    # Add sensitivity results (all entries including failures for auditability)
     json_metrics["bb_date_sensitivity"] = {
-        metric: [e for e in entries if not e.get("error")]
+        metric: entries
         for metric, entries in sensitivity.items()
     }
 
