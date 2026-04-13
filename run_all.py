@@ -48,6 +48,10 @@ SCRIPTS = [
     "analyze_mitch_changepoints.py",
     "analyze_weekly_tracker.py",
     "analyze_rux_forecast.py",
+    "analyze_piecewise_its.py",
+    "analyze_sequential_ci.py",
+    "analyze_placebo_tests.py",
+    "analyze_tau_u.py",
     "generate_roadmap.py",
     "generate_index.py",
 ]
@@ -75,6 +79,10 @@ SEND_BUNDLE_HTML = [
     "mitch_changepoint_investigation.html",
     "weekly_tracker.html",
     "rux_forecast.html",
+    "piecewise_regression.html",
+    "sequential_causal_impact.html",
+    "placebo_calibration.html",
+    "tau_u_effects.html",
     "roadmap.html",
 ]
 
@@ -100,6 +108,10 @@ SEND_BUNDLE_JSON = [
     "mitch_changepoint_metrics.json",
     "weekly_tracker.json",
     "rux_forecast.json",
+    "piecewise_regression_metrics.json",
+    "sequential_causal_impact_metrics.json",
+    "placebo_calibration_metrics.json",
+    "tau_u_metrics.json",
 ]
 
 

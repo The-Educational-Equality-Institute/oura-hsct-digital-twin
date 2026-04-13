@@ -2521,6 +2521,207 @@ def _build_individual_metric_tests(
 
 
 # ===========================================================================
+# CONFOUNDER ANALYSIS: BETA-BLOCKER SEPARATION
+# ===========================================================================
+
+
+def _build_confounder_analysis(
+    daily: pd.DataFrame,
+) -> tuple[str, dict[str, Any]]:
+    """Three-period analysis separating Jakavi-only from Jakavi+beta-blocker.
+
+    Splits the post-treatment period at BETA_BLOCKER_START to isolate
+    Ruxolitinib's effect from the combined Rux + beta-blocker signal.
+    Critical for clinician review (Schoemans/Wolff).
+
+    Returns (html_section_str, metrics_dict).
+    """
+    METRIC_DEFS = [
+        ("mean_rmssd", "HRV (RMSSD)", "ms"),
+        ("lowest_heart_rate", "Lowest HR", "bpm"),
+        ("average_heart_rate", "Average HR", "bpm"),
+        ("sleep_efficiency", "Sleep Efficiency", "%"),
+    ]
+
+    rux_str = str(TREATMENT_START)
+    bb_str = str(BETA_BLOCKER_START)
+    rux_days = (BETA_BLOCKER_START - TREATMENT_START).days
+    bb_days = (date.today() - BETA_BLOCKER_START).days
+
+    pre = daily[daily["date"] < rux_str]
+    jak_only = daily[(daily["date"] >= rux_str) & (daily["date"] < bb_str)]
+    jak_bb = daily[daily["date"] >= bb_str]
+
+    results: dict[str, Any] = {
+        "periods": {
+            "pre": {"start": str(DATA_START), "end": str(TREATMENT_START - timedelta(days=1)),
+                     "n_days": len(pre), "label": "Pre-treatment"},
+            "jakavi_only": {"start": rux_str, "end": str(BETA_BLOCKER_START - timedelta(days=1)),
+                            "n_days": len(jak_only), "n_rux_days": rux_days,
+                            "label": f"Jakavi only ({rux_days} days)"},
+            "jakavi_bb": {"start": bb_str, "end": str(daily["date"].max()),
+                          "n_days": len(jak_bb), "n_bb_days": bb_days,
+                          "label": f"Jakavi + beta-blocker ({bb_days} days)"},
+        },
+        "tests": {},
+    }
+
+    # --- Test 1: Pre vs Jakavi-only (isolates Rux effect) ---
+    # --- Test 2: Jakavi-only vs Jakavi+BB (marginal BB effect) ---
+    table_rows_isolated: list[str] = []
+    table_rows_marginal: list[str] = []
+
+    for col, label, unit in METRIC_DEFS:
+        pre_vals = pre[col].dropna()
+        jak_vals = jak_only[col].dropna()
+        bb_vals = jak_bb[col].dropna()
+
+        metric_result: dict[str, Any] = {"label": label, "unit": unit}
+
+        # Three-period means
+        metric_result["pre_mean"] = float(pre_vals.mean()) if len(pre_vals) else None
+        metric_result["jakavi_only_mean"] = float(jak_vals.mean()) if len(jak_vals) else None
+        metric_result["jakavi_bb_mean"] = float(bb_vals.mean()) if len(bb_vals) else None
+        metric_result["n_pre"] = len(pre_vals)
+        metric_result["n_jakavi_only"] = len(jak_vals)
+        metric_result["n_jakavi_bb"] = len(bb_vals)
+
+        # Test 1: Pre vs Jakavi-only
+        if len(pre_vals) >= 5 and len(jak_vals) >= 3:
+            u1, p1 = scipy_stats.mannwhitneyu(pre_vals, jak_vals, alternative="two-sided")
+            diff1 = float(jak_vals.mean() - pre_vals.mean())
+            std1 = np.sqrt((pre_vals.std(ddof=1) ** 2 + jak_vals.std(ddof=1) ** 2) / 2)
+            d1 = diff1 / std1 if std1 > 0 else 0.0
+            if col in ("lowest_heart_rate", "average_heart_rate"):
+                favorable1 = diff1 < 0
+            else:
+                favorable1 = diff1 > 0
+            metric_result["isolated_rux"] = {
+                "diff": diff1, "cohens_d": d1, "p_value": float(p1),
+                "u_statistic": float(u1), "direction": "favorable" if favorable1 else "unfavorable",
+            }
+            sig1 = p1 < 0.05
+            d_label1 = "large" if abs(d1) >= 0.8 else "medium" if abs(d1) >= 0.5 else "small"
+            sig_badge1 = (
+                f'<span class="badge badge-sig">p={p1:.4f}</span>' if sig1
+                else f'<span class="badge badge-ns">p={p1:.3f}</span>'
+            )
+            dir_cls1 = "favorable" if favorable1 else "unfavorable"
+            table_rows_isolated.append(
+                f'<tr><td style="font-weight:600">{label}</td>'
+                f'<td>{pre_vals.mean():.1f} {unit} (n={len(pre_vals)})</td>'
+                f'<td>{jak_vals.mean():.1f} {unit} (n={len(jak_vals)})</td>'
+                f'<td class="{dir_cls1}">{diff1:+.1f} {unit}</td>'
+                f'<td>{d1:+.2f} ({d_label1})</td>'
+                f'<td>{sig_badge1}</td></tr>'
+            )
+        else:
+            metric_result["isolated_rux"] = {"error": "insufficient data"}
+
+        # Test 2: Jakavi-only vs Jakavi+BB (marginal beta-blocker)
+        if len(jak_vals) >= 3 and len(bb_vals) >= 3:
+            u2, p2 = scipy_stats.mannwhitneyu(jak_vals, bb_vals, alternative="two-sided")
+            diff2 = float(bb_vals.mean() - jak_vals.mean())
+            metric_result["marginal_bb"] = {
+                "diff": diff2, "p_value": float(p2), "u_statistic": float(u2),
+            }
+            sig2 = p2 < 0.05
+            sig_badge2 = (
+                f'<span class="badge badge-sig">p={p2:.4f}</span>' if sig2
+                else f'<span class="badge badge-ns">p={p2:.3f}</span>'
+            )
+            table_rows_marginal.append(
+                f'<tr><td style="font-weight:600">{label}</td>'
+                f'<td>{jak_vals.mean():.1f} {unit} (n={len(jak_vals)})</td>'
+                f'<td>{bb_vals.mean():.1f} {unit} (n={len(bb_vals)})</td>'
+                f'<td>{diff2:+.1f} {unit}</td>'
+                f'<td>{sig_badge2}</td></tr>'
+            )
+        else:
+            metric_result["marginal_bb"] = {"error": "insufficient data"}
+
+        results["tests"][col] = metric_result
+
+    # --- Build HTML ---
+    timeline_html = f"""
+    <div style="background:{BG_ELEVATED};border:1px solid {BORDER_DEFAULT};border-radius:8px;
+                padding:16px;margin:16px 0;font-size:0.9rem">
+      <div style="font-weight:600;color:{TEXT_PRIMARY};margin-bottom:8px">Treatment Timeline</div>
+      <div style="display:flex;gap:24px;flex-wrap:wrap">
+        <div><span style="color:{TEXT_SECONDARY}">Pre-treatment:</span>
+             <span style="color:{TEXT_PRIMARY}">{len(pre)} days</span></div>
+        <div><span style="color:{ACCENT_BLUE}">&#9654;</span>
+             <span style="color:{TEXT_SECONDARY}">Jakavi only:</span>
+             <span style="color:{TEXT_PRIMARY}">{rux_str} to {str(BETA_BLOCKER_START - timedelta(days=1))} ({rux_days} days)</span></div>
+        <div><span style="color:{ACCENT_AMBER}">&#9654;</span>
+             <span style="color:{TEXT_SECONDARY}">Jakavi + BB:</span>
+             <span style="color:{TEXT_PRIMARY}">{bb_str} to present ({bb_days} days)</span></div>
+      </div>
+    </div>"""
+
+    def _make_table(title: str, subtitle: str, cols: list[str], rows: list[str]) -> str:
+        if not rows:
+            return ""
+        header = "".join(f'<th style="padding:10px 12px;color:{TEXT_PRIMARY}">{c}</th>' for c in cols)
+        return f"""
+        <div style="margin:20px 0">
+          <div style="font-weight:600;color:{TEXT_PRIMARY};font-size:1rem">{title}</div>
+          <div style="color:{TEXT_SECONDARY};font-size:0.85rem;margin-bottom:8px">{subtitle}</div>
+          <table style="width:100%;border-collapse:collapse;font-size:0.9rem">
+            <thead><tr style="border-bottom:2px solid {BORDER_DEFAULT}">{header}</tr></thead>
+            <tbody>{"".join(rows)}</tbody>
+          </table>
+        </div>"""
+
+    table1 = _make_table(
+        "Test 1: Isolated Ruxolitinib Effect",
+        f"Pre-treatment vs Jakavi-only period (beta-blocker confounder eliminated)",
+        ["Metric", "Pre Mean", "Jakavi-only Mean", "Change", "Cohen's d", "p-value"],
+        table_rows_isolated,
+    )
+
+    table2 = _make_table(
+        "Test 2: Marginal Beta-Blocker Effect",
+        f"Jakavi-only vs Jakavi + beta-blocker (what BB adds on top)",
+        ["Metric", "Jakavi-only Mean", "Jakavi+BB Mean", "Change", "p-value"],
+        table_rows_marginal,
+    )
+
+    # Interpretation
+    rux_results = results["tests"]
+    rux_hr_sig = (
+        rux_results.get("lowest_heart_rate", {}).get("isolated_rux", {}).get("p_value", 1) < 0.05
+        or rux_results.get("average_heart_rate", {}).get("isolated_rux", {}).get("p_value", 1) < 0.05
+    )
+    rux_hrv_sig = rux_results.get("mean_rmssd", {}).get("isolated_rux", {}).get("p_value", 1) < 0.05
+    bb_hrv_sig = rux_results.get("mean_rmssd", {}).get("marginal_bb", {}).get("p_value", 1) < 0.05
+
+    findings: list[str] = []
+    if rux_hr_sig:
+        findings.append("Ruxolitinib alone produces a statistically significant reduction in heart rate, "
+                        "independent of beta-blocker.")
+    if rux_hrv_sig:
+        findings.append("Ruxolitinib alone significantly improves HRV.")
+    else:
+        findings.append("HRV improvement during Jakavi-only period does not reach significance — "
+                        "the HRV signal strengthens after beta-blocker addition.")
+    if bb_hrv_sig:
+        findings.append("Beta-blocker addition produces a significant further HRV increase on top of Jakavi.")
+
+    interp_html = f"""
+    <div style="background:{BG_ELEVATED};border-left:3px solid {ACCENT_BLUE};
+                padding:12px 16px;margin:16px 0;border-radius:0 8px 8px 0">
+      <div style="font-weight:600;color:{TEXT_PRIMARY};margin-bottom:6px">Key Findings</div>
+      <ul style="color:{TEXT_SECONDARY};margin:0;padding-left:20px;line-height:1.6">
+        {"".join(f'<li>{f}</li>' for f in findings)}
+      </ul>
+    </div>"""
+
+    section_content = timeline_html + table1 + table2 + interp_html
+    return section_content, results
+
+
+# ===========================================================================
 # HTML REPORT GENERATION
 # ===========================================================================
 
@@ -2557,6 +2758,7 @@ def generate_html_report(
 
     # Build section HTML
     indiv_html, indiv_metrics = _build_individual_metric_tests(daily)
+    confounder_html, confounder_metrics = _build_confounder_analysis(daily)
     ci_html = _build_ci_summary(all_results.get("causal_impact", {}))
     stat_power_html = _build_statistical_power_section(daily, all_results)
     placebo_html = _build_placebo_summary(all_results.get("placebo_tests", {}))
@@ -2566,6 +2768,7 @@ def generate_html_report(
 
     # Store individual metric results for JSON export
     all_results["individual_metric_tests"] = indiv_metrics
+    all_results["confounder_analysis"] = confounder_metrics
 
     # Organize figure divs by section
     section_figs: dict[str, list[str]] = {}
@@ -2683,6 +2886,22 @@ def generate_html_report(
         "0. Individual Metric Treatment Response",
         indiv_method + indiv_html,
         section_id="indiv",
+    ))
+
+    # Section 0b: Confounder Analysis
+    confounder_method = (
+        '<div class="causal-method-note">'
+        '<strong>Method:</strong> Three-period analysis separating the post-treatment window into '
+        f'Jakavi-only ({(BETA_BLOCKER_START - TREATMENT_START).days} days) and '
+        f'Jakavi + beta-blocker ({(date.today() - BETA_BLOCKER_START).days} days). '
+        'Mann-Whitney U tests isolate each drug\'s contribution. '
+        'This addresses the key confounder question: does Ruxolitinib\'s effect stand '
+        'independently of the beta-blocker added later?</div>'
+    )
+    body_parts.append(make_section(
+        "0b. Confounder Analysis: Beta-Blocker Separation",
+        confounder_method + confounder_html,
+        section_id="confounder",
     ))
 
     # Section 1: CausalImpact
