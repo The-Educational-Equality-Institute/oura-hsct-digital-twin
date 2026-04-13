@@ -221,6 +221,116 @@ def _histogram(series: pd.Series, title: str, x_label: str, color: str) -> go.Fi
     return fig
 
 
+def compute_yearly_trajectory(hrv_series: pd.Series, age: int | str) -> dict:
+    """Compute yearly HRV means, deltas, and clinical flags.
+
+    Returns dict with keys: yearly (list of dicts), flags (list of strings),
+    recent_30d_mean, full_mean, span_days.
+    """
+    clean = hrv_series.dropna()
+    result: dict = {"yearly": [], "flags": [], "recent_30d_mean": None,
+                    "full_mean": None, "span_days": 0}
+    if clean.empty:
+        return result
+
+    span_days = (clean.index.max() - clean.index.min()).days
+    result["span_days"] = span_days
+    result["full_mean"] = round(float(clean.mean()), 1)
+
+    # Recent 30-day mean
+    last_30 = clean.loc[clean.index >= clean.index.max() - pd.Timedelta(days=30)]
+    recent_mean = float(last_30.mean()) if not last_30.empty else np.nan
+    result["recent_30d_mean"] = round(recent_mean, 1) if not np.isnan(recent_mean) else None
+
+    # Yearly breakdown
+    yearly_means = clean.groupby(clean.index.year).mean()
+    prev_val = None
+    for year, mean_val in yearly_means.items():
+        entry: dict = {"year": int(year), "mean_rmssd": round(float(mean_val), 1)}
+        if prev_val is not None:
+            delta = float(mean_val) - prev_val
+            entry["change"] = round(delta, 1)
+            entry["direction"] = "UP" if delta > 0 else "DOWN" if delta < 0 else "FLAT"
+        else:
+            entry["change"] = None
+            entry["direction"] = "--"
+        prev_val = float(mean_val)
+        result["yearly"].append(entry)
+
+    # --- Clinical flags ---
+    # 1. Year-over-year decline
+    if len(result["yearly"]) >= 2:
+        last_two = result["yearly"][-2:]
+        if last_two[1]["mean_rmssd"] < last_two[0]["mean_rmssd"]:
+            result["flags"].append("HRV declining year-over-year")
+
+    # 2. Recent 30-day mean >10% below full-period mean
+    full_mean = float(clean.mean())
+    if not np.isnan(recent_mean) and full_mean > 0:
+        pct_below = (full_mean - recent_mean) / full_mean * 100
+        if pct_below > 10:
+            result["flags"].append(
+                f"Recent 30-day mean ({recent_mean:.1f} ms) is "
+                f"{pct_below:.0f}% below full-period mean ({full_mean:.1f} ms)")
+
+    # 3. Age-based percentile threshold
+    try:
+        age_num = int(age)
+    except (ValueError, TypeError):
+        age_num = None
+    if age_num is not None:
+        threshold = 25 if age_num >= 60 else 36
+        if recent_mean < threshold:
+            result["flags"].append(
+                f"Mean HRV ({recent_mean:.1f} ms) below age-based 25th "
+                f"percentile threshold ({threshold} ms)")
+
+    return result
+
+
+def build_trajectory_html(traj: dict) -> str:
+    """Build HTML table and flag banner from trajectory data."""
+    parts = []
+
+    # Yearly table
+    if traj["yearly"]:
+        rows = ""
+        for entry in traj["yearly"]:
+            delta_str = f'{entry["change"]:+.1f}' if entry["change"] is not None else "--"
+            arrow = {"UP": "&#9650;", "DOWN": "&#9660;", "FLAT": "&#9654;", "--": ""}.get(
+                entry["direction"], "")
+            color = {"UP": "#4ade80", "DOWN": "#f87171", "FLAT": "#94a3b8", "--": "#94a3b8"}.get(
+                entry["direction"], "#94a3b8")
+            rows += (
+                f'<tr><td>{entry["year"]}</td>'
+                f'<td>{entry["mean_rmssd"]:.1f} ms</td>'
+                f'<td>{delta_str} ms</td>'
+                f'<td style="color:{color}">{arrow} {entry["direction"]}</td></tr>'
+            )
+        parts.append(
+            '<table style="width:100%;border-collapse:collapse;margin:1em 0">'
+            '<thead><tr style="border-bottom:1px solid #334155">'
+            '<th style="text-align:left;padding:6px">Year</th>'
+            '<th style="text-align:left;padding:6px">Mean RMSSD</th>'
+            '<th style="text-align:left;padding:6px">Change</th>'
+            '<th style="text-align:left;padding:6px">Direction</th>'
+            '</tr></thead><tbody>' + rows + '</tbody></table>'
+        )
+
+    # Warning banner for flags
+    if traj["flags"]:
+        flag_items = "".join(f"<li>{f}</li>" for f in traj["flags"])
+        parts.append(
+            '<div style="background:#7f1d1d;border:1px solid #991b1b;'
+            'border-radius:8px;padding:12px 16px;margin:1em 0">'
+            '<strong style="color:#fca5a5">&#9888; Clinical Flags</strong>'
+            f'<ul style="margin:8px 0 0 0;padding-left:20px;color:#fecaca">'
+            f'{flag_items}</ul></div>'
+        )
+
+    return "\n".join(parts) if parts else "<p>Insufficient data for trajectory analysis.</p>"
+
+
 def _dual_timeseries(
     s1: pd.Series, s2: pd.Series, title: str, y_label: str,
     c1: str, c2: str, n1: str = "Series 1", n2: str = "Series 2",
@@ -377,28 +487,49 @@ def main() -> None:
     )
 
     hrv_content = ""
+    hrv_series = pd.Series(dtype=float)
     if not sleep.empty and "average_hrv" in sleep.columns:
         hrv_series = sleep["average_hrv"].dropna()
         fig_hrv_ts = _timeseries_with_rolling(
             hrv_series, "Daily RMSSD (from sleep periods)", "RMSSD (ms)", C_HRV,
         )
-        hrv_content += _chart_html(fig_hrv_ts)
-
-        fig_hrv_hist = _histogram(hrv_series, "RMSSD Distribution", "RMSSD (ms)", C_HRV)
-        hrv_content += _chart_html(fig_hrv_hist)
     elif not hrv.empty:
         hrv_series = hrv["rmssd"].dropna()
         fig_hrv_ts = _timeseries_with_rolling(
             hrv_series, "Daily RMSSD (aggregated from 5-min readings)", "RMSSD (ms)", C_HRV,
         )
-        hrv_content += _chart_html(fig_hrv_ts)
+    else:
+        fig_hrv_ts = None
 
+    # Trajectory analysis (needs >180 days of data)
+    traj = compute_yearly_trajectory(hrv_series, age)
+
+    # Add linear trend line to HRV chart if >180 days
+    if fig_hrv_ts is not None and traj["span_days"] > 180 and len(hrv_series) > 30:
+        x_num = (hrv_series.index - hrv_series.index[0]).days.astype(float)
+        coeffs = np.polyfit(x_num, hrv_series.values, 1)
+        trend_y = np.polyval(coeffs, x_num)
+        fig_hrv_ts.add_trace(go.Scatter(
+            x=hrv_series.index, y=trend_y,
+            mode="lines",
+            line=dict(color="#f87171", width=1.5, dash="dash"),
+            name="Linear trend",
+        ))
+
+    if fig_hrv_ts is not None:
+        hrv_content += _chart_html(fig_hrv_ts)
         fig_hrv_hist = _histogram(hrv_series, "RMSSD Distribution", "RMSSD (ms)", C_HRV)
         hrv_content += _chart_html(fig_hrv_hist)
     else:
         hrv_content = "<p>No HRV data available.</p>"
 
     body += make_section("Heart Rate Variability", hrv_content, section_id="hrv")
+
+    # Yearly trajectory section (only if >180 days of HRV data)
+    if traj["span_days"] > 180 and traj["yearly"]:
+        traj_content = build_trajectory_html(traj)
+        body += make_section("HRV Yearly Trajectory", traj_content,
+                             section_id="hrv-trajectory")
 
     hr_content = ""
     if not sleep.empty and "lowest_heart_rate" in sleep.columns and "average_heart_rate" in sleep.columns:
@@ -489,6 +620,13 @@ def main() -> None:
             "mean_sleep_efficiency_pct": round(float(mean_efficiency), 0) if not np.isnan(mean_efficiency) else None,
             "mean_daily_steps": round(float(mean_steps), 0) if not np.isnan(mean_steps) else None,
         },
+        "hrv_trajectory": {
+            "yearly": traj["yearly"],
+            "recent_30d_mean": traj["recent_30d_mean"],
+            "full_period_mean": traj["full_mean"],
+            "span_days": traj["span_days"],
+        },
+        "clinical_flags": traj["flags"],
     }
     json_path = REPORTS_DIR / f"{profile_key}_standalone_metrics.json"
     json_path.write_text(json.dumps(metrics, indent=2), encoding="utf-8")

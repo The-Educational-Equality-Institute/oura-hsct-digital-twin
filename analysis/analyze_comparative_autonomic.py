@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from profiles import PROFILES
 from config import (
     REPORTS_DIR,
     ESC_RMSSD_DEFICIENCY,
@@ -83,6 +84,7 @@ from _theme import (
     ACCENT_CYAN,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
+    TEXT_TERTIARY,
 )
 from _hardening import safe_connect, safe_read_sql, section_html_or_placeholder
 
@@ -185,6 +187,119 @@ def _add_event_vline(
         font=dict(size=9, color=color),
         row=row, col=col,
     )
+
+
+def _classify_severity(
+    hrv_series: pd.Series,
+    patient_id: str,
+    recent_window: int = 30,
+) -> dict[str, Any]:
+    """Classify autonomic severity using recent data and trajectory.
+
+    Uses the last ``recent_window`` days of HRV data to determine current
+    severity, then checks year-over-year trajectory to adjust the
+    classification when values are declining.
+
+    Classification tiers (based on recent-window RMSSD mean):
+      - severe_autonomic_dysfunction:   RMSSD < 15 ms
+                                        OR (RMSSD < 25 ms AND declining)
+      - moderate_autonomic_dysfunction: RMSSD 15-25 ms
+                                        OR (RMSSD 25-40 ms AND declining >10%/yr)
+      - mild_autonomic_impairment:      RMSSD 25-40 ms AND stable
+      - normal_range:                   RMSSD > 40 ms AND stable or improving
+
+    For patients aged > 55, RMSSD 20-40 ms is considered age-appropriate normal
+    and thresholds are adjusted accordingly.
+    """
+    if hrv_series.empty:
+        return {
+            "classification": "insufficient_data",
+            "recent_mean_ms": None,
+            "full_history_mean_ms": None,
+            "recent_window_days": recent_window,
+            "trajectory": "insufficient data",
+            "yoy_change_pct": None,
+            "age_adjusted": False,
+            "age_adjustment_note": None,
+        }
+
+    full_mean = float(hrv_series.mean())
+
+    # Calendar-based recent window (last N days by date, not tail N rows)
+    clean = hrv_series.dropna()
+    last_date = clean.index.max()
+    cutoff = last_date - pd.Timedelta(days=recent_window)
+    recent = clean.loc[clean.index > cutoff]
+    if recent.empty:
+        recent = clean
+    recent_mean = float(recent.mean())
+
+    # Year-over-year change: compare earliest 90-day window to latest 90-day window
+    yoy_change_pct = None
+    if len(hrv_series) >= 180:
+        early_window = hrv_series.head(90).mean()
+        late_window = hrv_series.tail(90).mean()
+        if early_window > 0:
+            yoy_change_pct = float((late_window - early_window) / early_window * 100)
+
+    # Recent-window trend (30-day linear regression)
+    recent_trend = _compute_linear_trend(recent)
+    trajectory = recent_trend["direction"]
+
+    declining = trajectory == "declining"
+    declining_significant = (
+        yoy_change_pct is not None and yoy_change_pct < -10
+    )
+
+    # Age adjustment for patients > 55
+    patient_age = PROFILES.get(patient_id, {}).get("age")
+    age_adjusted = False
+    age_note = None
+    if patient_age is not None and patient_age > 55:
+        age_adjusted = True
+        age_note = (
+            f"Patient age {patient_age}: RMSSD 20-40 ms is within "
+            f"age-expected range for adults >55. Population norms decline "
+            f"~3-5 ms/decade after age 30."
+        )
+
+    # Classification logic
+    if age_adjusted:
+        # Age-adjusted thresholds for >55
+        if recent_mean < 15:
+            classification = "severe_autonomic_dysfunction"
+        elif recent_mean < 20 or (recent_mean < 25 and declining):
+            classification = "moderate_autonomic_dysfunction"
+        elif recent_mean < 30 and declining_significant:
+            classification = "moderate_autonomic_dysfunction"
+        elif recent_mean < 40 and declining_significant:
+            classification = "mild_autonomic_impairment"
+        else:
+            classification = "normal_range"
+    else:
+        # Standard thresholds
+        if recent_mean < 15 or (recent_mean < 25 and declining):
+            classification = "severe_autonomic_dysfunction"
+        elif (15 <= recent_mean < 25) or (25 <= recent_mean < 40 and declining_significant):
+            classification = "moderate_autonomic_dysfunction"
+        elif 25 <= recent_mean < 40:
+            classification = "mild_autonomic_impairment"
+        elif recent_mean >= 40 and not declining and not declining_significant:
+            classification = "normal_range"
+        else:
+            # RMSSD >= 40 but declining (recent trend or >10% year-over-year)
+            classification = "mild_autonomic_impairment"
+
+    return {
+        "classification": classification,
+        "recent_mean_ms": round(recent_mean, 1),
+        "full_history_mean_ms": round(full_mean, 1),
+        "recent_window_days": int(len(recent)),
+        "trajectory": trajectory,
+        "yoy_change_pct": round(yoy_change_pct, 1) if yoy_change_pct is not None else None,
+        "age_adjusted": age_adjusted,
+        "age_adjustment_note": age_note,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -380,6 +495,13 @@ def compute_trends_and_comparison(
             },
         }
 
+    # Severity classification for all patients (recent-window + trajectory)
+    severity_classifications: dict[str, dict[str, Any]] = {}
+    for pid, metrics in data.items():
+        severity_classifications[pid] = _classify_severity(metrics["hrv"], pid)
+
+    stats_result["severity_classification"] = severity_classifications
+
     # Cross-patient comparison
     pids = list(data.keys())
     if len(pids) >= 2:
@@ -410,13 +532,220 @@ def compute_trends_and_comparison(
             "hrv_gap_ms": round(m_mean - h_mean, 1),
             "hr_gap_bpm": round(h_hr_mean - m_hr_mean, 1),
             "trajectories_converging": converging,
-            "severity_classification": {
-                pids[0]: "severe_autonomic_dysfunction" if h_mean < ESC_RMSSD_DEFICIENCY else "moderate_autonomic_impairment",
-                pids[1]: "mild_autonomic_impairment" if m_mean > 30 else "moderate_autonomic_impairment",
-            },
         }
 
     return stats_result
+
+
+# ---------------------------------------------------------------------------
+# [5b/7] Recent Window & Trend Assessment
+# ---------------------------------------------------------------------------
+
+def compute_recent_window(
+    data: dict[str, dict[str, Any]],
+    patients: list[PatientConfig],
+    window_days: int = 30,
+) -> dict[str, Any]:
+    """Compute recent-window stats and full-period linear trends per patient.
+
+    Returns a dict keyed by patient_id, each containing:
+      - full_mean / recent_mean for HRV, lowest HR, avg HR
+      - pct_change (recent vs full)
+      - declining flag (recent mean >10% below full-history mean)
+      - full-period linear trend (slope, direction)
+    """
+    patient_map = {p.patient_id: p for p in patients}
+    result: dict[str, Any] = {}
+
+    for pid, metrics in data.items():
+        p = patient_map[pid]
+        hrv = metrics["hrv"]
+        hr = metrics["hr"]
+        hr_low = metrics["hr_lowest"]
+
+        entry: dict[str, Any] = {
+            "label": p.display_name,
+            "window_days": window_days,
+        }
+
+        for metric_name, series in [("hrv", hrv), ("lowest_hr", hr_low), ("avg_hr", hr)]:
+            clean = series.dropna()
+            if clean.empty:
+                entry[metric_name] = {
+                    "full_mean": None, "recent_mean": None,
+                    "pct_change": None, "declining": False,
+                    "recent_start": None, "recent_end": None,
+                }
+                continue
+
+            full_mean = float(clean.mean())
+
+            # Most recent N calendar days (not tail N rows)
+            last_date = clean.index.max()
+            cutoff = last_date - pd.Timedelta(days=window_days)
+            recent = clean.loc[clean.index > cutoff]
+            recent_mean = float(recent.mean()) if not recent.empty else full_mean
+
+            pct_change = ((recent_mean - full_mean) / full_mean * 100) if full_mean != 0 else 0.0
+            declining = pct_change < -10.0
+
+            entry[metric_name] = {
+                "full_mean": round(full_mean, 1),
+                "recent_mean": round(recent_mean, 1),
+                "pct_change": round(pct_change, 1),
+                "declining": declining,
+                "recent_start": str(recent.index.min().date()) if not recent.empty else None,
+                "recent_end": str(recent.index.max().date()) if not recent.empty else None,
+                "recent_n": int(len(recent)),
+            }
+
+        # Full-period linear trend for HRV
+        hrv_clean = hrv.dropna()
+        if len(hrv_clean) >= 10:
+            x = np.arange(len(hrv_clean), dtype=float)
+            y = hrv_clean.values.astype(float)
+            slope, intercept, r, p_val, se = scipy_stats.linregress(x, y)
+            slope_per_week = slope * 7
+            total_days = (hrv_clean.index.max() - hrv_clean.index.min()).days
+            predicted_start = intercept
+            predicted_end = intercept + slope * len(hrv_clean)
+            entry["full_period_trend"] = {
+                "slope_per_week": round(float(slope_per_week), 3),
+                "p_value": float(p_val),
+                "r_squared": round(float(r ** 2), 3),
+                "direction": _trend_direction(slope, p_val),
+                "predicted_start": round(float(predicted_start), 1),
+                "predicted_end": round(float(predicted_end), 1),
+                "total_days": total_days,
+            }
+        else:
+            entry["full_period_trend"] = {
+                "slope_per_week": None,
+                "p_value": None,
+                "r_squared": None,
+                "direction": "insufficient data",
+                "predicted_start": None,
+                "predicted_end": None,
+                "total_days": 0,
+            }
+
+        result[pid] = entry
+
+    return result
+
+
+def _build_recent_window_html(
+    recent_window: dict[str, Any],
+    patients: list[PatientConfig],
+) -> str:
+    """Build HTML section for the recent 30-day window comparison."""
+    patient_map = {p.patient_id: p for p in patients}
+
+    # Table header
+    rows = []
+    for i, p in enumerate(patients):
+        pid = p.patient_id
+        rw = recent_window.get(pid)
+        if rw is None:
+            continue
+        label = f"P{i + 1}"
+        hrv = rw.get("hrv", {})
+        hr_low = rw.get("lowest_hr", {})
+        avg_hr = rw.get("avg_hr", {})
+
+        def _fmt(val: float | None) -> str:
+            return f"{val:.1f}" if val is not None else "N/A"
+
+        def _pct_badge(pct: float | None, declining: bool) -> str:
+            if pct is None:
+                return '<span style="color:#6B7280;">N/A</span>'
+            color = ACCENT_RED if declining else (ACCENT_AMBER if pct < -5 else ACCENT_GREEN)
+            arrow = "&#9660;" if pct < 0 else "&#9650;" if pct > 0 else "&#8212;"
+            return f'<span style="color:{color};font-weight:600;">{arrow} {pct:+.1f}%</span>'
+
+        def _trend_badge(trend: dict) -> str:
+            direction = trend.get("direction", "N/A")
+            slope = trend.get("slope_per_week")
+            colors = {"improving": ACCENT_GREEN, "declining": ACCENT_RED, "stable": ACCENT_AMBER}
+            color = colors.get(direction, TEXT_SECONDARY)
+            slope_str = f" ({slope:+.2f} ms/wk)" if slope is not None else ""
+            return f'<span style="color:{color};font-weight:600;">{direction.upper()}{slope_str}</span>'
+
+        trend = rw.get("full_period_trend", {})
+        pred_start = trend.get("predicted_start")
+        pred_end = trend.get("predicted_end")
+        trend_note = ""
+        if pred_start is not None and pred_end is not None:
+            trend_note = f"<br><span style='color:#6B7280;font-size:0.85em;'>Regression: {pred_start:.0f} &rarr; {pred_end:.0f} ms over {trend.get('total_days', 0)} days</span>"
+
+        rows.append(f"""
+        <tr>
+          <td style="font-weight:600;color:{PATIENT_COLORS.get(pid, ACCENT_PURPLE)};">{label}</td>
+          <td>{_fmt(hrv.get('full_mean'))}</td>
+          <td>{_fmt(hrv.get('recent_mean'))} {_pct_badge(hrv.get('pct_change'), hrv.get('declining', False))}</td>
+          <td>{_fmt(hr_low.get('full_mean'))}</td>
+          <td>{_fmt(hr_low.get('recent_mean'))} {_pct_badge(hr_low.get('pct_change'), hr_low.get('declining', False))}</td>
+          <td>{_fmt(avg_hr.get('full_mean'))}</td>
+          <td>{_fmt(avg_hr.get('recent_mean'))} {_pct_badge(avg_hr.get('pct_change'), avg_hr.get('declining', False))}</td>
+          <td>{_trend_badge(trend)}{trend_note}</td>
+        </tr>""")
+
+    # Flags for declining patients
+    flags = []
+    for i, p in enumerate(patients):
+        pid = p.patient_id
+        rw = recent_window.get(pid)
+        if rw is None:
+            continue
+        label = f"P{i + 1}"
+        for metric_label, key in [("HRV", "hrv"), ("Lowest HR", "lowest_hr"), ("Avg HR", "avg_hr")]:
+            m = rw.get(key, {})
+            if m.get("declining"):
+                pct = m.get("pct_change", 0)
+                flags.append(
+                    f'<div style="color:{ACCENT_RED};padding:6px 12px;background:rgba(239,68,68,0.08);'
+                    f'border-radius:6px;margin-top:6px;font-size:0.9em;">'
+                    f'&#9888; {label} {metric_label}: recent 30-day mean is {abs(pct):.1f}% below full-history mean '
+                    f'({m.get("full_mean")} &rarr; {m.get("recent_mean")})'
+                    f'</div>'
+                )
+
+    flags_html = "\n".join(flags) if flags else (
+        f'<div style="color:{ACCENT_GREEN};padding:6px 12px;font-size:0.9em;">'
+        'No patients flagged for &gt;10% decline in recent window.</div>'
+    )
+
+    html = f"""
+    <div style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:0.9em;margin:12px 0;">
+      <thead>
+        <tr style="border-bottom:1px solid {TEXT_TERTIARY};color:{TEXT_SECONDARY};text-align:left;">
+          <th style="padding:8px 6px;"></th>
+          <th style="padding:8px 6px;">HRV Full</th>
+          <th style="padding:8px 6px;">HRV 30d</th>
+          <th style="padding:8px 6px;">Low HR Full</th>
+          <th style="padding:8px 6px;">Low HR 30d</th>
+          <th style="padding:8px 6px;">Avg HR Full</th>
+          <th style="padding:8px 6px;">Avg HR 30d</th>
+          <th style="padding:8px 6px;">Full-Period Trend</th>
+        </tr>
+      </thead>
+      <tbody style="color:{TEXT_PRIMARY};">
+        {"".join(rows)}
+      </tbody>
+    </table>
+    </div>
+    <div style="margin-top:8px;">
+      <strong style="color:{TEXT_SECONDARY};font-size:0.9em;">Decline Flags (recent 30d mean &gt;10% below full-history mean):</strong>
+      {flags_html}
+    </div>
+    <p style="color:{TEXT_TERTIARY};font-size:0.8em;margin-top:10px;">
+      Full-period trend uses linear regression across each patient's entire data range.
+      Declining = recent 30-day mean is more than 10% below full-history mean, indicating
+      the full-history average overstates current health status.
+    </p>
+    """
+    return html
 
 
 # ---------------------------------------------------------------------------
@@ -775,6 +1104,7 @@ def build_html(
     data: dict[str, dict[str, Any]],
     stats_result: dict[str, Any],
     patients: list[PatientConfig],
+    recent_window: dict[str, Any] | None = None,
 ) -> str:
     """Build the full HTML report."""
     sections: list[str] = []
@@ -808,6 +1138,17 @@ def build_html(
         status_label=h_trend_dir.title(),
     ))
     sections.append(make_kpi_row(*kpi_cards))
+
+    # -- Recent Window Comparison --
+    if recent_window:
+        sections.append(section_html_or_placeholder(
+            "Recent 30-Day Window",
+            lambda: make_section(
+                "Recent 30-Day Window vs Full History",
+                _build_recent_window_html(recent_window, patients),
+                section_id="recent-window",
+            ),
+        ))
 
     # -- Section 1: HRV Trajectory --
     sections.append(section_html_or_placeholder(
@@ -905,13 +1246,18 @@ def build_html(
 # [7/7] JSON Export
 # ---------------------------------------------------------------------------
 
-def export_json(stats_result: dict[str, Any]) -> None:
+def export_json(
+    stats_result: dict[str, Any],
+    recent_window: dict[str, Any] | None = None,
+) -> None:
     """Write structured metrics JSON."""
     output = {
         "report": "comparative_autonomic",
         "generated_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
         **stats_result,
     }
+    if recent_window:
+        output["recent_window"] = recent_window
 
     # Sanitize NaN for JSON
     def _sanitize(obj: Any) -> Any:
@@ -960,15 +1306,40 @@ def main() -> int:
     logger.info("[5/7] Computing trends and comparison...")
     stats_result = compute_trends_and_comparison(data, patients)
 
+    for pid, sev in stats_result.get("severity_classification", {}).items():
+        logger.info(
+            "  %s severity: %s (recent %.1f ms, full-history %.1f ms, trajectory=%s%s)",
+            pid,
+            sev["classification"],
+            sev.get("recent_mean_ms") or 0,
+            sev.get("full_history_mean_ms") or 0,
+            sev.get("trajectory", "N/A"),
+            f", age-adjusted" if sev.get("age_adjusted") else "",
+        )
+
+    logger.info("[5b/7] Computing recent window comparison...")
+    recent_window = compute_recent_window(data, patients)
+    for pid, rw in recent_window.items():
+        hrv_info = rw.get("hrv", {})
+        trend_info = rw.get("full_period_trend", {})
+        logger.info(
+            "  %s: HRV full=%.1f, recent-30d=%.1f (%+.1f%%), trend=%s",
+            rw.get("label", pid),
+            hrv_info.get("full_mean") or 0,
+            hrv_info.get("recent_mean") or 0,
+            hrv_info.get("pct_change") or 0,
+            trend_info.get("direction", "N/A"),
+        )
+
     logger.info("[6/7] Generating HTML report...")
-    html = build_html(data, stats_result, patients)
+    html = build_html(data, stats_result, patients, recent_window=recent_window)
     HTML_OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     with open(HTML_OUTPUT, "w") as f:
         f.write(html)
     logger.info("HTML report written to %s", HTML_OUTPUT)
 
     logger.info("[7/7] Exporting JSON metrics...")
-    export_json(stats_result)
+    export_json(stats_result, recent_window=recent_window)
 
     logger.info("Comparative autonomic analysis complete.")
     return 0

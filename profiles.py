@@ -30,11 +30,11 @@ PROFILES = {
         "ring_gen": 4,
     },
     "mitch": {
-        "label": "Post-Stroke Patient",
-        "age": 33,
-        "condition": "Stroke at 33, bilateral carotid/vertebral artery dissection (left main)",
+        "label": "Post-Stroke / ALL Survivor",
+        "age": 36,
+        "condition": "ALL at 14 (daunorubicin, vincristine), bilateral vertebral artery dissection with cerebellar stroke at 33. Missing echo (22yr post-anthracycline). Autonomic dysfunction worsening.",
         "database": PROJECT_ROOT / "data" / "mitch.db",
-        "major_event_date": date(2024, 12, 15),
+        "major_event_date": date(2023, 4, 22),  # Stroke date (22 April 2023)
         "major_event_label": "Stroke",
         # P2's tokens use prefixed env vars
         "token_env": "MITCH_OURA_ACCESS_TOKEN",
