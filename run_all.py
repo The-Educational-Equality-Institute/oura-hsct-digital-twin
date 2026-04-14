@@ -53,6 +53,7 @@ SCRIPTS = [
     "analyze_placebo_tests.py",
     "analyze_tau_u.py",
     "generate_roadmap.py",
+    "generate_research_synthesis.py",
     "generate_index.py",
 ]
 
@@ -83,6 +84,7 @@ SEND_BUNDLE_HTML = [
     "sequential_causal_impact.html",
     "placebo_calibration.html",
     "tau_u_effects.html",
+    "research_synthesis.html",
     "roadmap.html",
 ]
 
@@ -112,6 +114,7 @@ SEND_BUNDLE_JSON = [
     "sequential_causal_impact_metrics.json",
     "placebo_calibration_metrics.json",
     "tau_u_metrics.json",
+    "research_synthesis_metrics.json",
 ]
 
 

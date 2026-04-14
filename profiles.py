@@ -20,7 +20,7 @@ PROFILES = {
         "condition": "ALL at 14, allogeneic HSCT 2023-11-23",
         "transplant_date": date(2023, 11, 23),
         "treatment_start": date(2026, 3, 16),
-        "treatment": "Ruxolitinib 10mg BID",
+        "treatment": "Ruxolitinib 10mg BID + Bisoprolol 2.5mg daily (from Apr 8)",
         "database": PROJECT_ROOT / "data" / "demo.db",
         "major_event_date": date(2023, 11, 23),
         "major_event_label": "HSCT",

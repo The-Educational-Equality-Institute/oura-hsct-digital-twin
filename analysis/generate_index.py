@@ -169,6 +169,10 @@ REPORT_META: dict[str, dict] = {
         "desc": "Tau-U and NAP effect sizes for single-case experimental design with baseline trend correction.",
         "icon": "&#964;",  # tau
     },
+    "synthesis": {
+        "desc": "Two-hit autonomic recovery hypothesis: research synthesis with live KPIs, timeline, and statistical evidence.",
+        "icon": "&#9883;",  # caduceus-like
+    },
 }
 
 GROUP_SUMMARIES: dict[str, str] = {

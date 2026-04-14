@@ -70,6 +70,7 @@ REPORT_REGISTRY = [
     {"id": "sequential_ci", "file": "sequential_causal_impact.html", "title": "Sequential CI", "group": "Statistical"},
     {"id": "placebo", "file": "placebo_calibration.html", "title": "Placebo Tests", "group": "Statistical"},
     {"id": "tau_u", "file": "tau_u_effects.html", "title": "Tau-U Effects", "group": "Statistical"},
+    {"id": "synthesis", "file": "research_synthesis.html", "title": "Research Synthesis", "group": "Clinical"},
 ]
 
 NAV_PRIMARY_IDS = [
