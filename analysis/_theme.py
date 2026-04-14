@@ -71,6 +71,7 @@ REPORT_REGISTRY = [
     {"id": "placebo", "file": "placebo_calibration.html", "title": "Placebo Tests", "group": "Statistical"},
     {"id": "tau_u", "file": "tau_u_effects.html", "title": "Tau-U Effects", "group": "Statistical"},
     {"id": "synthesis", "file": "research_synthesis.html", "title": "Research Synthesis", "group": "Clinical"},
+    {"id": "treatment_report", "file": "treatment_response_report.html", "title": "Treatment Report", "group": "Clinical"},
 ]
 
 NAV_PRIMARY_IDS = [

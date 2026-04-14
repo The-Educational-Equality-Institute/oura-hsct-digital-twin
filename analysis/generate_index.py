@@ -173,6 +173,10 @@ REPORT_META: dict[str, dict] = {
         "desc": "Two-hit autonomic recovery hypothesis: research synthesis with live KPIs, timeline, and statistical evidence.",
         "icon": "&#9883;",  # caduceus-like
     },
+    "treatment_report": {
+        "desc": "Primary clinical report covering all systems and both medicines for Drs Schoemans and Wolff.",
+        "icon": "&#9764;",  # medical
+    },
 }
 
 GROUP_SUMMARIES: dict[str, str] = {
