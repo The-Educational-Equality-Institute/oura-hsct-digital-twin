@@ -1,0 +1,187 @@
+================================================================================
+  BEHANDLINGSRAPPORT — HENRIK
+  14. april 2026
+  Dag 29 på Jakavi (ruxolitinib 10mg x2/dag)
+  Dag 7 på Bisoprolol 2.5mg/dag
+================================================================================
+
+
+1. I NATT
+─────────
+
+  HRV:              28.3 ms
+  Laveste puls:     61 bpm
+  Snittpuls søvn:   71.1 bpm
+  Søvnlengde:       6.6 timer
+  Søvneffektivitet: 85%
+  Dyp søvn:         1.0 timer
+  REM søvn:         0.6 timer
+  Readiness:        72
+  Temp.avvik:       +0.1 C
+
+
+2. HVA HAR SKJEDD MED HJERTET
+──────────────────────────────
+
+  For medisin (67 dager):
+    HRV snitt:        10.0 ms  (1.6. persentil -- kritisk lavt)
+    Laveste puls:     76.7 bpm
+    Snittpuls sovn:   85.2 bpm
+    Recovery Index:   61
+    94% av nettene under ESC-grensen for alvorlig autonom svikt
+
+  Pa Jakavi alene (22 dager, 16. mars - 7. april):
+    HRV snitt:        10.9 ms  (ingen signifikant endring)
+    Laveste puls:     72.9 bpm  (ned 3.8 bpm, p=0.009)
+    Snittpuls sovn:   81.4 bpm  (ned 3.7 bpm, p=0.012)
+    Recovery Index:   58
+    -> Jakavi senket pulsen, men HRV forble flat rundt 10 ms
+
+  Pa Jakavi + Bisoprolol (7 dager, 8.-14. april):
+    HRV snitt:        22.6 ms  (opp 11.7 ms, p=0.002)
+    Laveste puls:     68.0 bpm  (ned ytterligere 4.9 bpm)
+    Snittpuls sovn:   76.5 bpm
+    Recovery Index:   90  (opp fra 58)
+    Rekord-HRV:       34.6 ms (13. april) -- hoyeste noensinne i datasettet
+
+  Totalendring (for medisin -> na):
+    HRV:              10.0 -> 22.6 ms  (+126%)
+    Laveste puls:     76.7 -> 68.0 bpm  (-8.7)
+    Snittpuls:        85.2 -> 76.5 bpm  (-8.7)
+    Recovery:         61 -> 90  (+29)
+
+
+3. SOVN
+───────
+
+  For medisin:        5.9 timer, 79% effektivitet
+    Dyp: 1.13h (19%)  REM: 0.88h (15%)
+
+  Jakavi alene:       5.9 timer, 80% effektivitet
+    Dyp: 1.06h (18%)  REM: 0.94h (16%)
+
+  Jakavi + Bisoprolol: 7.3 timer, 80% effektivitet
+    Dyp: 1.46h (20%)  REM: 1.03h (14%)
+
+  Endring:
+    Sovnlengde:       +1.4 timer/natt (p=0.003)
+    Dyp sovn:         +20 minutter/natt (+29%)
+    REM sovn:         +9 minutter/natt
+    Effektivitet:     Uendret (79% -> 80%)
+    Pustefrekvens:    13.9 -> 15.3 brpm (opp, men innenfor normalt)
+
+
+4. AKTIVITET OG FORM
+─────────────────────
+
+  For medisin:        2391 skritt/dag, aktivitetsscore 54
+  Jakavi alene:       3744 skritt/dag, aktivitetsscore 56
+  Jakavi + Bisoprolol: 4069 skritt/dag, aktivitetsscore 83
+
+  Aktivitetsscore:    54 -> 83  (p=0.0001)
+  Skritt:             2391 -> 4069  (+70%)
+  Aktive kalorier:    172 -> 276 kcal/dag
+  -> Du er markant mer aktiv. Aktivitetsscoren er den mest signifikante
+     endringen i hele datasettet (p=0.0001).
+
+
+5. INFLAMMASJON OG TEMPERATUR
+─────────────────────────────
+
+  Temperaturavvik:
+    For medisin:      +0.06 C
+    Jakavi alene:     -0.09 C  (gikk ned -- god respons)
+    Jakavi + Biso:    +0.30 C  (!! steget, p=0.035)
+    -> Temperaturen gikk NED pa Jakavi alene (anti-inflammatorisk effekt),
+       men har steget igjen etter Bisoprolol ble lagt til. Kan vaere
+       medikamenteffekt, kan vaere tilfeldig med 7 dager. Bor folges.
+
+  SpO2:
+    Stabil gjennom hele perioden: 96.1% -> 95.7%
+    Ingen bekymring. Lungene er stabile.
+
+  Readiness:
+    For medisin:      snitt 65, 22/64 dager >=70 (34%)
+    Jakavi + Biso:    snitt 68, 4/6 dager >=70 (67%)
+
+
+6. SAMMENLIGNING MED MITCH OG MAMMA
+────────────────────────────────────
+  (Siste 22 dager, samme tidsvindu)
+
+                      Henrik (36)    Mitch (36)    Wenche (61)
+  ─────────────────────────────────────────────────────────────
+  HRV (RMSSD)          14.5 ms       43.1 ms       26.8 ms
+  Laveste HR           71.5 bpm      49.6 bpm      52.3 bpm
+  Snitt sovn-HR        80.0 bpm      58.7 bpm      57.2 bpm
+
+  Din 61 ar gamle mor har nesten dobbelt sa hoy HRV som deg
+  og 23 bpm lavere sovnpuls. Du er uteliggeren -- ikke dem.
+  Din genetiske baseline burde ligge rundt 35-45 ms HRV.
+  Du er pa 22.6 ms og stigende.
+
+
+7. HVA MEDISINENE GJOR -- OPPSUMMERT
+─────────────────────────────────────
+
+  JAKAVI (ruxolitinib 10mg x2/dag):
+    Startet 16. mars. Virker anti-inflammatorisk via JAK1/JAK2-hemming.
+    Reduserer cytokiner (IL-6, TNF-a, IFN-g) som driver den autonome
+    dysfunksjonen. Etter 23 dager alene:
+    * Pulsen gikk signifikant ned (-3.8 bpm, p=0.009)
+    * HRV forble flat (~10 ms) -- trolig fordi det sympatiske nervesystemet
+      var selvopprettholdende selv etter at inflammasjonen begynte a avta
+    * Temperaturen gikk ned (godt tegn -- mindre inflammasjon)
+
+  BISOPROLOL (2.5mg/dag):
+    Lagt til 8. april oppa Jakavi. Selektiv beta-1-blokker.
+    Blokkerer sympatisk input til sinusknuten.
+    Etter 7 dager:
+    * HRV eksploderte: 10.9 -> 22.6 ms (+107%, p=0.002)
+    * Pulsen gikk videre ned (-4.9 bpm)
+    * Sovnlengde opp 1.4 timer/natt
+    * Recovery Index fra 58 til 90
+    * Aktivitetsscore fra 56 til 83
+
+  TOLKNING:
+    Jakavi brukte 23 dager pa a redusere inflammasjonen og gjenopprette
+    det autonome nervesystemets evne til a fungere. Men den sympatiske
+    overdriften holdt seg selv oppe -- som en komprimert fjaer. Bisoprolol
+    brot den sympatiske lasen, og den allerede gjenopprettede vagale
+    kapasiteten kunne endelig uttrykke seg.
+
+    Det er IKKE slik at Bisoprolol gjor alt alene. Hadde du fatt
+    Bisoprolol uten Jakavi forst, ville responsen trolig vaert mye svakere
+    fordi inflammasjonen fortsatt ville undertrykket vagusnerven.
+    Rekkefolgen er viktig.
+
+
+8. VARSLER
+──────────
+
+  !! Temperaturavvik steget til +0.3 C (p=0.035)
+     Var -0.09 C pa Jakavi alene. Bor nevnes for Schoemans.
+
+  !! Pustefrekvens steget fra 13.9 til 15.3 brpm
+     Innenfor normalomradet, men folg trenden.
+
+  i  PPG-begrensning: Oura Ring maler HRV via pulsoksimetri, ikke EKG.
+     Ved HRV under ~15 ms er malenoyaktigheten begrenset. Verdiene
+     fra for Bisoprolol bor tolkes kvalitativt ('veldig lavt'),
+     ikke som presise tall.
+
+  Anbefalte prover:
+    * hsCRP (na -- for a etablere inflammasjonsstatus etter Bisoprolol)
+    * IL-6 (hvis tilgjengelig)
+    * Ferritin (oppdatering fra 1247 ug/L i desember)
+    * HEV PCR (virusstatus etter ruxolitinib)
+    * Hjerte-MR T2* (kardial jernavleiring -- aldri gjort)
+    * Autonom testing (tilt table, QSART) ved 3 maneder
+
+================================================================================
+  Generert 14. april 2026 fra Oura Ring Gen 4-data
+  96 dager kontinuerlig overvakning (8. januar - 14. april 2026)
+  Alle p-verdier: Mann-Whitney U, tosidig
+  Digital Twin: oura-hsct-digital-twin (TEEI)
+================================================================================
+
