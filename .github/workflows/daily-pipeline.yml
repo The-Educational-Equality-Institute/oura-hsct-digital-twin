@@ -140,11 +140,24 @@ jobs:
             reports/*.json
           retention-days: 30
 
-      # --- Deploy to Cloudflare Pages ---
-      # Deploys to the digital-twin-reports project (reports only).
-      # The main Astro landing page at digital-twin is managed separately.
-      - name: Deploy to Cloudflare Pages
+      # --- Deploy to Cloudflare Pages via Astro landing page ---
+      # The Astro site at digital-twin-site owns the root URL.
+      # Reports are synced into public/reports/, then built and deployed together.
+      - name: Clone Astro landing page site
         if: success()
+        run: |
+          gh repo clone The-Educational-Equality-Institute/digital-twin-site /tmp/digital-twin-site -- --depth 1 || true
+          if [ ! -d /tmp/digital-twin-site ]; then
+            echo "Could not clone digital-twin-site repo, falling back to reports-only deploy"
+            echo "ASTRO_AVAILABLE=false" >> $GITHUB_ENV
+          else
+            echo "ASTRO_AVAILABLE=true" >> $GITHUB_ENV
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.ACTIONS_PAT }}
+
+      - name: Deploy via Astro site
+        if: success() && env.ASTRO_AVAILABLE == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -154,11 +167,47 @@ jobs:
             exit 0
           fi
 
+          cd /tmp/digital-twin-site
+          npm ci
+
+          # Sync fresh reports into the Astro site
+          mkdir -p public/reports
+          for f in $GITHUB_WORKSPACE/reports/*.html; do
+            [ -f "$f" ] && cp "$f" public/reports/
+          done
+          for f in $GITHUB_WORKSPACE/reports/*.json; do
+            [ -f "$f" ] && cp "$f" public/reports/
+          done
+
+          # Remove any index.html from reports (landing page is index.astro)
+          rm -f public/reports/index.html
+
+          npx astro build
+          npm install -g wrangler
+
+          wrangler pages deploy dist \
+            --project-name=digital-twin \
+            --branch=main \
+            --commit-dirty=true
+
+      - name: Deploy reports only (fallback)
+        if: success() && env.ASTRO_AVAILABLE == 'false'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "Skipping Cloudflare deploy (CLOUDFLARE_API_TOKEN not configured)"
+            exit 0
+          fi
+
+          echo "WARNING: Deploying reports without Astro landing page"
           npm install -g wrangler
 
           mkdir -p deploy
           cp reports/*.html deploy/ 2>/dev/null || true
           cp reports/*.json deploy/ 2>/dev/null || true
+          rm -f deploy/index.html
 
           wrangler pages deploy deploy \
             --project-name=digital-twin \
