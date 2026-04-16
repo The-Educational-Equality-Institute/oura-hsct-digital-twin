@@ -52,6 +52,12 @@ echo "[3/5] Importing OMRON BP readings..."
 python "$DIGITAL_TWIN/api/import_omron.py" || echo "  OMRON import non-fatal warning (continuing)"
 echo "  OMRON import done."
 
+# 3c. Rebuild the DuckDB analytic layer (frame_1d, frame_1h, v_baselines)
+#     from the latest SQLite state. Idempotent, ~1s per rebuild.
+echo "[3c/5] Rebuilding analytic frames..."
+python "$DIGITAL_TWIN/analysis/_frames.py" --rebuild || echo "  frame rebuild non-fatal warning (continuing)"
+echo "  frame rebuild done."
+
 # 4. Run all analysis scripts
 echo "[4/5] Running analysis pipeline..."
 cd "$DIGITAL_TWIN"
