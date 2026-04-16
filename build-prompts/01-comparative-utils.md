@@ -6,7 +6,7 @@ Create `analysis/_comparative_utils.py` — a shared utility module that all 5 c
 
 ## Project location
 
-`/home/henrik/projects/teei/oura-hsct-digital-twin/`
+`/home/henrik/projects/helse/oura-hsct-digital-twin/`
 
 ## Two patients
 

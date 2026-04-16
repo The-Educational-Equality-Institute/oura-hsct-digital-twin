@@ -1,7 +1,7 @@
 # Viatom TH12 12-Lead ECG Holter — Integration Plan
 
 Status: Plan only, no code. Written 2026-04-16.
-Target: `/home/henrik/projects/teei/oura-hsct-digital-twin/`
+Target: `/home/henrik/projects/helse/oura-hsct-digital-twin/`
 Python: 3.12 venv at `.venv/`
 DB: SQLite at `data/oura.db`
 

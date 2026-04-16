@@ -1,6 +1,6 @@
 # Digital Twin Upgrade Plan: Foundation Models and Multi-Modal Fusion
 
-Target: `/home/henrik/projects/teei/oura-hsct-digital-twin/` (Python 3.12, `.venv/`, `data/oura.db`)
+Target: `/home/henrik/projects/helse/oura-hsct-digital-twin/` (Python 3.12, `.venv/`, `data/oura.db`)
 
 Generated 2026-04-16 by deep-research planning agent.
 

@@ -16,7 +16,7 @@ Feed these to the Claude Code session on ryzen (`launch-h4oura.sh`) in order.
 
 Test with:
 ```bash
-cd /home/henrik/projects/teei/oura-hsct-digital-twin
+cd /home/henrik/projects/helse/oura-hsct-digital-twin
 source .venv/bin/activate
 python analysis/<script_name>.py
 ```

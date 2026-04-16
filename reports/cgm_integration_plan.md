@@ -1,6 +1,6 @@
 # FreeStyle Libre 3 Plus Integration Plan
 
-**Target project:** `/home/henrik/projects/teei/oura-hsct-digital-twin/`
+**Target project:** `/home/henrik/projects/helse/oura-hsct-digital-twin/`
 **Patient:** Henrik (post-HSCT MDS-AML, ruxolitinib 10 mg BID + bisoprolol 2.5 mg daily)
 **Sensor:** FreeStyle Libre 3 Plus, one sensor / 15-day trial, activation ~2026-04-21
 **Plan committed:** 2026-04-16

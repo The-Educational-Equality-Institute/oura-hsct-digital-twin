@@ -6,7 +6,7 @@ Create `analysis/analyze_comparative_autonomic.py` — Module 1: Autonomic Recov
 
 ## Project location
 
-`/home/henrik/projects/teei/oura-hsct-digital-twin/`
+`/home/henrik/projects/helse/oura-hsct-digital-twin/`
 
 ## Output files
 

@@ -1,6 +1,6 @@
 # Viatom Checkme O2 Max — Integration Plan
 
-**Target project:** `/home/henrik/projects/teei/oura-hsct-digital-twin/`
+**Target project:** `/home/henrik/projects/helse/oura-hsct-digital-twin/`
 **Author:** integration planning pass, 2026-04-16
 **Status:** Plan only, no code changes in this document.
 
