@@ -36,27 +36,44 @@ The pipeline re-computes all reported values from the current data on every run.
 ```
 oura-digital-twin/
   config.example.py        Patient-specific constants (copy to config.py)
+  profiles.py              Multi-patient profile registry
   .env.example             API credentials template (copy to .env)
-  run_all.py               Pipeline runner - all 12 scripts sequentially
+  run_all.py               Analysis pipeline runner
+  run_tests.py             Test suite runner (all tests/ingest/)
   requirements.txt         Core dependencies
   requirements-full.txt    Full stack (optional backends included)
   pyproject.toml           Ruff linter configuration
   api/
     oura_oauth2_setup.py   OAuth2 authorization flow
     import_oura.py         Oura API -> SQLite importer
+    import_glucose.py      FreeStyle Libre / LibreView CSV importer
+    import_viatom_ecg.py   Viatom TH12 12-lead ECG Holter importer
+    import_contec_abpm.py  Contec ABPM50 24h ambulatory BP importer
+    import_checkme_spo2.py Checkme O2 Max continuous SpO2 importer
+    import_omron.py        OMRON M7 (HEM-7380T1) AFib BP importer
+    import_symptom.py      Manual symptom-event CLI logger
+    _ingest_common.py      Shared CSV/DB helpers for all importers
   analysis/
     _theme.py              Shared HTML/CSS design system
     _config.py             Backwards-compat config re-export
     _hardening.py          Numerical stability utilities
     statcheck_reports.py   QA - verify stats match between HTML and JSON
-    analyze_oura_*.py      10 analysis scripts
-    generate_*.py          2 dashboard/roadmap generators
+    analyze_oura_*.py      Oura-source analyses
+    analyze_comparative_*.py  Cross-patient comparative analyses
+    analyze_glucose_autonomic_coupling.py  CGM × Oura HRV coupling
+    generate_*.py          Dashboard/roadmap generators
+  docs/
+    MULTI_DEVICE_INGEST.md Multi-device ingest guide (this session)
+    checkme_o2_max_integration_plan.md  Vendor-format research notes
+  tests/
+    ingest/                Importer unit tests (79 tests, stdlib only)
   scripts/
     daily_pipeline.sh      Cron-ready daily import + analysis
     install_full_stack.sh  Full dependency installer (handles ssm/Cython)
   data/demo.db             Demo dataset (79 days of real Oura data, included)
   data/oura.db             Your own data (created by importer, gitignored)
   reports/                 Generated output (gitignored, see live site)
+  reports/cgm_hypotheses_pre_registered.md  Pre-registered H1-H4 for CGM trial
 ```
 
 ## Quick Start (demo data included)
@@ -122,6 +139,31 @@ If data is missing/empty, `run_all.py` now stops at precheck with an actionable 
 instead of emitting long per-script tracebacks.
 
 All output goes to `reports/`.
+
+## Multi-Device Monitoring (optional)
+
+Beyond Oura, the pipeline supports importing data from additional monitoring
+devices into the same SQLite database, enabling cross-modal analyses (e.g. CGM
+× HRV coupling, ECG events at glucose spikes, SpO2 desaturations × sleep phase).
+
+| Device | Modality | Importer |
+|---|---|---|
+| FreeStyle Libre 3 Plus | Glucose (1/min) | `api/import_glucose.py` |
+| Viatom TH12 | 12-lead ECG Holter + AI events | `api/import_viatom_ecg.py` |
+| Contec ABPM50 | 24h ambulatory BP | `api/import_contec_abpm.py` |
+| Checkme O2 Max | Continuous SpO2 | `api/import_checkme_spo2.py` |
+| OMRON M7 (HEM-7380T1) | Home BP + AFib detection | `api/import_omron.py` |
+| Manual symptom events | CLI logger | `api/import_symptom.py` |
+
+Each importer supports `--init-only` (schema only), `--csv` (real import), and
+`--profile` (multi-patient). See [`docs/MULTI_DEVICE_INGEST.md`](docs/MULTI_DEVICE_INGEST.md)
+for per-device commands, schema details, and the format-validation workflow.
+
+Run the ingest test suite:
+
+```bash
+python run_tests.py
+```
 
 ## Configuration
 
