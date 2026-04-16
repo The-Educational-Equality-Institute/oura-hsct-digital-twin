@@ -100,6 +100,57 @@ temperature_schema = DataFrameSchema(
 )
 
 # ---------------------------------------------------------------------------
+# Blood pressure data (omron_bp_readings table) - OMRON M7 Intelli IT AFib
+# ---------------------------------------------------------------------------
+bp_schema = DataFrameSchema(
+    {
+        "sys": Column(
+            int,
+            Check.in_range(60, 260),
+            nullable=False,
+            description="Systolic BP (mmHg) - 60 to 260 covers severe hypotension to hypertensive crisis",
+        ),
+        "dia": Column(
+            int,
+            Check.in_range(30, 200),
+            nullable=False,
+            description="Diastolic BP (mmHg)",
+        ),
+        "bpm": Column(
+            int,
+            Check.in_range(25, 220),
+            nullable=False,
+            description="Pulse rate measured by cuff (bpm)",
+        ),
+        "ihb": Column(
+            int,
+            Check.isin([0, 1]),
+            nullable=False,
+            description="Irregular heartbeat flag (OMRON M7 per-reading bit; NOT the same as OMRON AFib verdict)",
+        ),
+        "mov": Column(
+            int,
+            Check.isin([0, 1]),
+            nullable=False,
+            description="Body movement flag during measurement",
+        ),
+        "map_mmhg": Column(
+            float,
+            Check.in_range(40, 220),
+            nullable=True,
+            description="Mean arterial pressure = DIA + (SYS-DIA)/3",
+        ),
+        "pulse_pressure": Column(
+            int,
+            Check.in_range(20, 180),
+            nullable=True,
+            description="SYS - DIA (mmHg). <20 flagged as artifact at ingest.",
+        ),
+    },
+    coerce=True,
+)
+
+# ---------------------------------------------------------------------------
 # Statistical results - for validating computed p-values and effect sizes
 # ---------------------------------------------------------------------------
 stats_result_schema = DataFrameSchema(
@@ -151,4 +202,13 @@ def validate_sleep(df):
     cols = {"total_sleep_duration", "efficiency"}
     if cols & set(df.columns):
         return sleep_schema.validate(df, lazy=True)
+    return df
+
+
+def validate_bp(df):
+    """Validate blood pressure DataFrame. Filters out artifact rows first."""
+    if "sys" in df.columns and "dia" in df.columns:
+        if "is_artifact" in df.columns:
+            df = df[df["is_artifact"] == 0]
+        return bp_schema.validate(df, lazy=True)
     return df

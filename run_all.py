@@ -52,6 +52,7 @@ SCRIPTS = [
     "analyze_sequential_ci.py",
     "analyze_placebo_tests.py",
     "analyze_tau_u.py",
+    "analyze_omron_bp.py",
     "generate_roadmap.py",
     "generate_research_synthesis.py",
     "generate_treatment_report.py",
@@ -88,6 +89,7 @@ SEND_BUNDLE_HTML = [
     "research_synthesis.html",
     "treatment_response_report.html",
     "roadmap.html",
+    "omron_bp_report.html",
 ]
 
 SEND_BUNDLE_JSON = [
@@ -118,6 +120,7 @@ SEND_BUNDLE_JSON = [
     "tau_u_metrics.json",
     "research_synthesis_metrics.json",
     "treatment_response_metrics.json",
+    "omron_bp_report.json",
 ]
 
 
