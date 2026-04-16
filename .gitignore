@@ -9,6 +9,8 @@ config.py
 # Data (user-specific databases)
 data/*.db
 !data/demo.db
+data/*.duckdb
+data/analytic.duckdb
 
 # Python
 __pycache__/
