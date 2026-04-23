@@ -49,11 +49,9 @@ SCRIPTS = [
     "analyze_weekly_tracker.py",
     "analyze_rux_forecast.py",
     "generate_roadmap.py",
-    "generate_index.py",
 ]
 
 SEND_BUNDLE_HTML = [
-    "index.html",
     "oura_full_analysis.html",
     "advanced_hrv_analysis.html",
     "advanced_sleep_analysis.html",
