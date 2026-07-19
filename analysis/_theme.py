@@ -39,7 +39,6 @@ from config import DATABASE_PATH, FONT_FAMILY, PLOTLY_CDN_URL, PATIENT_LABEL, DA
 # ---------------------------------------------------------------------------
 
 REPORT_REGISTRY = [
-    {"id": "home", "file": "index.html", "title": "Dashboard", "group": "Core"},
     {"id": "about", "file": "roadmap.html#honest", "title": "About", "group": "Context"},
     {"id": "roadmap", "file": "roadmap.html#roadmap", "title": "Next Steps", "group": "Context"},
     {"id": "full_analysis", "file": "oura_full_analysis.html", "title": "Full Analysis", "group": "Core"},
@@ -1814,7 +1813,7 @@ def get_navigation_html(current_report_id: str) -> str:
 
     return (
         '<nav class="odt-nav">\n'
-        '  <a class="odt-nav-brand" href="index.html">'
+        '  <a class="odt-nav-brand" href="oura_full_analysis.html">'
         '<span class="odt-logo">DT</span>'
         'Oura <span>Digital Twin</span></a>\n'
         '  <button class="odt-nav-toggle" '
