@@ -2485,7 +2485,13 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
 
     # Section 2: Drug Response
     body += make_section(
-        f"Ruxolitinib Drug Response (started {TREATMENT_START})",
+        "Whole-period response, ruxolitinib and beta-blocker pooled (descriptive)",
+        '<div class="dt-section-intro">This comparison pools every night on treatment against every night before, '
+        'so it cannot attribute the change to either medicine on its own. In this pipeline\'s own '
+        '<a href="placebo_calibration.html">placebo calibration</a>, this kind of before/after test fires at '
+        '100% of dates where nothing happened, so it is shown as description, not evidence. The phase-resolved '
+        'estimate is on the <a href="piecewise_regression.html">Piecewise ITS</a> page and the '
+        '<a href="index.html">homepage</a>.</div>'
         '<div class="dt-section-intro">Latent-state shifts are standardized, so the pre/post comparison shows magnitude rather than raw clinical units. '
         'Use this block to gauge which modeled subsystems moved most after treatment began. HEV diagnosed on '
         f'{HEV_DIAGNOSIS_DATE} may confound late-March movement.</div>'
