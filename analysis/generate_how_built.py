@@ -177,9 +177,14 @@ def verification_status() -> str:
         mismatches = audit.get("mismatches", "?")
         if isinstance(mismatches, list):
             mismatches = len(mismatches)
+        # This page is generated before statcheck runs, so the audit file it
+        # reads belongs to the previous pipeline run. Say so; the audit of the
+        # current run is the claims page, written by statcheck itself.
         parts.append(
-            f"The latest statistical audit checked {audit.get('reports_checked', '?')} pages, extracted "
-            f"{audit.get('claims_extracted', '?')} claims and found {mismatches} mismatches; it {ok}."
+            f"The statistical audit that closed the previous pipeline run checked "
+            f"{audit.get('reports_checked', '?')} pages, extracted "
+            f"{audit.get('claims_extracted', '?')} claims and found {mismatches} mismatches; it {ok}. "
+            f"The audit of this run is published as <a href=\"claims.html\">Every number, checked</a>."
         )
     if summary:
         parts.append(
