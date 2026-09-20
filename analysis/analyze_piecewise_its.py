@@ -147,15 +147,27 @@ def load_daily_data() -> pd.DataFrame:
     )
 
     # Sleep periods (per-night)
+    # A date can carry several long_sleep periods (a split night); keep the
+    # longest so every date appears exactly once, matching the convention in
+    # analyze_oura_causal.py. Two such dates exist in the current data
+    # (2026-05-19, 2026-06-01) and without this they are counted twice.
     sleep = pd.read_sql_query(
-        """SELECT day as date, average_heart_rate, lowest_heart_rate, efficiency
+        """SELECT day as date, average_heart_rate, lowest_heart_rate, efficiency,
+                  total_sleep_duration
            FROM oura_sleep_periods
            WHERE type = 'long_sleep'
            ORDER BY day""",
         conn,
     )
-    for col in ["average_heart_rate", "lowest_heart_rate", "efficiency"]:
+    for col in ["average_heart_rate", "lowest_heart_rate", "efficiency",
+                "total_sleep_duration"]:
         sleep[col] = pd.to_numeric(sleep[col], errors="coerce")
+    sleep = (
+        sleep.sort_values(["date", "total_sleep_duration"], ascending=[True, False])
+        .drop_duplicates(subset="date", keep="first")
+        .drop(columns=["total_sleep_duration"])
+        .reset_index(drop=True)
+    )
     sleep = sleep.rename(columns={"efficiency": "sleep_efficiency"})
 
     # Readiness (for temperature deviation if needed later)
@@ -367,7 +379,7 @@ def build_fitted_vs_observed_chart(result: dict[str, Any]) -> go.Figure:
 
     fig.update_layout(
         **LAYOUT_DEFAULTS,
-        title=dict(text=f"{label} — Observed vs ITS Fitted"),
+        title=dict(text=f"{label} - Observed vs ITS Fitted"),
         xaxis_title="Date",
         yaxis_title=f"{label} ({unit})",
         height=400,
@@ -448,7 +460,7 @@ def build_residual_diagnostics_chart(result: dict[str, Any]) -> go.Figure:
 
     fig.update_layout(
         **LAYOUT_DEFAULTS,
-        title=dict(text=f"{label} — Residual Diagnostics"),
+        title=dict(text=f"{label} - Residual Diagnostics"),
         height=350,
         showlegend=False,
     )
@@ -690,19 +702,19 @@ def _methodology_section() -> str:
       <table style="width:100%;border-collapse:collapse;margin:12px 0;">
         <tr style="border-bottom:1px solid {BORDER_SUBTLE};">
           <td style="padding:6px 12px;color:{ACCENT_AMBER};font-weight:600;width:80px">&beta;<sub>2</sub></td>
-          <td style="padding:6px 12px">Jakavi level shift — immediate change in the metric when Jakavi started</td>
+          <td style="padding:6px 12px">Jakavi level shift - immediate change in the metric when Jakavi started</td>
         </tr>
         <tr style="border-bottom:1px solid {BORDER_SUBTLE};">
           <td style="padding:6px 12px;color:{ACCENT_AMBER};font-weight:600">&beta;<sub>3</sub></td>
-          <td style="padding:6px 12px">Jakavi slope change — change in daily trend after Jakavi</td>
+          <td style="padding:6px 12px">Jakavi slope change - change in daily trend after Jakavi</td>
         </tr>
         <tr style="border-bottom:1px solid {BORDER_SUBTLE};">
           <td style="padding:6px 12px;color:{ACCENT_GREEN};font-weight:600">&beta;<sub>4</sub></td>
-          <td style="padding:6px 12px">Beta-blocker level shift — immediate change when beta-blocker was added</td>
+          <td style="padding:6px 12px">Beta-blocker level shift - immediate change when beta-blocker was added</td>
         </tr>
         <tr>
           <td style="padding:6px 12px;color:{ACCENT_GREEN};font-weight:600">&beta;<sub>5</sub></td>
-          <td style="padding:6px 12px">Beta-blocker slope change — change in daily trend after adding beta-blocker</td>
+          <td style="padding:6px 12px">Beta-blocker slope change - change in daily trend after adding beta-blocker</td>
         </tr>
       </table>
 
@@ -984,10 +996,10 @@ def _build_sensitivity_section(sensitivity: dict[str, Any]) -> str:
             b4_sig = f'<span style="color:{ACCENT_GREEN}">*</span>' if e.get("b4_significant") else ""
             b5_sig = f'<span style="color:{ACCENT_GREEN}">*</span>' if e.get("b5_significant") else ""
 
-            b4_est = f'{e["b4_estimate"]:+.2f}' if e.get("b4_estimate") is not None else "—"
-            b5_est = f'{e["b5_estimate"]:+.3f}' if e.get("b5_estimate") is not None else "—"
-            b4_p = format_p_value(e["b4_pvalue"]) if e.get("b4_pvalue") is not None else "—"
-            b5_p = format_p_value(e["b5_pvalue"]) if e.get("b5_pvalue") is not None else "—"
+            b4_est = f'{e["b4_estimate"]:+.2f}' if e.get("b4_estimate") is not None else "-"
+            b5_est = f'{e["b5_estimate"]:+.3f}' if e.get("b5_estimate") is not None else "-"
+            b4_p = format_p_value(e["b4_pvalue"]) if e.get("b4_pvalue") is not None else "-"
+            b5_p = format_p_value(e["b5_pvalue"]) if e.get("b5_pvalue") is not None else "-"
 
             n_post = e.get("n_post", "?")
             n_post_warn = f' <span style="color:{ACCENT_AMBER}" title="&lt;{MIN_POST_BB_DAYS} post-BB days">&#9888;</span>' if underpowered else ""
@@ -1028,7 +1040,7 @@ def _build_sensitivity_section(sensitivity: dict[str, Any]) -> str:
 
         rows_per_metric.append(f"""
         <div style="margin:20px 0">
-          <div style="font-weight:600;color:{color};font-size:1rem">{label} — {badge}</div>
+          <div style="font-weight:600;color:{color};font-size:1rem">{label} - {badge}</div>
           <div style="color:{TEXT_SECONDARY};font-size:0.82rem;margin-top:4px">{support_note}</div>
           <table style="width:100%;border-collapse:collapse;font-size:0.85rem;margin-top:8px">
             <thead><tr style="border-bottom:2px solid {BORDER_DEFAULT}">

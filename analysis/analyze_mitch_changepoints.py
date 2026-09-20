@@ -1113,7 +1113,7 @@ def build_html(
         title="Patient 2 Changepoint Investigation",
         body_content=body,
         report_id="mitch_changepoints",
-        header_meta="Patient 2 — Changepoint Investigation",
+        header_meta="Patient 2 - Changepoint Investigation",
         post_days=0,
     )
 

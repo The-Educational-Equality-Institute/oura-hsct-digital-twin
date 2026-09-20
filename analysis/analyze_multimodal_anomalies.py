@@ -37,7 +37,13 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
-import stumpy
+
+try:
+    import stumpy
+    STUMPY_AVAILABLE = True
+except ImportError:
+    stumpy = None
+    STUMPY_AVAILABLE = False
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -46,7 +52,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from config import REPORTS_DIR, PATIENT_LABEL, TREATMENT_START  # noqa: E402
-from _frames import load_frame, load_baselines, with_baseline_z  # noqa: E402
+try:
+    from _frames import load_frame, load_baselines, with_baseline_z  # noqa: E402
+    FRAMES_AVAILABLE = True
+    FRAMES_IMPORT_ERROR = ""
+except ImportError as exc:
+    load_frame = None
+    load_baselines = None
+    with_baseline_z = None
+    FRAMES_AVAILABLE = False
+    FRAMES_IMPORT_ERROR = str(exc)
 from _theme import (  # noqa: E402
     wrap_html, make_kpi_card, make_kpi_row, make_section,
     ACCENT_BLUE, ACCENT_RED, ACCENT_AMBER,
@@ -218,6 +233,37 @@ def build_multivariate_plot(mp: np.ndarray, idx: pd.DatetimeIndex,
 
 
 def main() -> int:
+    missing = []
+    if not STUMPY_AVAILABLE:
+        missing.append("stumpy")
+    if not FRAMES_AVAILABLE:
+        missing.append(f"duckdb/_frames ({FRAMES_IMPORT_ERROR})")
+    if missing:
+        REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+        body = make_section(
+            "Optional dependency unavailable",
+            (
+                "<p>Multimodal matrix-profile anomaly detection requires "
+                "<code>stumpy</code> and the DuckDB frame backend, which are "
+                "part of the optional full-stack environment. Core report "
+                "regeneration continues without this analysis.</p>"
+            ),
+            section_id="dependency",
+        )
+        html = wrap_html(
+            title=f"{PATIENT_LABEL} - Multimodal anomaly detection",
+            body_content=body,
+            report_id="multimodal_anomaly_report",
+        )
+        HTML_OUTPUT.write_text(html)
+        JSON_OUTPUT.write_text(json.dumps({
+            "status": "dependency_unavailable",
+            "missing": missing,
+            "generated_at": datetime.now().isoformat(timespec="seconds"),
+        }, indent=2))
+        print(f"WARN: optional dependencies unavailable ({', '.join(missing)}), wrote dependency placeholder")
+        return 0
+
     df = load_frame("1d")
     if df.empty:
         html = wrap_html(

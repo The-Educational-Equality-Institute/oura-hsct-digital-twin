@@ -7,12 +7,12 @@ post-allogeneic-HSCT surveillance with chronic GVHD, autonomic dysfunction,
 and iron overload.
 
 Biomarkers:
-  1. Autonomic Dysfunction Severity Index (ADSI) — 0-100
-  2. GVHD Activity Score (Wearable) — 0-100
-  3. Recovery Trajectory Index — 0-100
-  4. Pharmacodynamic Response Score (ruxolitinib) — Z-score
-  5. Cardiovascular Risk Composite — 0-100
-  6. Wearable Allostatic Load Score — 0-7
+  1. Autonomic Dysfunction Severity Index (ADSI) - 0-100
+  2. GVHD Activity Score (Wearable) - 0-100
+  3. Recovery Trajectory Index - 0-100
+  4. Pharmacodynamic Response Score (ruxolitinib) - Z-score
+  5. Cardiovascular Risk Composite - 0-100
+  6. Wearable Allostatic Load Score - 0-7
 
 Outputs:
   - Interactive HTML dashboard: reports/composite_biomarkers.html
@@ -915,8 +915,9 @@ def build_dashboard(df: pd.DataFrame, biomarkers: dict[str, pd.Series],
         if row == 1 and col == 1:
             fig.add_annotation(
                 x=rux_line_date, y=0.98,
-                xref="x domain",
+                xref="x",
                 yref="y domain",
+                xanchor="left", xshift=4,
                 text="Rux start",
                 showarrow=False,
                 font=dict(size=9, color=ACCENT_BLUE),
@@ -1612,7 +1613,7 @@ def main() -> int:
     HTML_OUTPUT.write_text(html_content, encoding="utf-8")
     print(f"  -> HTML: {HTML_OUTPUT}")
 
-    # 6. Export JSON — include individual treatment response metrics
+    # 6. Export JSON - include individual treatment response metrics
     print("\n[6/6] Exporting JSON metrics...")
 
     # Build treatment_response and three_period for JSON

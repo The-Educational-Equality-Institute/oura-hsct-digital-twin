@@ -141,8 +141,13 @@ def load_daily_data() -> pd.DataFrame:
     )
 
     # Sleep periods -> efficiency, heart rates
+    # A date can carry several long_sleep periods (a split night); keep the
+    # longest so every date appears exactly once, matching the convention in
+    # analyze_oura_causal.py. Two such dates exist in the current data
+    # (2026-05-19, 2026-06-01) and without this they are counted twice.
     sp = pd.read_sql_query(
-        """SELECT day as date, efficiency, average_heart_rate, lowest_heart_rate
+        """SELECT day as date, efficiency, average_heart_rate, lowest_heart_rate,
+                  total_sleep_duration
            FROM oura_sleep_periods
            WHERE type = 'long_sleep'
            ORDER BY day""",
@@ -151,6 +156,12 @@ def load_daily_data() -> pd.DataFrame:
     for col in sp.columns:
         if col != "date":
             sp[col] = pd.to_numeric(sp[col], errors="coerce")
+    sp = (
+        sp.sort_values(["date", "total_sleep_duration"], ascending=[True, False])
+        .drop_duplicates(subset="date", keep="first")
+        .drop(columns=["total_sleep_duration"])
+        .reset_index(drop=True)
+    )
     sp = sp.rename(columns={"efficiency": "sleep_efficiency"})
 
     conn.close()

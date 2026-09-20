@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-generate_oura_3d_dashboard.py — Unified CMO Dashboard
+generate_oura_3d_dashboard.py - Unified CMO Dashboard
 
 The front door. One HTML file shows everything: CausalImpact p-values,
 UKF state estimates, disease-state models, anomaly detection, composite
@@ -8,9 +8,9 @@ biomarkers, and raw biosignal visualizations. The goal is fast external
 review of an exploratory N=1 wearable dataset, not clinical proof.
 
 Architecture:
-  Tab 1 (Overview)     — Narrative + KPI cards + Hero ITS + Forest plot
-  Tab 2 (Disease)      — rSLDS states + Anomaly timeline + Biomarkers + SpO2
-  Tab 3 (Biosignals)   — Raw biosignal timeline + HR Terrain + Phase Space
+  Tab 1 (Overview)     - Narrative + KPI cards + Hero ITS + Forest plot
+  Tab 2 (Disease)      - rSLDS states + Anomaly timeline + Biomarkers + SpO2
+  Tab 3 (Biosignals)   - Raw biosignal timeline + HR Terrain + Phase Space
                           + Sleep heatmap + Circadian radar
 
 Data sources:
@@ -53,6 +53,9 @@ from _theme import (
     BORDER_SUBTLE, BORDER_DEFAULT,
     TEXT_PRIMARY, TEXT_SECONDARY, TEXT_TERTIARY,
     ACCENT_BLUE, ACCENT_GREEN, ACCENT_RED, ACCENT_AMBER, ACCENT_PURPLE, ACCENT_CYAN,
+    ACCENT_TEAL, ACCENT_TEAL_DEEP,
+    IMPROVE, DECLINE, NEUTRAL,
+    C_HR, C_HRV,
     STATUS_COLORS,
     C_CRITICAL, C_ACCENT,
     C_PRE_TX, C_POST_TX,
@@ -79,26 +82,26 @@ ACUTE_EVENT = _to_date_str(KNOWN_EVENT_DATE)
 # ---------------------------------------------------------------------------
 # Dark theme color palette (colorblind-safe)
 # ---------------------------------------------------------------------------
-C_PRE = "#4589FF"        # Blue — pre-ruxolitinib
-C_POST = "#F59E0B"       # Amber — post-ruxolitinib (design system ACCENT_AMBER)
-C_INTERVENTION = "#FFFFFF"  # White dashed — March 16 line
-C_CI_BAND = "rgba(255,255,255,0.1)"  # Subtle — confidence intervals
-C_ALERT = "#CC79A7"      # Magenta — anomaly alerts
-C_COUNTERFACTUAL = "#999999"  # Grey — predicted counterfactual
-C_STATES = ["#10B981", "#F59E0B", "#EF4444", "#3B82F6"]  # Remission, Pre-flare, Flare, Recovery
+C_PRE = "#4589FF"        # Blue - pre-ruxolitinib
+C_POST = "#F59E0B"       # Amber - post-ruxolitinib (design system ACCENT_AMBER)
+C_INTERVENTION = "#FFFFFF"  # White dashed - March 16 line
+C_CI_BAND = "rgba(20,22,26,0.08)"  # Subtle - confidence intervals
+C_ALERT = "#CC79A7"      # Magenta - anomaly alerts
+C_COUNTERFACTUAL = "#999999"  # Grey - predicted counterfactual
+C_STATES = ["#3A3AD6", "#F59E0B", "#EF4444", "#3B82F6"]  # Remission, Pre-flare, Flare, Recovery
 C_STATE_NAMES = ["Remission", "Pre-flare", "Active Flare", "Recovery"]
 
-# Existing colors (for 3D panels) — from config
+# Existing colors (for 3D panels) - from config
 COLOR_PRE_RUX = C_PRE_TX
 COLOR_POST_RUX = C_POST_TX
 COLOR_EVENT = C_ACCENT
 COLOR_SURFACE_SCALE = "Plasma"
 
 # Sleep phase colors
-PHASE_COLORS = {1: "#6366F1", 2: "#3B82F6", 3: "#10B981", 4: "#EF4444"}
+PHASE_COLORS = {1: "#6366F1", 2: "#3B82F6", 3: "#3A3AD6", 4: "#EF4444"}
 PHASE_NAMES = {1: "Deep", 2: "Light", 3: "REM", 4: "Awake"}
 
-# Note: DARK_LAYOUT removed — the "clinical_dark" Plotly template
+# Note: DARK_LAYOUT removed - the "clinical_dark" Plotly template
 # handles paper_bgcolor, plot_bgcolor, font, gridcolor automatically.
 
 
@@ -135,12 +138,12 @@ def _add_vline(
         fig.add_annotation(
             x=x, y=y_pos, yref="paper",
             text=annotation_text, showarrow=False,
-            font=a_font, bgcolor="rgba(15,17,23,0.7)",
+            font=a_font, bgcolor="rgba(255,255,255,0.92)",
             borderpad=3,
         )
 
 
-# Alias for backwards-compat within this file — canonical is _theme.format_p_value
+# Alias for backwards-compat within this file - canonical is _theme.format_p_value
 _format_p_value = format_p_value
 
 
@@ -166,7 +169,7 @@ def _apply_data_start(df: pd.DataFrame, col: str) -> pd.DataFrame:
 
 
 # ===================================================================
-# DATA LOADING — RAW DATABASE
+# DATA LOADING - RAW DATABASE
 # ===================================================================
 
 def load_heart_rate(conn: sqlite3.Connection) -> pd.DataFrame:
@@ -263,7 +266,7 @@ def load_activity(conn: sqlite3.Connection) -> pd.DataFrame:
 
 
 # ===================================================================
-# DATA LOADING — ANALYSIS MODULE JSON OUTPUTS
+# DATA LOADING - ANALYSIS MODULE JSON OUTPUTS
 # ===================================================================
 
 def load_analysis_outputs(reports_dir: Path) -> dict:
@@ -303,7 +306,7 @@ def build_narrative_summary(outputs: dict, summary: dict) -> str:
     dt = outputs.get("digital_twin", {})
     streams = causal.get("causal_impact", {}).get("streams", {})
 
-    # Temperature deviation — strongest signal
+    # Temperature deviation - strongest signal
     temp = streams.get("temperature_deviation", {})
     temp_p = temp.get("p_value")
     temp_prob = temp.get("probability_of_effect")
@@ -462,7 +465,7 @@ def build_kpi_cards(outputs: dict, summary: dict) -> str:
     cards.append(_card("Resting HR", hr_str, "bpm", hr_detail,
                        "critical" if hr_mean and hr_mean > 90 else "warning"))
 
-    # 4. SpO2 — use summary (same source as JSON output) to avoid mismatch
+    # 4. SpO2 - use summary (same source as JSON output) to avoid mismatch
     spo2_mean = summary.get("mean_spo2")
     bos = spo2.get("bos_risk", {})
     spo2_str = f"{spo2_mean:.1f}" if spo2_mean else "N/A"
@@ -535,7 +538,7 @@ def build_hero_its_chart(outputs: dict, readiness_df: pd.DataFrame) -> go.Figure
         if intervention_idx > 0 and intervention_idx < len(dates):
             fig.add_vrect(
                 x0=dates[0], x1=RUXOLITINIB_START,
-                fillcolor="rgba(69,137,255,0.04)", line_width=0,
+                fillcolor="rgba(58,58,214,0.04)", line_width=0,
             )
             fig.add_vrect(
                 x0=RUXOLITINIB_START, x1=dates[-1],
@@ -582,7 +585,7 @@ def build_hero_its_chart(outputs: dict, readiness_df: pd.DataFrame) -> go.Figure
             hoverinfo="skip",
         ))
 
-        # Intervention line — dramatic
+        # Intervention line - dramatic
         _add_vline(fig, x=RUXOLITINIB_START, line_dash="dash",
                    line_color=C_INTERVENTION, line_width=2.5,
                    annotation_text="<b>Ruxolitinib start</b>",
@@ -603,7 +606,7 @@ def build_hero_its_chart(outputs: dict, readiness_df: pd.DataFrame) -> go.Figure
                 text=f"<b>{_format_p_value(p_val)}</b>",
                 showarrow=True, arrowhead=2, arrowcolor=C_POST,
                 font=dict(size=14, color=C_POST),
-                bgcolor="rgba(15,17,23,0.9)", bordercolor=C_POST, borderwidth=1,
+                bgcolor="rgba(255,255,255,0.94)", bordercolor=C_POST, borderwidth=1,
                 borderpad=6,
             )
 
@@ -631,13 +634,13 @@ def build_hero_its_chart(outputs: dict, readiness_df: pd.DataFrame) -> go.Figure
             title="Date",
             tickformat="%d %b",
             showspikes=True, spikemode="across", spikesnap="cursor",
-            spikecolor="rgba(255,255,255,0.15)", spikethickness=1,
+            spikecolor="rgba(20,22,26,0.10)", spikethickness=1,
             spikedash="dot",
         ),
         yaxis=dict(
             title="Temperature Deviation (\u00b0C)",
             showspikes=True, spikemode="across", spikesnap="cursor",
-            spikecolor="rgba(255,255,255,0.15)", spikethickness=1,
+            spikecolor="rgba(20,22,26,0.10)", spikethickness=1,
             spikedash="dot",
             gridcolor=BORDER_SUBTLE,
         ),
@@ -677,7 +680,7 @@ def build_forest_plot(outputs: dict) -> go.Figure:
     # Near-zero baselines (e.g. temperature_deviation ≈ 0.08°C) produce
     # extreme relative_effect_pct values (-287%) that blow out the x-axis.
     # Fix: cap display at ±DISPLAY_CAP%, use arrow markers for capped values,
-    # show true values in hover text.  Remove CI whiskers — the JSON's
+    # show true values in hover text.  Remove CI whiskers - the JSON's
     # ci_lower/ci_upper are posterior intervals on the counterfactual, not
     # confidence intervals on the relative effect.
     DISPLAY_CAP = 80  # ±80% keeps axis readable for clinical audience
@@ -845,6 +848,94 @@ def build_forest_plot(outputs: dict) -> go.Figure:
 
 
 # ===================================================================
+# PRE/POST RUXOLITINIB SLOPE CHART (replaces static comparison cards)
+# ===================================================================
+
+def build_pre_post_slope_chart(summary: dict) -> go.Figure:
+    """Two-point slope chart: pre- vs post-ruxolitinib mean HR and HRV.
+
+    Plots the real pre/post means already computed in `summary` (never
+    inferred here) as one line per metric on its own y-axis, since HR
+    (bpm) and HRV (ms) sit on very different scales. A metric is only
+    plotted if both its pre and post means are real numbers; a missing
+    mean is skipped rather than fabricated.
+    """
+    print("  Building Pre/Post Slope Chart...")
+
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    x_labels = ["Pre-Ruxolitinib", "Post-Ruxolitinib"]
+
+    pre_hr = summary.get("pre_mean_hr")
+    post_hr = summary.get("post_mean_hr")
+    pre_hrv = summary.get("pre_mean_hrv")
+    post_hrv = summary.get("post_mean_hrv")
+
+    has_hr = pre_hr is not None and post_hr is not None and not (
+        isinstance(pre_hr, float) and np.isnan(pre_hr)
+    ) and not (isinstance(post_hr, float) and np.isnan(post_hr))
+    has_hrv = pre_hrv is not None and post_hrv is not None and not (
+        isinstance(pre_hrv, float) and np.isnan(pre_hrv)
+    ) and not (isinstance(post_hrv, float) and np.isnan(post_hrv))
+
+    if has_hrv:
+        hrv_delta = post_hrv - pre_hrv
+        fig.add_trace(go.Scatter(
+            x=x_labels, y=[pre_hrv, post_hrv],
+            mode="lines+markers+text",
+            line=dict(color=C_HRV, width=3),
+            marker=dict(size=11, color=C_HRV, line=dict(width=2, color=BG_SURFACE)),
+            text=[f"{pre_hrv:.1f} ms", f"{post_hrv:.1f} ms"],
+            textposition=["middle left", "middle right"],
+            textfont=dict(size=13, color=C_HRV),
+            name=f"HRV (RMSSD): {hrv_delta:+.1f} ms",
+            hovertemplate="%{x}<br>HRV: %{y:.1f} ms<extra></extra>",
+        ), secondary_y=False)
+
+    if has_hr:
+        hr_delta = post_hr - pre_hr
+        fig.add_trace(go.Scatter(
+            x=x_labels, y=[pre_hr, post_hr],
+            mode="lines+markers+text",
+            line=dict(color=C_HR, width=3),
+            marker=dict(size=11, color=C_HR, line=dict(width=2, color=BG_SURFACE)),
+            text=[f"{pre_hr:.1f} bpm", f"{post_hr:.1f} bpm"],
+            textposition=["middle left", "middle right"],
+            textfont=dict(size=13, color=C_HR),
+            name=f"Resting HR: {hr_delta:+.1f} bpm",
+            hovertemplate="%{x}<br>HR: %{y:.1f} bpm<extra></extra>",
+        ), secondary_y=True)
+
+    if not has_hr and not has_hrv:
+        fig.add_annotation(
+            text="No pre/post HR or HRV means available",
+            xref="paper", yref="paper", x=0.5, y=0.5,
+            showarrow=False, font=dict(size=13, color=TEXT_TERTIARY),
+        )
+
+    fig.update_xaxes(
+        showgrid=False,
+        range=[-0.35, 1.35],
+    )
+    fig.update_yaxes(
+        title_text="HRV RMSSD (ms)", secondary_y=False,
+        gridcolor=BORDER_SUBTLE, color=C_HRV,
+    )
+    fig.update_yaxes(
+        title_text="Resting HR (bpm)", secondary_y=True,
+        showgrid=False, color=C_HR,
+    )
+    fig.update_layout(
+        margin=dict(l=70, r=70, t=30, b=40),
+        height=320,
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=1.04, xanchor="center", x=0.5,
+                    font=dict(size=11)),
+    )
+
+    return fig
+
+
+# ===================================================================
 # TAB 2: rSLDS DISEASE STATE TIMELINE
 # ===================================================================
 
@@ -910,7 +1001,7 @@ def build_disease_states(outputs: dict) -> go.Figure:
         xaxis=dict(
             title="Date", tickformat="%d %b",
             showspikes=True, spikemode="across", spikesnap="cursor",
-            spikecolor="rgba(255,255,255,0.15)", spikethickness=1, spikedash="dot",
+            spikecolor="rgba(20,22,26,0.10)", spikethickness=1, spikedash="dot",
         ),
         height=320,
         legend=dict(orientation="h", yanchor="bottom", y=-0.25, xanchor="center", x=0.5),
@@ -938,8 +1029,8 @@ def build_anomaly_timeline(outputs: dict) -> go.Figure:
         dates = [s["date"] if isinstance(s.get("date"), str) else str(s.get("date", "")) for s in daily_scores]
         scores = [s.get("ensemble_score", 0) for s in daily_scores]
 
-        colors = [C_ALERT if sc > threshold else "rgba(69,137,255,0.4)" for sc in scores]
-        border_colors = [C_ALERT if sc > threshold else "rgba(69,137,255,0.6)" for sc in scores]
+        colors = [C_ALERT if sc > threshold else "rgba(58,58,214,0.4)" for sc in scores]
+        border_colors = [C_ALERT if sc > threshold else "rgba(58,58,214,0.6)" for sc in scores]
 
         fig.add_trace(go.Bar(
             x=dates, y=scores,
@@ -972,7 +1063,7 @@ def build_anomaly_timeline(outputs: dict) -> go.Figure:
                 text=f"Feb 9: {scores[idx]:.3f}",
                 showarrow=True, arrowhead=2, arrowcolor=C_ALERT,
                 font=dict(size=10, color=TEXT_PRIMARY),
-                bgcolor="rgba(15,17,23,0.9)", bordercolor=C_ALERT,
+                bgcolor="rgba(255,255,255,0.94)", bordercolor=C_ALERT,
             )
 
     fig.update_layout(
@@ -980,7 +1071,7 @@ def build_anomaly_timeline(outputs: dict) -> go.Figure:
         xaxis=dict(
             title="Date", tickformat="%d %b",
             showspikes=True, spikemode="across", spikesnap="cursor",
-            spikecolor="rgba(255,255,255,0.15)", spikethickness=1, spikedash="dot",
+            spikecolor="rgba(20,22,26,0.10)", spikethickness=1, spikedash="dot",
         ),
         yaxis=dict(title="Ensemble Anomaly Score", gridcolor=BORDER_SUBTLE),
         height=280,
@@ -1029,7 +1120,7 @@ def build_biomarker_trends(outputs: dict) -> go.Figure:
             post_dates = [d for d in dates if d >= rux_date]
             post_vals = [v for d, v in zip(dates, values) if d >= rux_date]
 
-            # Pre line — sparkline aesthetic
+            # Pre line - sparkline aesthetic
             fig.add_trace(go.Scatter(
                 x=pre_dates, y=pre_vals,
                 mode="lines", line=dict(color=C_PRE, width=1.5),
@@ -1059,7 +1150,7 @@ def build_biomarker_trends(outputs: dict) -> go.Figure:
 
             if pre_mean is not None:
                 fig.add_hline(y=pre_mean, line_dash="dot",
-                              line_color="rgba(69,137,255,0.4)", line_width=1,
+                              line_color="rgba(58,58,214,0.4)", line_width=1,
                               row=row, col=col)
             if post_mean is not None:
                 fig.add_hline(y=post_mean, line_dash="dot",
@@ -1178,7 +1269,7 @@ def build_spo2_panel(outputs: dict, spo2_df: pd.DataFrame) -> go.Figure:
 
     fig.update_xaxes(tickformat="%d %b", row=1, col=1, gridcolor=BORDER_SUBTLE,
                      showspikes=True, spikemode="across", spikesnap="cursor",
-                     spikecolor="rgba(255,255,255,0.15)", spikethickness=1, spikedash="dot")
+                     spikecolor="rgba(20,22,26,0.10)", spikethickness=1, spikedash="dot")
     fig.update_yaxes(gridcolor=BORDER_SUBTLE, row=1, col=1)
     fig.update_xaxes(gridcolor=BORDER_SUBTLE, row=1, col=2)
     fig.update_yaxes(gridcolor=BORDER_SUBTLE, row=1, col=2)
@@ -1193,7 +1284,7 @@ def build_spo2_panel(outputs: dict, spo2_df: pd.DataFrame) -> go.Figure:
 
 
 # ===================================================================
-# TAB 3: HEART RATE TERRAIN MAP (3D Surface) — preserved
+# TAB 3: HEART RATE TERRAIN MAP (3D Surface) - preserved
 # ===================================================================
 
 def build_hr_terrain(hr_df: pd.DataFrame, sleep_df: pd.DataFrame) -> go.Figure:
@@ -1254,8 +1345,8 @@ def build_hr_terrain(hr_df: pd.DataFrame, sleep_df: pd.DataFrame) -> go.Figure:
 
     # Refined clinical colorscale: deep blue -> teal -> amber -> red
     hr_colorscale = [
-        [0.0, "#0d1b2a"],
-        [0.2, "#1b3a5c"],
+        [0.0, "#F7F7F5"],
+        [0.2, "#EEF0FB"],
         [0.4, "#2a7f8e"],
         [0.6, "#48b97c"],
         [0.75, "#f0c840"],
@@ -1278,8 +1369,8 @@ def build_hr_terrain(hr_df: pd.DataFrame, sleep_df: pd.DataFrame) -> go.Figure:
         lighting=dict(ambient=0.65, diffuse=0.5, specular=0.15, roughness=0.6, fresnel=0.1),
         contours=dict(
             z=dict(show=True, usecolormap=True, highlightcolor="rgba(255,255,255,0.3)", project_z=True),
-            x=dict(show=True, color="rgba(255,255,255,0.04)", width=1),
-            y=dict(show=True, color="rgba(255,255,255,0.04)", width=1),
+            x=dict(show=True, color="rgba(20,22,26,0.05)", width=1),
+            y=dict(show=True, color="rgba(20,22,26,0.05)", width=1),
         ),
         opacity=0.95,
     )])
@@ -1314,15 +1405,15 @@ def build_hr_terrain(hr_df: pd.DataFrame, sleep_df: pd.DataFrame) -> go.Figure:
         scene=dict(
             xaxis=dict(title=dict(text="Hours from bedtime", font=dict(size=14, color=TEXT_PRIMARY)),
                        range=[0, 10],
-                       backgroundcolor=BG_PRIMARY, gridcolor="rgba(255,255,255,0.06)",
+                       backgroundcolor=BG_PRIMARY, gridcolor="rgba(20,22,26,0.06)",
                        color=TEXT_PRIMARY, tickfont=dict(size=11)),
             yaxis=dict(title=dict(text="Night", font=dict(size=14, color=TEXT_PRIMARY)),
                        tickvals=tick_vals, ticktext=tick_texts,
-                       backgroundcolor=BG_PRIMARY, gridcolor="rgba(255,255,255,0.06)",
+                       backgroundcolor=BG_PRIMARY, gridcolor="rgba(20,22,26,0.06)",
                        color=TEXT_PRIMARY, tickfont=dict(size=10)),
             zaxis=dict(title=dict(text="HR (bpm)", font=dict(size=14, color=TEXT_PRIMARY)),
                        range=[60, 110],
-                       backgroundcolor=BG_PRIMARY, gridcolor="rgba(255,255,255,0.06)",
+                       backgroundcolor=BG_PRIMARY, gridcolor="rgba(20,22,26,0.06)",
                        color=TEXT_PRIMARY, tickfont=dict(size=11)),
             camera=dict(eye=dict(x=1.5, y=-1.5, z=1.0), up=dict(x=0, y=0, z=1)),
             aspectratio=dict(x=1.5, y=2, z=0.7),
@@ -1335,7 +1426,7 @@ def build_hr_terrain(hr_df: pd.DataFrame, sleep_df: pd.DataFrame) -> go.Figure:
 
 
 # ===================================================================
-# TAB 3: PHASE SPACE (3D Scatter) — preserved
+# TAB 3: PHASE SPACE (3D Scatter) - preserved
 # ===================================================================
 
 def build_phase_space(sleep_df: pd.DataFrame, spo2_df: pd.DataFrame) -> go.Figure:
@@ -1409,7 +1500,7 @@ def build_phase_space(sleep_df: pd.DataFrame, spo2_df: pd.DataFrame) -> go.Figur
         x=plot_df_sorted["average_heart_rate"],
         y=plot_df_sorted["average_hrv"],
         z=plot_df_sorted["spo2_plot"],
-        mode="lines", line=dict(color="rgba(255,255,255,0.15)", width=1.5),
+        mode="lines", line=dict(color="rgba(20,22,26,0.10)", width=1.5),
         showlegend=False, hoverinfo="skip",
     ))
 
@@ -1433,15 +1524,15 @@ def build_phase_space(sleep_df: pd.DataFrame, spo2_df: pd.DataFrame) -> go.Figur
         scene=dict(
             xaxis=dict(title=dict(text="Mean HR (bpm)", font=dict(size=14, color=TEXT_PRIMARY)),
                        backgroundcolor=BG_PRIMARY,
-                       gridcolor="rgba(255,255,255,0.06)", color=TEXT_PRIMARY,
+                       gridcolor="rgba(20,22,26,0.06)", color=TEXT_PRIMARY,
                        tickfont=dict(size=11)),
             yaxis=dict(title=dict(text="Mean HRV (ms)", font=dict(size=14, color=TEXT_PRIMARY)),
                        backgroundcolor=BG_PRIMARY,
-                       gridcolor="rgba(255,255,255,0.06)", color=TEXT_PRIMARY,
+                       gridcolor="rgba(20,22,26,0.06)", color=TEXT_PRIMARY,
                        tickfont=dict(size=11)),
             zaxis=dict(title=dict(text="SpO2 (%)", font=dict(size=14, color=TEXT_PRIMARY)),
                        backgroundcolor=BG_PRIMARY,
-                       gridcolor="rgba(255,255,255,0.06)", color=TEXT_PRIMARY,
+                       gridcolor="rgba(20,22,26,0.06)", color=TEXT_PRIMARY,
                        tickfont=dict(size=11)),
             camera=dict(eye=dict(x=1.5, y=1.5, z=1.0)),
             aspectratio=dict(x=1, y=1, z=0.7),
@@ -1456,7 +1547,7 @@ def build_phase_space(sleep_df: pd.DataFrame, spo2_df: pd.DataFrame) -> go.Figur
 
 
 # ===================================================================
-# TAB 3: SLEEP ARCHITECTURE HEATMAP — preserved
+# TAB 3: SLEEP ARCHITECTURE HEATMAP - preserved
 # ===================================================================
 
 def build_sleep_heatmap(epochs_df: pd.DataFrame, sleep_df: pd.DataFrame) -> go.Figure:
@@ -1478,12 +1569,12 @@ def build_sleep_heatmap(epochs_df: pd.DataFrame, sleep_df: pd.DataFrame) -> go.F
         if date_idx is not None and epoch_idx < max_epochs:
             z_matrix[date_idx, epoch_idx] = row["phase"]
 
-    # Refined sleep phase colorscale — high contrast on dark background
+    # Refined sleep phase colorscale - high contrast on dark background
     colorscale = [
-        [0.0, "#1A1D27"], [0.125, "#7C3AED"], [0.25, "#7C3AED"],   # Deep — vivid purple
-        [0.25, "#3B82F6"], [0.5, "#3B82F6"],                        # Light — blue
-        [0.5, "#10B981"], [0.75, "#10B981"],                        # REM — emerald
-        [0.75, "#EF4444"], [1.0, "#EF4444"],                        # Awake — red
+        [0.0, "#FFFFFF"], [0.125, "#7C3AED"], [0.25, "#7C3AED"],   # Deep - vivid purple
+        [0.25, "#3B82F6"], [0.5, "#3B82F6"],                        # Light - blue
+        [0.5, "#3A3AD6"], [0.75, "#3A3AD6"],                        # REM - emerald
+        [0.75, "#EF4444"], [1.0, "#EF4444"],                        # Awake - red
     ]
 
     date_labels = [str(d) for d in dates]
@@ -1533,7 +1624,7 @@ def build_sleep_heatmap(epochs_df: pd.DataFrame, sleep_df: pd.DataFrame) -> go.F
 
 
 # ===================================================================
-# TAB 3: CIRCADIAN RHYTHM RADAR — BUG FIXED
+# TAB 3: CIRCADIAN RHYTHM RADAR - BUG FIXED
 # ===================================================================
 
 def build_circadian_radar(hr_df: pd.DataFrame, outputs: dict) -> go.Figure:
@@ -1576,7 +1667,7 @@ def build_circadian_radar(hr_df: pd.DataFrame, outputs: dict) -> go.Figure:
         mode="lines+markers",
         line=dict(color=C_PRE, width=2.5),
         marker=dict(size=6, color=C_PRE, line=dict(width=1, color="rgba(255,255,255,0.4)")),
-        fill="toself", fillcolor="rgba(69,137,255,0.12)",
+        fill="toself", fillcolor="rgba(58,58,214,0.12)",
         name=f"Pre-Ruxolitinib (n={n_pre_readings:,} readings)",
         hovertemplate="<b>%{theta}</b><br>HR: %{r:.1f} bpm<extra>Pre-Rux</extra>",
     ))
@@ -1603,12 +1694,12 @@ def build_circadian_radar(hr_df: pd.DataFrame, outputs: dict) -> go.Figure:
 
     fig.add_trace(go.Scatterpolar(
         r=pre_upper + [pre_upper[0]], theta=theta_labels_closed,
-        mode="lines", line=dict(color="rgba(69,137,255,0.3)", width=1, dash="dot"),
+        mode="lines", line=dict(color="rgba(58,58,214,0.3)", width=1, dash="dot"),
         showlegend=False, hoverinfo="skip",
     ))
     fig.add_trace(go.Scatterpolar(
         r=pre_lower + [pre_lower[0]], theta=theta_labels_closed,
-        mode="lines", line=dict(color="rgba(69,137,255,0.3)", width=1, dash="dot"),
+        mode="lines", line=dict(color="rgba(58,58,214,0.3)", width=1, dash="dot"),
         showlegend=False, hoverinfo="skip",
     ))
 
@@ -1635,11 +1726,11 @@ def build_circadian_radar(hr_df: pd.DataFrame, outputs: dict) -> go.Figure:
         polar=dict(
             radialaxis=dict(visible=True, range=[r_min, r_max],
                             ticksuffix=" bpm", tickfont=dict(size=10, color=TEXT_SECONDARY),
-                            gridcolor="rgba(255,255,255,0.08)",
+                            gridcolor="rgba(20,22,26,0.08)",
                             linecolor=BORDER_SUBTLE),
             angularaxis=dict(tickfont=dict(size=13, color=TEXT_PRIMARY, family=FONT_FAMILY),
                              direction="clockwise", rotation=90,
-                             gridcolor="rgba(255,255,255,0.08)",
+                             gridcolor="rgba(20,22,26,0.08)",
                              linecolor=BORDER_SUBTLE),
             bgcolor=BG_PRIMARY,
         ),
@@ -1652,7 +1743,7 @@ def build_circadian_radar(hr_df: pd.DataFrame, outputs: dict) -> go.Figure:
 
 
 # ===================================================================
-# TAB 3: BIOSIGNAL TIMELINE (5-row subplots) — preserved with UKF overlay
+# TAB 3: BIOSIGNAL TIMELINE (5-row subplots) - preserved with UKF overlay
 # ===================================================================
 
 def build_biosignal_timeline(
@@ -1683,7 +1774,7 @@ def build_biosignal_timeline(
 
     def add_annotations(fig: go.Figure, row: int) -> None:
         fig.add_vrect(x0=date_min, x1=RUXOLITINIB_START,
-                      fillcolor="rgba(69,137,255,0.03)", line_width=0, row=row, col=1)
+                      fillcolor="rgba(58,58,214,0.03)", line_width=0, row=row, col=1)
         fig.add_vrect(x0=RUXOLITINIB_START, x1=date_max,
                       fillcolor="rgba(230,159,0,0.03)", line_width=0, row=row, col=1)
         fig.add_vline(x=RUXOLITINIB_START, line_dash="dash",
@@ -1771,33 +1862,33 @@ def build_biosignal_timeline(
     fig.add_trace(go.Scatter(
         x=dates_hr, y=sleep_sorted["efficiency"],
         mode="markers+lines",
-        marker=dict(size=4, color="#10B981", opacity=0.6),
-        line=dict(color="#10B981", width=1.5),
+        marker=dict(size=4, color="#3A3AD6", opacity=0.6),
+        line=dict(color="#3A3AD6", width=1.5),
         name="Efficiency", showlegend=False,
         hovertemplate="<b>%{x|%b %d}</b><br>Eff: %{y:.0f} %<extra></extra>",
     ), row=5, col=1)
     eff_rolling = sleep_sorted["efficiency"].rolling(7, min_periods=1, center=True).mean()
     fig.add_trace(go.Scatter(
         x=dates_hr, y=eff_rolling,
-        mode="lines", line=dict(color="#10B981", width=2.5),
+        mode="lines", line=dict(color="#3A3AD6", width=2.5),
         name="Eff 7d avg", showlegend=False,
     ), row=5, col=1)
-    fig.add_hline(y=85, line_dash="dash", line_color="rgba(16,185,129,0.5)",
+    fig.add_hline(y=85, line_dash="dash", line_color="rgba(58,58,214,0.5)",
                   row=5, col=1, annotation_text="85%",
                   annotation_position="bottom right",
-                  annotation_font=dict(size=9, color="rgba(16,185,129,0.7)"))
+                  annotation_font=dict(size=9, color="rgba(58,58,214,0.7)"))
     add_annotations(fig, 5)
 
-    # Y-axis labels — sparkline aesthetic: minimal text
+    # Y-axis labels - sparkline aesthetic: minimal text
     for row_i, label in enumerate(["bpm", "ms", "%", "\u00b0C", "%"], 1):
         fig.update_yaxes(title_text=label, row=row_i, col=1, color=TEXT_PRIMARY,
-                         gridcolor="rgba(255,255,255,0.05)",
+                         gridcolor="rgba(20,22,26,0.06)",
                          tickfont=dict(size=9, color=TEXT_TERTIARY))
     # Add crosshair spikes to all x-axes
     for row_i in range(1, 6):
         fig.update_xaxes(
             showspikes=True, spikemode="across", spikesnap="cursor",
-            spikecolor="rgba(255,255,255,0.12)", spikethickness=1, spikedash="dot",
+            spikecolor="rgba(20,22,26,0.10)", spikethickness=1, spikedash="dot",
             tickformat="%d %b", tickfont=dict(size=9, color=TEXT_TERTIARY),
             row=row_i, col=1,
         )
@@ -1811,7 +1902,7 @@ def build_biosignal_timeline(
         showarrow=False, font=dict(size=11, color=TEXT_PRIMARY),
     )
 
-    # Style subplot titles — sparkline aesthetic
+    # Style subplot titles - sparkline aesthetic
     for ann in fig.layout.annotations:
         if ann.text and ann.text != fig.layout.annotations[-1].text:  # skip legend annotation
             ann.update(font=dict(size=11, color=TEXT_SECONDARY, family=FONT_FAMILY))
@@ -1921,7 +2012,7 @@ def compute_summary(
 
 
 # ===================================================================
-# HTML ASSEMBLY — DARK THEME WITH TABS AND LAZY LOADING
+# HTML ASSEMBLY - DARK THEME WITH TABS AND LAZY LOADING
 # ===================================================================
 
 def build_html(
@@ -1949,17 +2040,9 @@ def build_html(
     n_json = sum(1 for k, v in outputs.items() if v)
     total_json = len(outputs)
 
-    # Format helpers
-    def fmt(val, suffix="", decimals=1):
-        if val is None or (isinstance(val, float) and np.isnan(val)):
-            return "N/A"
-        if isinstance(val, float):
-            return f"{val:.{decimals}f}{suffix}"
-        return f"{val}{suffix}"
-
     phase_html = ""
     for name, pct in summary.get("phase_pcts", {}).items():
-        color = {"Deep": "#6366F1", "Light": "#3B82F6", "REM": "#10B981", "Awake": "#EF4444"}.get(name, "#6B7280")
+        color = {"Deep": "#6366F1", "Light": "#3B82F6", "REM": "#3A3AD6", "Awake": "#EF4444"}.get(name, "#6B7280")
         phase_html += f'<span style="color:{color};font-weight:600">{name}: {pct:.1f}%</span> '
 
     # --- Extract key stats for hero ---
@@ -1980,24 +2063,22 @@ def build_html(
     p_display = _format_p_value(temp_p)
     q_display = f"{temp_q:.3f}" if temp_q is not None else "N/A"
 
-    # --- Build body content ---
-    body_parts: list[str] = []
+    # CausalImpact needs the optional pycausalimpact package installed. When
+    # it is not present (or the module produced zero streams for any other
+    # reason), the p-value/q-value/FDR tiles below would show N/A / N/A / 0/0,
+    # which reads as a broken page. In that case the hero swaps to four stats
+    # that are always real: the pre/post HRV and HR means already computed in
+    # summary, plus the modelled window sizes. Never fabricated, never
+    # hardcoded: read straight from summary.
+    causal_stats_available = total_streams > 0 and temp_p is not None
 
-    # ===================== HERO SECTION =====================
-    body_parts.append(f"""
-    <div class="dash-hero odt-reveal">
-      <div class="dash-hero-glow"></div>
-      <div class="dash-hero-glow dash-hero-glow-2"></div>
-      <div class="dash-hero-content">
-        <div class="dash-hero-badge">
-          <span class="dash-hero-pulse"></span>
-          POST-HSCT BIOMETRIC MONITORING
-        </div>
-        <h1 class="dash-hero-title">
-          Consumer wearable suggests a physiological shift after JAK inhibitor start<br>
-          <span class="dash-hero-highlight">exploratory N=1 monitoring in a confounded window</span>
-        </h1>
-        <div class="dash-hero-stats">
+    pre_hrv, post_hrv = summary.get("pre_mean_hrv"), summary.get("post_mean_hrv")
+    pre_hr, post_hr = summary.get("pre_mean_hr"), summary.get("post_mean_hr")
+    has_hrv_delta = pre_hrv is not None and post_hrv is not None
+    has_hr_delta = pre_hr is not None and post_hr is not None
+
+    if causal_stats_available:
+        hero_stat_cards = f"""
           <div class="dash-hero-stat-card dash-hero-stat-primary">
             <div class="dash-hero-stat-value">{p_display}</div>
             <div class="dash-hero-stat-label">Lowest raw<br>p-value</div>
@@ -2013,7 +2094,46 @@ def build_html(
           <div class="dash-hero-stat-card">
             <div class="dash-hero-stat-value">{total_readings:,}</div>
             <div class="dash-hero-stat-label">Biometric readings<br>analyzed</div>
+          </div>"""
+    else:
+        hrv_delta_str = f"{post_hrv - pre_hrv:+.1f}" if has_hrv_delta else "N/A"
+        hr_delta_str = f"{post_hr - pre_hr:+.1f}" if has_hr_delta else "N/A"
+        hero_stat_cards = f"""
+          <div class="dash-hero-stat-card dash-hero-stat-primary">
+            <div class="dash-hero-stat-value">{hrv_delta_str}</div>
+            <div class="dash-hero-stat-label">HRV shift<br>ms (pre to post)</div>
           </div>
+          <div class="dash-hero-stat-card">
+            <div class="dash-hero-stat-value">{hr_delta_str}</div>
+            <div class="dash-hero-stat-label">Resting HR shift<br>bpm (pre to post)</div>
+          </div>
+          <div class="dash-hero-stat-card">
+            <div class="dash-hero-stat-value">{summary['n_unique_days']}</div>
+            <div class="dash-hero-stat-label">Days<br>modelled</div>
+          </div>
+          <div class="dash-hero-stat-card">
+            <div class="dash-hero-stat-value">{summary['post_days']}</div>
+            <div class="dash-hero-stat-label">Post-drug<br>days observed</div>
+          </div>"""
+
+    # --- Build body content ---
+    body_parts: list[str] = []
+
+    # ===================== HERO SECTION =====================
+    body_parts.append(f"""
+    <div class="dash-hero odt-hero-card odt-reveal">
+      <div class="dash-hero-glow"></div>
+      <div class="dash-hero-glow dash-hero-glow-2"></div>
+      <div class="dash-hero-content">
+        <div class="dash-hero-badge">
+          <span class="dash-hero-pulse"></span>
+          POST-HSCT BIOMETRIC MONITORING
+        </div>
+        <h1 class="dash-hero-title">
+          Consumer wearable suggests a physiological shift after JAK inhibitor start<br>
+          <span class="dash-hero-highlight">exploratory N=1 monitoring in a confounded window</span>
+        </h1>
+        <div class="dash-hero-stats">{hero_stat_cards}
         </div>
         <div class="dash-hero-meta">
           Oura Ring Gen 4 &middot; {summary['n_unique_days']} days &middot;
@@ -2023,37 +2143,20 @@ def build_html(
       </div>
     </div>""")
 
-    # ===================== COMPARISON STRIP =====================
+    # ===================== COMPARISON STRIP (slope chart) =====================
     body_parts.append(f"""
-    <div class="dash-comparison odt-reveal">
-      <div class="dash-comparison-card">
-        <div class="dash-comparison-icon" style="background:rgba(59,130,246,0.15);color:{ACCENT_BLUE}">PRE</div>
-        <div class="dash-comparison-body">
-          <div class="dash-comparison-title">Pre-Ruxolitinib</div>
-          <div class="dash-comparison-detail">
-            {summary['pre_days']} days &middot; {summary['pre_sleep_periods']} sleep periods
-          </div>
-          <div class="dash-comparison-metrics">
-            <span>HR <strong>{fmt(summary['pre_mean_hr'])}</strong> bpm</span>
-            <span>HRV <strong>{fmt(summary['pre_mean_hrv'])}</strong> ms</span>
+    <div class="dash-comparison-panel odt-reveal">
+      <div class="dash-comparison-panel-header">
+        <div>
+          <div class="dash-comparison-panel-title">Pre-Ruxolitinib to Post-Ruxolitinib</div>
+          <div class="dash-comparison-panel-detail">
+            {summary['pre_days']} days ({summary['pre_sleep_periods']} sleep periods) vs
+            {summary['post_days']} days ({summary['post_sleep_periods']} sleep periods)
           </div>
         </div>
       </div>
-      <div class="dash-comparison-divider">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 12h14m-4-4l4 4-4 4" stroke="{TEXT_TERTIARY}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </div>
-      <div class="dash-comparison-card">
-        <div class="dash-comparison-icon" style="background:rgba(245,158,11,0.15);color:{ACCENT_AMBER}">POST</div>
-        <div class="dash-comparison-body">
-          <div class="dash-comparison-title">Post-Ruxolitinib</div>
-          <div class="dash-comparison-detail">
-            {summary['post_days']} days &middot; {summary['post_sleep_periods']} sleep periods
-          </div>
-          <div class="dash-comparison-metrics">
-            <span>HR <strong>{fmt(summary['post_mean_hr'])}</strong> bpm</span>
-            <span>HRV <strong>{fmt(summary['post_mean_hrv'])}</strong> ms</span>
-          </div>
-        </div>
+      <div id="chart-pre_post_slope" class="chart-box" data-chart="pre_post_slope" style="height:320px">
+        <div class="dash-chart-skeleton"><div class="odt-skeleton" style="height:100%"></div></div>
       </div>
     </div>""")
 
@@ -2243,7 +2346,7 @@ def build_html(
 
     # --- Extra CSS for dashboard-specific components ---
     extra_css = f"""
-/* Hide standard header — custom hero replaces it */
+/* Hide standard header - custom hero replaces it */
 .odt-header {{ display: none; }}
 
 /* ============================================================
@@ -2251,11 +2354,13 @@ def build_html(
    ============================================================ */
 .dash-hero {{
   position: relative;
+  box-sizing: border-box;
+  max-width: 100%;
   padding: 56px 40px 46px;
   margin: -20px -40px 28px;
   overflow: hidden;
-  background: linear-gradient(135deg, #0d1018 0%, #141a2e 50%, #0d1018 100%);
-  border-bottom: 1px solid rgba(59,130,246,0.08);
+  background: linear-gradient(135deg, #F7F7F5 0%, #FFFFFF 50%, #F7F7F5 100%);
+  border-bottom: 1px solid rgba(58,58,214,0.08);
 }}
 .dash-hero-glow {{
   position: absolute;
@@ -2269,7 +2374,7 @@ def build_html(
   animation: pulseGlow 15s ease-in-out infinite;
 }}
 .dash-hero-glow-2 {{
-  background: radial-gradient(circle, {ACCENT_PURPLE} 0%, transparent 70%);
+  background: radial-gradient(circle, {ACCENT_TEAL_DEEP} 0%, transparent 70%);
   top: -100px; right: -200px; left: auto;
   opacity: 0.04;
   animation-delay: 7s;
@@ -2284,8 +2389,8 @@ def build_html(
   align-items: center; gap: 8px;
   padding: 6px 16px;
   border-radius: 20px;
-  background: rgba(59,130,246,0.1);
-  border: 1px solid rgba(59,130,246,0.25);
+  background: rgba(58,58,214,0.1);
+  border: 1px solid rgba(58,58,214,0.25);
   font-size: 0.6875rem;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -2299,7 +2404,7 @@ def build_html(
   background: {ACCENT_GREEN};
   display: inline-block;
   animation: pulseGlow 2s ease-in-out infinite;
-  box-shadow: 0 0 8px rgba(16,185,129,0.6);
+  box-shadow: 0 0 8px rgba(58,58,214,0.6);
 }}
 .dash-hero-title {{
   font-size: clamp(2.2rem, 4vw, 3.2rem);
@@ -2313,7 +2418,7 @@ def build_html(
   margin-right: auto;
 }}
 .dash-hero-highlight {{
-  background: linear-gradient(135deg, {ACCENT_BLUE} 0%, {ACCENT_CYAN} 50%, {ACCENT_PURPLE} 100%);
+  background: linear-gradient(135deg, {ACCENT_TEAL} 0%, {ACCENT_TEAL_DEEP} 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -2336,17 +2441,17 @@ def build_html(
 }}
 .dash-hero-stat-card:hover {{
   background: var(--bg-elevated);
-  border-color: rgba(255,255,255,0.1);
+  border-color: rgba(20,22,26,0.08);
   transform: translateY(-1px);
-  box-shadow: 0 6px 24px rgba(0,0,0,0.25);
+  box-shadow: 0 6px 24px rgba(20,22,26,0.08);
 }}
 .dash-hero-stat-primary {{
-  background: rgba(59,130,246,0.08);
-  border-color: rgba(59,130,246,0.2);
+  background: rgba(58,58,214,0.08);
+  border-color: rgba(58,58,214,0.2);
 }}
 .dash-hero-stat-primary:hover {{
-  border-color: rgba(59,130,246,0.4);
-  box-shadow: 0 8px 32px rgba(59,130,246,0.15);
+  border-color: rgba(58,58,214,0.4);
+  box-shadow: 0 8px 32px rgba(58,58,214,0.15);
 }}
 .dash-hero-stat-value {{
   font-size: 1.9rem;
@@ -2372,61 +2477,32 @@ def build_html(
 }}
 
 /* ============================================================
-   COMPARISON STRIP (Pre/Post)
+   COMPARISON PANEL (Pre/Post slope chart)
    ============================================================ */
-.dash-comparison {{
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 24px;
-  padding: 0 8px;
-}}
-.dash-comparison-card {{
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 14px;
+.dash-comparison-panel {{
   background: var(--bg-surface);
   border: 1px solid {BORDER_SUBTLE};
   border-radius: 12px;
-  padding: 18px 22px;
+  padding: 20px 22px 8px;
+  margin-bottom: 24px;
   transition: all 0.25s;
 }}
-.dash-comparison-card:hover {{
-  background: var(--bg-elevated);
+.dash-comparison-panel:hover {{
   border-color: {BORDER_DEFAULT};
 }}
-.dash-comparison-icon {{
-  width: 44px; height: 44px;
-  border-radius: 12px;
-  display: flex; align-items: center; justify-content: center;
-  font-weight: 800; font-size: 0.6875rem;
-  letter-spacing: 0.08em;
-  flex-shrink: 0;
-}}
-.dash-comparison-body {{ flex: 1; min-width: 0; }}
-.dash-comparison-title {{
-  font-size: 0.9375rem; font-weight: 700; color: {TEXT_PRIMARY};
-  margin-bottom: 2px;
-}}
-.dash-comparison-detail {{
-  font-size: 0.75rem; color: {TEXT_TERTIARY};
-  margin-bottom: 6px;
-}}
-.dash-comparison-metrics {{
-  display: flex; gap: 16px; font-size: 0.8125rem; color: {TEXT_SECONDARY};
+.dash-comparison-panel-header {{
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
   flex-wrap: wrap;
+  margin-bottom: 4px;
 }}
-.dash-comparison-metrics strong {{
-  color: {TEXT_PRIMARY}; font-weight: 700;
+.dash-comparison-panel-title {{
+  font-size: 0.9375rem; font-weight: 700; color: {TEXT_PRIMARY};
 }}
-.dash-comparison-divider {{
-  flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  width: 40px; height: 40px;
-  background: var(--bg-elevated);
-  border-radius: 50%;
-  border: 1px solid {BORDER_SUBTLE};
+.dash-comparison-panel-detail {{
+  font-size: 0.75rem; color: {TEXT_TERTIARY};
 }}
 
 /* ============================================================
@@ -2436,8 +2512,8 @@ def build_html(
   display: flex; gap: 14px;
   align-items: flex-start;
   padding: 20px 22px;
-  background: rgba(59,130,246,0.04);
-  border: 1px solid rgba(59,130,246,0.12);
+  background: rgba(58,58,214,0.04);
+  border: 1px solid rgba(58,58,214,0.12);
   border-radius: 12px;
   margin-bottom: 24px;
   font-size: 0.875rem;
@@ -2447,7 +2523,7 @@ def build_html(
 .dash-narrative-icon {{
   flex-shrink: 0;
   width: 36px; height: 36px;
-  background: rgba(59,130,246,0.1);
+  background: rgba(58,58,214,0.1);
   border-radius: 10px;
   display: flex; align-items: center; justify-content: center;
   margin-top: 2px;
@@ -2479,7 +2555,7 @@ def build_html(
   background: var(--bg-elevated);
   border-color: {BORDER_DEFAULT};
   transform: translateY(-1px);
-  box-shadow: 0 6px 24px rgba(0,0,0,0.25);
+  box-shadow: 0 6px 24px rgba(20,22,26,0.08);
 }}
 .kpi-status {{
   position: absolute; top: 0; right: 0;
@@ -2560,8 +2636,8 @@ def build_html(
 .dash-tab-btn:hover svg {{ opacity: 0.7; }}
 .dash-tab-btn.active {{
   color: {TEXT_PRIMARY};
-  background: rgba(59,130,246,0.12);
-  box-shadow: 0 2px 8px rgba(59,130,246,0.15);
+  background: rgba(58,58,214,0.12);
+  box-shadow: 0 2px 8px rgba(58,58,214,0.15);
 }}
 .dash-tab-btn.active svg {{ opacity: 1; color: {ACCENT_BLUE}; }}
 
@@ -2607,7 +2683,7 @@ def build_html(
   min-height: 420px;
   position: relative;
   background:
-    linear-gradient(180deg, rgba(255,255,255,0.01), transparent 24%),
+    linear-gradient(180deg, rgba(20,22,26,0.02), transparent 24%),
     linear-gradient(180deg, rgba(15,17,23,0.22), rgba(15,17,23,0.06));
 }}
 
@@ -2696,14 +2772,14 @@ def build_html(
   .dash-methodology-grid {{ grid-template-columns: 1fr; }}
 }}
 @media (max-width: 768px) {{
-  .dash-hero {{ padding: 32px 20px; margin: -20px -20px 20px; }}
+  .dash-hero {{ padding: 32px 16px; margin: -20px 0 20px; }}
+  .dash-hero-glow {{ display: none; }}
   .dash-hero-title {{ font-size: 1.75rem; }}
   .dash-hero-stats {{ grid-template-columns: 1fr 1fr; gap: 10px; }}
   .dash-hero-stat-card {{ padding: 14px 12px; }}
   .dash-hero-stat-value {{ font-size: 1.375rem; }}
   .dash-kpi-grid {{ grid-template-columns: 1fr 1fr; gap: 10px; }}
-  .dash-comparison {{ flex-direction: column; }}
-  .dash-comparison-divider {{ transform: rotate(90deg); }}
+  .dash-comparison-panel {{ padding: 16px 14px 6px; }}
   .dash-tab-nav {{ flex-wrap: wrap; justify-content: center; }}
   .dash-tab-btn {{ padding: 8px 14px; font-size: 0.75rem; }}
   .dash-chart-header {{ padding: 14px 16px 12px; }}
@@ -2765,7 +2841,7 @@ const dashObserver = new IntersectionObserver((entries) => {{
           el.innerHTML = '';
           Plotly.newPlot(el.id, d.data, d.layout, {{
             responsive: true,
-            displayModeBar: true,
+            displayModeBar: false,
             scrollZoom: true,
             modeBarButtonsToRemove: ['lasso2d', 'select2d'],
             displaylogo: false,
@@ -2797,7 +2873,7 @@ function renderChart(el) {{
       el.innerHTML = '';
       Plotly.newPlot(el.id, d.data, d.layout, {{
         responsive: true,
-        displayModeBar: true,
+        displayModeBar: false,
         scrollZoom: true,
         modeBarButtonsToRemove: ['lasso2d', 'select2d'],
         displaylogo: false,
@@ -2841,7 +2917,7 @@ document.querySelectorAll('.dash-tab-section.active .chart-box').forEach(renderC
 
 def main() -> int:
     print("=" * 60)
-    print("Oura Digital Twin — Unified CMO Dashboard")
+    print("Oura Digital Twin - Unified CMO Dashboard")
     print("=" * 60)
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -2889,6 +2965,9 @@ def main() -> int:
     # Build all visualizations
     print("\nBuilding visualizations...")
     figures = {}
+
+    # Comparison strip (above tabs)
+    figures["pre_post_slope"] = build_pre_post_slope_chart(summary)
 
     # Tab 1: Overview
     figures["hero_its"] = build_hero_its_chart(outputs, readiness_df)

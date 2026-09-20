@@ -1314,9 +1314,6 @@ def build_html(
 
     sections.append(section_html_or_placeholder("Methodology", _methodology_section))
 
-    # ---- Disclaimer ----
-    sections.append(disclaimer_banner())
-
     body = "\n".join(sections)
 
     # Determine data end date

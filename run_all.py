@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
 """Run all Oura analysis modules and generate reports.
 
-Executes 12 pipeline scripts sequentially, outputting all HTML reports
-and JSON metrics to oura-digital-twin/reports/.
+Executes every script in SCRIPTS sequentially (see the list below for the
+current count), writing HTML reports and JSON metrics to reports/. It then
+runs the statistical integrity audit (analysis/statcheck_reports.py) over the
+generated pages. The audit is a gate: when it does not pass, reports/send_bundle
+is not assembled and this script exits non-zero, so nothing downstream ships a
+page whose numbers contradict its own metrics JSON.
+
+Also writes reports/run_summary.json with per-script pass/fail and runtime.
 
 Usage:
     cd oura-digital-twin
@@ -16,6 +22,7 @@ import shutil
 import subprocess
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -57,8 +64,25 @@ SCRIPTS = [
     "generate_roadmap.py",
     "generate_research_synthesis.py",
     "generate_treatment_report.py",
+    "generate_404.py",
+    "generate_how_built.py",
+    "analyze_patient_standalone.py --profile mitch",
+    "analyze_patient_standalone.py --profile wenche",
+    "generate_anthropic_case.py",
     "generate_index.py",
 ]
+
+# Generators that may legitimately be absent from a checkout. A missing file
+# here is recorded as SKIPPED, not as a failure, so the pipeline does not turn
+# red for a page that simply does not exist yet.
+OPTIONAL_SCRIPTS = {
+    "generate_404.py",
+    "generate_how_built.py",
+}
+
+STATCHECK_SCRIPT = "statcheck_reports.py"
+STATCHECK_AUDIT = REPORTS_DIR / "statcheck_audit.json"
+RUN_SUMMARY_PATH = REPORTS_DIR / "run_summary.json"
 
 SEND_BUNDLE_HTML = [
     "index.html",
@@ -198,6 +222,76 @@ def assemble_send_bundle() -> tuple[list[str], list[str]]:
     )
     return copied_html, copied_json
 
+def run_statcheck() -> tuple[bool, dict]:
+    """Run the claim audit over the freshly generated reports.
+
+    Returns (passed, audit_payload). The audit is authoritative: it compares
+    every statistic printed in reports/*.html against the JSON its generator
+    wrote, and writes reports/statcheck_audit.json + reports/claims.html.
+    """
+    script_path = ANALYSIS_DIR / STATCHECK_SCRIPT
+    if not script_path.exists():
+        log(f"\n  STATCHECK MISSING: {script_path} not found. Treating as failure.")
+        return False, {"pass": False, "error": f"{script_path} not found"}
+
+    log(f"\n{'-' * 70}")
+    log("Running statcheck (every printed number vs its metrics JSON)...")
+    log(f"{'-' * 70}")
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(script_path)],
+            capture_output=False,
+            env=SUBPROCESS_ENV,
+            timeout=600,
+        )
+        returncode = proc.returncode
+    except subprocess.TimeoutExpired:
+        log("\n  STATCHECK TIMEOUT (>600s).")
+        return False, {"pass": False, "error": "statcheck timed out"}
+
+    payload: dict = {}
+    if STATCHECK_AUDIT.exists():
+        try:
+            payload = json.loads(STATCHECK_AUDIT.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            log(f"\n  STATCHECK audit unreadable: {exc}")
+            return False, {"pass": False, "error": str(exc)}
+    else:
+        log(f"\n  STATCHECK wrote no audit file at {STATCHECK_AUDIT}.")
+        return False, {"pass": False, "error": "no audit file"}
+
+    passed = returncode == 0 and payload.get("pass") is True
+    return passed, payload
+
+
+def write_run_summary(results: list[tuple], total_time: float,
+                      successes: int, failures: int, skipped: int) -> None:
+    """Record per-script outcome and runtime for downstream pages."""
+    scripts = []
+    for entry in results:
+        scripts.append({
+            "name": entry[0],
+            "ok": entry[1] == "OK",
+            "runtime_s": round(entry[2], 1) if len(entry) > 2 else None,
+        })
+    RUN_SUMMARY_PATH.write_text(
+        json.dumps(
+            {
+                "generated_at": datetime.now().isoformat(timespec="seconds"),
+                "scripts": scripts,
+                "total_runtime_s": round(total_time, 1),
+                "passed": successes,
+                "failed": failures,
+                "skipped": skipped,
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description="Run all Oura analysis scripts.")
     parser.add_argument(
@@ -231,10 +325,17 @@ def main():
 
     results = []
     for i, script in enumerate(SCRIPTS, 1):
-        script_path = ANALYSIS_DIR / script
+        # An entry may carry arguments ("analyze_patient_standalone.py --profile mitch");
+        # the first token is the file, the whole string is the name shown in logs and run_summary.
+        script_file, *script_args = script.split()
+        script_path = ANALYSIS_DIR / script_file
         if not script_path.exists():
-            log(f"\n[{i}/{n_scripts}] SKIP {script} - file not found")
-            results.append((script, "MISSING"))
+            if script in OPTIONAL_SCRIPTS:
+                log(f"\n[{i}/{n_scripts}] SKIP {script} - optional generator not present")
+                results.append((script, "SKIPPED"))
+            else:
+                log(f"\n[{i}/{n_scripts}] SKIP {script} - file not found")
+                results.append((script, "MISSING"))
             continue
 
         log(f"\n{'-' * 70}")
@@ -244,7 +345,7 @@ def main():
 
         try:
             proc = subprocess.run(
-                [sys.executable, str(script_path)],
+                [sys.executable, str(script_path), *script_args],
                 capture_output=False,
                 env=SUBPROCESS_ENV,
                 timeout=600,  # 10 min per script
@@ -263,7 +364,8 @@ def main():
     # Summary
     total_time = time.perf_counter() - t_total
     successes = sum(1 for e in results if e[1] == "OK")
-    failures = n_scripts - successes
+    skipped = sum(1 for e in results if e[1] == "SKIPPED")
+    failures = n_scripts - successes - skipped
     log(f"\n{'=' * 70}")
     log("  PIPELINE COMPLETE")
     log(f"{'=' * 70}")
@@ -275,13 +377,33 @@ def main():
 
     log(f"\n  Total runtime: {total_time:.1f}s")
     log(f"  Reports: {REPORTS_DIR}")
-    log(f"  Passed: {successes}/{n_scripts}  Failed: {failures}/{n_scripts}")
+    log(
+        f"  Passed: {successes}/{n_scripts}  Failed: {failures}/{n_scripts}"
+        f"  Skipped: {skipped}/{n_scripts}"
+    )
+
+    write_run_summary(results, total_time, successes, failures, skipped)
+    log(f"  Run summary: {RUN_SUMMARY_PATH}")
 
     if failures:
         log(f"\n  {failures}/{n_scripts} script(s) failed.")
 
-    # Assemble send bundle only when all scripts passed
-    if failures == 0:
+    # The claim audit gates everything downstream.
+    statcheck_ok, audit = run_statcheck()
+    if statcheck_ok:
+        log(
+            f"\n  STATCHECK PASS - {audit.get('claims_extracted', 0)} claims across "
+            f"{audit.get('reports_checked', 0)} pages, 0 mismatches."
+        )
+    else:
+        log(
+            f"\n  STATCHECK FAIL - {len(audit.get('mismatches', []))} mismatch(es), "
+            f"{len(audit.get('json_errors', []))} JSON error(s). "
+            f"See {STATCHECK_AUDIT} and {REPORTS_DIR / 'claims.html'}."
+        )
+
+    # Assemble send bundle only when all scripts passed AND the audit is green
+    if failures == 0 and statcheck_ok:
         try:
             copied_html, copied_json = assemble_send_bundle()
             log(f"\n  Curated HTML reports: {len(copied_html)}")
@@ -296,6 +418,8 @@ def main():
             log(f"  Manifest: {SEND_BUNDLE_DIR / 'SEND_MANIFEST.md'}")
         except FileNotFoundError as exc:
             log(f"\n  Send bundle assembly failed: {exc}")
+    elif not statcheck_ok:
+        log("  Send bundle skipped (statcheck did not pass).")
     else:
         log("  Send bundle skipped (not all scripts passed).")
 
@@ -304,6 +428,9 @@ def main():
     # default:  exit 1 only if ALL scripts failed (partial success = exit 0)
     if successes == 0:
         log("\n  All scripts failed. Exiting with code 1.")
+        sys.exit(1)
+    if not statcheck_ok:
+        log("\n  Statcheck did not pass. Exiting with code 1.")
         sys.exit(1)
     if args.strict and failures > 0:
         log("\n  Strict mode: exiting with code 1 due to failures.")

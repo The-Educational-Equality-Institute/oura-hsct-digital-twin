@@ -66,6 +66,7 @@ from _theme import (
     make_section,
     disclaimer_banner,
     format_p_value,
+    add_phase_shading,
     COLORWAY,
     STATUS_COLORS,
     BG_PRIMARY,
@@ -150,7 +151,7 @@ def _add_event_vline(
         x=x_val, y=1.02, yref="paper",
         text=label,
         showarrow=False,
-        font=dict(size=9, color=color),
+        font=dict(size=11, color=color),
         row=row, col=col,
     )
 
@@ -784,7 +785,7 @@ def _fig_henrik_timeline(
             x=list(upper.index) + list(lower.index[::-1]),
             y=list(upper.values) + list(lower.values[::-1]),
             fill="toself",
-            fillcolor=f"rgba(59,130,246,0.08)",
+            fillcolor="rgba(59,130,246,0.08)",
             line=dict(width=0),
             name="95% CI",
             showlegend=True,
@@ -835,6 +836,8 @@ def _fig_henrik_timeline(
                 name=f"CP: {method.upper()}",
             ))
 
+    add_phase_shading(fig, pd.Timestamp(TREATMENT_START))
+
     # Patient 1 event lines
     for evt_date, evt_label, evt_color in HENRIK_EVENTS:
         _add_event_vline(fig, pd.Timestamp(evt_date), evt_label, evt_color)
@@ -879,6 +882,8 @@ def _fig_bocpd_probability(
         fill="tozeroy",
         fillcolor="rgba(139,92,246,0.15)",
     ))
+    if patient_name == "Patient 1":
+        add_phase_shading(fig, pd.Timestamp(TREATMENT_START))
 
     # Threshold line
     fig.add_shape(
@@ -891,7 +896,7 @@ def _fig_bocpd_probability(
         x=clean.index[-1], y=threshold,
         text=f"Threshold ({threshold})",
         showarrow=False,
-        font=dict(size=9, color=ACCENT_AMBER),
+        font=dict(size=11, color=ACCENT_AMBER),
         xanchor="right",
     )
 
@@ -1247,9 +1252,9 @@ def _build_henrik_section(
             '<table class="odt-table" style="width:100%;border-collapse:collapse;">'
             '<thead><tr>'
             '<th style="text-align:left;padding:8px;border-bottom:1px solid #374151;">Metric</th>'
-            f'<th style="text-align:center;padding:8px;border-bottom:1px solid #374151;">Pre-Acute<br><small>(&lt; {KNOWN_EVENT_DATE})</small></th>'
-            f'<th style="text-align:center;padding:8px;border-bottom:1px solid #374151;">Post-Acute / Pre-Rux<br><small>({KNOWN_EVENT_DATE} - {TREATMENT_START})</small></th>'
-            f'<th style="text-align:center;padding:8px;border-bottom:1px solid #374151;">Post-Rux<br><small>(&ge; {TREATMENT_START})</small></th>'
+            f'<th style="text-align:center;padding:8px;border-bottom:1px solid #374151;">Pre-Acute<br><small style="font-size:11px">(&lt; {KNOWN_EVENT_DATE})</small></th>'
+            f'<th style="text-align:center;padding:8px;border-bottom:1px solid #374151;">Post-Acute / Pre-Rux<br><small style="font-size:11px">({KNOWN_EVENT_DATE} - {TREATMENT_START})</small></th>'
+            f'<th style="text-align:center;padding:8px;border-bottom:1px solid #374151;">Post-Rux<br><small style="font-size:11px">(&ge; {TREATMENT_START})</small></th>'
             '</tr></thead>'
             f'<tbody>{table_rows}</tbody>'
             '</table></div>'

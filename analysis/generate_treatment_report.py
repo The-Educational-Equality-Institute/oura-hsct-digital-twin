@@ -8,7 +8,9 @@ Outputs:  reports/treatment_response_report.html
           reports/treatment_response_metrics.json
 """
 from __future__ import annotations
-import json, sqlite3, sys
+import json
+import sqlite3
+import sys
 from datetime import date, datetime
 from pathlib import Path
 
@@ -24,6 +26,7 @@ from config import (DATABASE_PATH, REPORTS_DIR, TREATMENT_START,
                     BETA_BLOCKER_START, DATA_START)
 from profiles import PROFILES
 from _theme import (wrap_html, make_kpi_card, make_kpi_row, make_section,
+                    add_phase_shading,
                     format_p_value, TEXT_SECONDARY, TEXT_TERTIARY,
                     ACCENT_BLUE, ACCENT_GREEN, ACCENT_PURPLE, ACCENT_CYAN)
 
@@ -39,21 +42,27 @@ def _connect(path: Path) -> sqlite3.Connection:
     return conn
 
 def _df(conn, sql):
-    try: return pd.read_sql_query(sql, conn)
-    except Exception: return pd.DataFrame()
+    try:
+        return pd.read_sql_query(sql, conn)
+    except Exception:
+        return pd.DataFrame()
 
 def _phase(d: date) -> str:
-    if d < TREATMENT_START: return P_PRE
+    if d < TREATMENT_START:
+        return P_PRE
     return P_JAK if d < BETA_BLOCKER_START else P_BISO
 
 def _load_json(name: str) -> dict:
     p = REPORTS_DIR / name
     if p.exists():
-        try: return json.loads(p.read_text("utf-8"))
-        except (json.JSONDecodeError, OSError): pass
+        try:
+            return json.loads(p.read_text("utf-8"))
+        except (json.JSONDecodeError, OSError):
+            pass
     return {}
 
 def _vlines(fig):
+    add_phase_shading(fig, str(TREATMENT_START))
     for d, lbl, clr in ((str(TREATMENT_START), "Jakavi", ACCENT_BLUE),
                          (str(BETA_BLOCKER_START), "Bisoprolol", ACCENT_GREEN)):
         fig.add_vline(x=d, line=dict(color=clr, width=2, dash="dash"), opacity=0.7)
@@ -65,7 +74,8 @@ def _phase_ts(df, col, title, ylabel, height=400):
     fig = go.Figure()
     for phase, color in PHASE_COLORS.items():
         sub = df[df["phase"] == phase]
-        if sub.empty or col not in sub.columns: continue
+        if sub.empty or col not in sub.columns:
+            continue
         fig.add_trace(go.Scatter(x=sub["date"], y=sub[col], mode="lines+markers",
                                  name=phase, line=dict(color=color, width=2),
                                  marker=dict(size=4, color=color)))
@@ -121,29 +131,35 @@ def load_henrik_data() -> pd.DataFrame:
     for d in (sleep, readiness, activity, spo2):
         if not d.empty and "date" in d.columns:
             d["date"] = pd.to_datetime(d["date"]).dt.date
-    if sleep.empty: return pd.DataFrame()
+    if sleep.empty:
+        return pd.DataFrame()
     for c in ("total_sleep_duration","rem_sleep_duration","deep_sleep_duration","light_sleep_duration"):
-        if c in sleep.columns: sleep[c] = sleep[c] / 3600.0
+        if c in sleep.columns:
+            sleep[c] = sleep[c] / 3600.0
     merged = sleep.copy()
     for d in (readiness, activity, spo2):
-        if not d.empty: merged = merged.merge(d, on="date", how="left")
+        if not d.empty:
+            merged = merged.merge(d, on="date", how="left")
     merged["phase"] = merged["date"].apply(_phase)
     return merged.sort_values("date").reset_index(drop=True)
 
 def _load_comp(db_path, days=22):
-    if not db_path.exists(): return None
+    if not db_path.exists():
+        return None
     conn = _connect(db_path)
     s = _df(conn, f"""SELECT day AS date, average_hrv, average_heart_rate, lowest_heart_rate,
         total_sleep_duration, efficiency, average_breath, type
         FROM oura_sleep_periods WHERE type='long_sleep' ORDER BY day DESC LIMIT {days}""")
     a = _df(conn, f"SELECT date, steps FROM oura_activity WHERE score IS NOT NULL ORDER BY date DESC LIMIT {days}")
     conn.close()
-    if s.empty: return None
+    if s.empty:
+        return None
     s["date"] = pd.to_datetime(s["date"]).dt.date
     if not a.empty:
         a["date"] = pd.to_datetime(a["date"]).dt.date
         s = s.merge(a, on="date", how="left")
-    if "total_sleep_duration" in s.columns: s["total_sleep_duration"] = s["total_sleep_duration"] / 3600.0
+    if "total_sleep_duration" in s.columns:
+        s["total_sleep_duration"] = s["total_sleep_duration"] / 3600.0
     return s
 
 # --- Section builders ---
@@ -285,7 +301,8 @@ def build_temp(df):
         fig = go.Figure()
         for phase, color in PHASE_COLORS.items():
             sub = df[df["phase"] == phase]
-            if sub.empty: continue
+            if sub.empty:
+                continue
             fig.add_trace(go.Scatter(x=sub["date"], y=sub["temperature_deviation"],
                           mode="lines+markers", name=phase,
                           line=dict(color=color, width=2), marker=dict(size=4, color=color)))
@@ -317,7 +334,8 @@ def build_drugs(ci_data, tau_data):
     run_b = ci_data.get("run_b", {}).get("streams", {})
     def _ci(streams, key):
         s = streams.get(key, {})
-        if not s: return ("-","-","-")
+        if not s:
+            return ("-","-","-")
         return (f"{s.get('avg_effect',0):+.1f}", f"{s.get('relative_effect_pct',0):+.0f}%",
                 format_p_value(s.get("p_value")))
     rows = []
@@ -357,7 +375,8 @@ def build_comparison(df):
     recent = df.tail(22)
     mitch, wenche = _load_comp(MITCH_DB), _load_comp(WENCHE_DB)
     def _s(data, col):
-        if data is None or col not in data.columns: return "-"
+        if data is None or col not in data.columns:
+            return "-"
         s = data[col].dropna()
         return f"{s.mean():.1f}" if len(s) > 0 else "-"
     rows = []

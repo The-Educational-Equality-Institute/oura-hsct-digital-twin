@@ -1,13 +1,13 @@
-"""Dark clinical theme for Oura Digital Twin HTML reports.
+"""Light clinical theme for Oura Digital Twin HTML reports.
 
 Complete design system: Plotly template, CSS, navigation bar, KPI cards,
-section components, and full-page assembly. All 11 analysis scripts import
+section components, and full-page assembly. Every report generator imports
 from this module for visual consistency.
 
 Usage:
     from _theme import (
         wrap_html, make_kpi_card, make_kpi_row, make_section,
-        disclaimer_banner, metric_explainer, format_p_value,
+        make_hero_timeseries, disclaimer_banner, metric_explainer, format_p_value,
         METRIC_DESCRIPTIONS, STATUS_COLORS, COLORWAY,
     )
     import plotly.io as pio
@@ -17,11 +17,17 @@ Usage:
         make_kpi_card("RMSSD", 18.3, "ms", status="critical", detail="Below ESC threshold"),
         make_kpi_card("Mean HR", 72, "bpm", status="normal"),
     )
+    hero_fig = make_hero_timeseries()  # queries oura.db directly; or pass metrics={...}
+    body += make_chart_panel(
+        "HRV and heart rate", "Full observation window",
+        hero_fig.to_html(include_plotlyjs=False, full_html=False),
+    )
     body += make_section("HRV Trends", fig.to_html(include_plotlyjs=False, full_html=False))
     html = wrap_html("Advanced HRV", body, report_id="hrv")
 """
 
 import json
+import re
 import sqlite3
 import sys
 from datetime import date, datetime
@@ -33,45 +39,52 @@ import plotly.graph_objects as go
 import plotly.io as pio
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from config import DATABASE_PATH, FONT_FAMILY, PLOTLY_CDN_URL, PATIENT_LABEL, DATA_START, TREATMENT_START, HEV_DIAGNOSIS_DATE
+from config import (
+    DATABASE_PATH, FONT_FAMILY, PLOTLY_CDN_URL, PATIENT_LABEL, DATA_START,
+    TREATMENT_START, HEV_DIAGNOSIS_DATE, BETA_BLOCKER_START,
+    SITE_NAME, SITE_URL, SITE_DESCRIPTION, SITE_INDEXABLE, OG_IMAGE_PATH,
+    REPO_URL, COMPANION_URL, COMPANION_LABEL, HEALTH_EQUITY_URL,
+)
 
 # ---------------------------------------------------------------------------
-# Report Registry — 11 reports in 3 groups
+# Report Registry - navigation metadata
 # ---------------------------------------------------------------------------
 
 REPORT_REGISTRY = [
-    {"id": "home", "file": "index.html", "title": "Dashboard", "group": "Core"},
-    {"id": "about", "file": "roadmap.html#honest", "title": "About", "group": "Context"},
-    {"id": "roadmap", "file": "roadmap.html#roadmap", "title": "Next Steps", "group": "Context"},
-    {"id": "full_analysis", "file": "oura_full_analysis.html", "title": "Full Analysis", "group": "Core"},
-    {"id": "biomarkers", "file": "composite_biomarkers.html", "title": "Biomarker Trends", "group": "Core"},
-    {"id": "sleep", "file": "advanced_sleep_analysis.html", "title": "Sleep Analysis", "group": "Core"},
-    {"id": "causal", "file": "causal_inference_report.html", "title": "Causal: Ruxolitinib", "group": "Clinical"},
-    {"id": "gvhd", "file": "gvhd_prediction_report.html", "title": "GvHD Prediction", "group": "Clinical"},
-    {"id": "spo2", "file": "spo2_bos_screening.html", "title": "SpO2 & BOS", "group": "Clinical"},
-    {"id": "hrv", "file": "advanced_hrv_analysis.html", "title": "Advanced HRV", "group": "Advanced"},
-    {"id": "digital_twin", "file": "digital_twin_report.html", "title": "Digital Twin", "group": "Advanced"},
-    {"id": "foundation", "file": "foundation_model_report.html", "title": "Foundation Model", "group": "Advanced"},
-    {"id": "anomalies", "file": "anomaly_detection_report.html", "title": "Anomaly Detection", "group": "Advanced"},
-    {"id": "3d_dashboard", "file": "oura_3d_dashboard.html", "title": "3D Dashboard", "group": "Advanced"},
-    {"id": "comp_autonomic", "file": "comparative_autonomic_report.html", "title": "Autonomic Comparison", "group": "Comparative"},
-    {"id": "comp_treatment", "file": "comparative_treatment_response.html", "title": "Treatment Response", "group": "Comparative"},
-    {"id": "comp_sleep", "file": "comparative_sleep_analysis.html", "title": "Sleep Architecture", "group": "Comparative"},
-    {"id": "comp_coupling", "file": "comparative_activity_recovery_coupling.html", "title": "Activity-Recovery", "group": "Comparative"},
-    {"id": "comp_anomalies", "file": "comparative_anomaly_report.html", "title": "Anomaly Patterns", "group": "Comparative"},
-    {"id": "comp_breathing", "file": "comparative_breathing_analysis.html", "title": "Breathing Analysis", "group": "Comparative"},
-    {"id": "comp_temperature", "file": "comparative_temperature_analysis.html", "title": "Temperature Analysis", "group": "Comparative"},
-    {"id": "mitch_standalone", "file": "mitch_standalone_report.html", "title": "P2 Dashboard", "group": "Individual"},
-    {"id": "wenche_standalone", "file": "wenche_standalone_report.html", "title": "P3 Dashboard", "group": "Individual"},
-    {"id": "mitch_changepoints", "file": "mitch_changepoint_investigation.html", "title": "P2 Changepoints", "group": "Comparative"},
-    {"id": "weekly", "file": "weekly_tracker.html", "title": "Weekly Tracker", "group": "Core"},
-    {"id": "forecast", "file": "rux_forecast.html", "title": "Rux Forecast", "group": "Clinical"},
-    {"id": "piecewise_its", "file": "piecewise_regression.html", "title": "Piecewise ITS", "group": "Statistical"},
-    {"id": "sequential_ci", "file": "sequential_causal_impact.html", "title": "Sequential CI", "group": "Statistical"},
-    {"id": "placebo", "file": "placebo_calibration.html", "title": "Placebo Tests", "group": "Statistical"},
-    {"id": "tau_u", "file": "tau_u_effects.html", "title": "Tau-U Effects", "group": "Statistical"},
-    {"id": "synthesis", "file": "research_synthesis.html", "title": "Research Synthesis", "group": "Clinical"},
-    {"id": "treatment_report", "file": "treatment_response_report.html", "title": "Treatment Report", "group": "Clinical"},
+    {"id": "home", "file": "index.html", "title": "Dashboard", "group": "Core", "desc": "Current dashboard, report directory, and live status overview."},
+    {"id": "about", "file": "roadmap.html#honest", "title": "About", "group": "Context", "desc": "Methodology, limitations, and honest assessment of what this system can and cannot do."},
+    {"id": "roadmap", "file": "roadmap.html#roadmap", "title": "Next Steps", "group": "Context", "desc": "Planned analyses, validation targets, and next steps for the digital twin platform."},
+    {"id": "how_built", "file": "how_built.html", "title": "How this was built", "group": "Context", "desc": "Who did what, how a number gets onto a page, and how the pipeline checks itself. Measured, not claimed."},
+    {"id": "claims", "file": "claims.html", "title": "Every number, checked", "group": "Context", "desc": "Every statistic printed on this site, cross-checked against the JSON the pipeline computed it from."},
+    {"id": "full_analysis", "file": "oura_full_analysis.html", "title": "Full Analysis", "group": "Core", "desc": "Heart rate, HRV, sleep, activity, SpO2, and readiness trends across the full observation window."},
+    {"id": "biomarkers", "file": "composite_biomarkers.html", "title": "Biomarker Trends", "group": "Core", "desc": "Composite biomarker indices combining multiple Oura signals into research-use summary scores."},
+    {"id": "sleep", "file": "advanced_sleep_analysis.html", "title": "Sleep Analysis", "group": "Core", "desc": "Sleep architecture, staging distribution, efficiency, and circadian rhythm analysis."},
+    {"id": "causal", "file": "causal_inference_report.html", "title": "Causal: Ruxolitinib", "group": "Clinical", "desc": "Bayesian causal impact and interrupted time-series analysis of ruxolitinib response."},
+    {"id": "gvhd", "file": "gvhd_prediction_report.html", "title": "GvHD Prediction", "group": "Clinical", "desc": "Hidden Markov and state-space models predicting GvHD flare probability from wearable signals."},
+    {"id": "spo2", "file": "spo2_bos_screening.html", "title": "SpO2 & BOS", "group": "Clinical", "desc": "SpO2 trend monitoring and bronchiolitis obliterans syndrome screening thresholds."},
+    {"id": "hrv", "file": "advanced_hrv_analysis.html", "title": "Advanced HRV", "group": "Advanced", "desc": "Frequency-domain HRV, Poincare plots, DFA, sample entropy, and autonomic balance metrics."},
+    {"id": "digital_twin", "file": "digital_twin_report.html", "title": "Digital Twin", "group": "Advanced", "desc": "Unscented Kalman Filter digital twin tracking latent inflammatory and autonomic states."},
+    {"id": "foundation", "file": "foundation_model_report.html", "title": "Foundation Model", "group": "Advanced", "desc": "Chronos foundation model forecasting with prediction intervals and anomaly scoring."},
+    {"id": "anomalies", "file": "anomaly_detection_report.html", "title": "Anomaly Detection", "group": "Advanced", "desc": "Matrix Profile, Isolation Forest, and CUSUM anomaly detection across biometric channels."},
+    {"id": "3d_dashboard", "file": "oura_3d_dashboard.html", "title": "3D Dashboard", "group": "Advanced", "desc": "Interactive 3D scatter of sleep, HRV, and activity with treatment phase coloring."},
+    {"id": "comp_autonomic", "file": "comparative_autonomic_report.html", "title": "Autonomic Comparison", "group": "Comparative", "desc": "HRV and resting HR recovery trajectories compared between post-HSCT and post-stroke patients."},
+    {"id": "comp_treatment", "file": "comparative_treatment_response.html", "title": "Treatment Response", "group": "Comparative", "desc": "Changepoint detection and pre/post treatment response with Mann-Whitney U tests."},
+    {"id": "comp_sleep", "file": "comparative_sleep_analysis.html", "title": "Sleep Architecture", "group": "Comparative", "desc": "Sleep architecture, efficiency, and timing compared against clinical benchmarks."},
+    {"id": "comp_coupling", "file": "comparative_activity_recovery_coupling.html", "title": "Activity-Recovery", "group": "Comparative", "desc": "Activity-recovery coupling analysis: does day N activity predict day N+1 recovery?"},
+    {"id": "comp_anomalies", "file": "comparative_anomaly_report.html", "title": "Anomaly Patterns", "group": "Comparative", "desc": "Anomaly fingerprinting and clustering: how bad days manifest differently."},
+    {"id": "comp_breathing", "file": "comparative_breathing_analysis.html", "title": "Breathing Analysis", "group": "Comparative", "desc": "Respiratory-rate trends, week-over-week shifts, and outlier nights against recent baseline."},
+    {"id": "comp_temperature", "file": "comparative_temperature_analysis.html", "title": "Temperature Analysis", "group": "Comparative", "desc": "Temperature deviation tracking, excursion alerts, and post-treatment change patterns."},
+    {"id": "mitch_standalone", "file": "mitch_standalone_report.html", "title": "P2 Dashboard", "group": "Individual", "desc": "Post-stroke patient P2: HRV, HR, sleep, and activity dashboard."},
+    {"id": "wenche_standalone", "file": "wenche_standalone_report.html", "title": "P3 Dashboard", "group": "Individual", "desc": "Healthy control P3: baseline HRV, HR, sleep, and activity reference."},
+    {"id": "mitch_changepoints", "file": "mitch_changepoint_investigation.html", "title": "P2 Changepoints", "group": "Comparative", "desc": "Patient 2 changepoint scan of HRV, sleep, and recovery markers around key timeline events."},
+    {"id": "weekly", "file": "weekly_tracker.html", "title": "Weekly Tracker", "group": "Core", "desc": "One-page weekly tracker with watchpoints, week-over-week deltas, and clinician-style summary text."},
+    {"id": "forecast", "file": "rux_forecast.html", "title": "Rux Forecast", "group": "Clinical", "desc": "Near-term HRV and heart-rate recovery forecast from the current post-treatment trajectory."},
+    {"id": "piecewise_its", "file": "piecewise_regression.html", "title": "Piecewise ITS", "group": "Statistical", "desc": "Piecewise ITS regression with AR(1) errors: two-intervention model with date sensitivity analysis."},
+    {"id": "sequential_ci", "file": "sequential_causal_impact.html", "title": "Sequential CI", "group": "Statistical", "desc": "Sequential Bayesian CausalImpact isolating Jakavi and beta-blocker effects in separate runs."},
+    {"id": "placebo", "file": "placebo_calibration.html", "title": "Placebo Tests", "group": "Statistical", "desc": "Falsification tests at 20 random pre-treatment dates to calibrate false positive rates."},
+    {"id": "tau_u", "file": "tau_u_effects.html", "title": "Tau-U Effects", "group": "Statistical", "desc": "Tau-U and NAP effect sizes for single-case experimental design with baseline trend correction."},
+    {"id": "synthesis", "file": "research_synthesis.html", "title": "Research Synthesis", "group": "Clinical", "desc": "Two-hit autonomic recovery hypothesis with live KPIs, timeline, and statistical evidence."},
+    {"id": "treatment_report", "file": "treatment_response_report.html", "title": "Treatment Report", "group": "Clinical", "desc": "Primary clinical report covering all systems and both medicines for specialist review."},
 ]
 
 NAV_PRIMARY_IDS = [
@@ -83,77 +96,108 @@ NAV_PRIMARY_IDS = [
 ]
 
 # ---------------------------------------------------------------------------
-# Color Palette — premium dark theme
+# Color Palette - clinical LIGHT tokens
 # ---------------------------------------------------------------------------
 
-# Backgrounds
-BG_PRIMARY = "#0F1117"
-BG_SURFACE = "#1A1D27"
-BG_ELEVATED = "#242837"
+# Approved light clinical-premium palette (matches analysis/generate_index.py
+# and analysis/generate_anthropic_case.py exactly):
+#   page bg #F7F7F5, card/surface #FFFFFF, hairline rgba(20,22,26,0.08),
+#   ink #14161A, secondary #5B616E, tertiary #8A909C, ONE accent deep indigo
+#   #3A3AD6 (+ soft tint rgba(58,58,214,0.08)). No green, no teal, no cyan.
 
-# Text
-TEXT_PRIMARY = "#E8E8ED"
-TEXT_SECONDARY = "#9CA3AF"
-TEXT_TERTIARY = "#6B7280"
+# Surfaces and ink
+BG_PRIMARY = "#F7F7F5"
+BG_SURFACE = "#FFFFFF"
+BG_ELEVATED = "#F2F2EF"
+TEXT_PRIMARY = "#14161A"
+TEXT_SECONDARY = "#5B616E"
+TEXT_TERTIARY = "#666D7B"
+BORDER_SUBTLE = "rgba(20,22,26,0.06)"
+BORDER_DEFAULT = "rgba(20,22,26,0.12)"
 
-# Borders & grid
-BORDER_SUBTLE = "#2D3348"
-BORDER_DEFAULT = "#374151"
+# --- Signature accent: ONE deep indigo hue ---
+# The whole system runs on a single accent, deep indigo #3A3AD6, plus a soft
+# tint for fills. ACCENT_TEAL is kept ONLY as a name (imports depend on it)
+# but now resolves to the indigo accent; ACCENT_TEAL_DEEP is a deeper indigo
+# used for the darker end of tonal ramps. No teal/cyan/green pigment remains.
+ACCENT_TEAL = "#3A3AD6"
+ACCENT_TEAL_DEEP = "#2A2AA6"
 
-# Accent colors
-ACCENT_BLUE = "#3B82F6"
-ACCENT_GREEN = "#10B981"
-ACCENT_AMBER = "#F59E0B"
-ACCENT_RED = "#EF4444"
-ACCENT_PURPLE = "#8B5CF6"
-ACCENT_CYAN = "#06B6D4"
-ACCENT_PINK = "#EC4899"
-ACCENT_ORANGE = "#F97316"
-ACCENT_INDIGO = "#6366F1"
+# Categorical slots. Legacy names are kept as real (non-duplicate) aliases so
+# the 25+ report generators that import ACCENT_CYAN/ACCENT_INDIGO/etc. keep
+# working. On light we lead with indigo and fill the rest of the wheel with
+# ink/grey and a sparing amber; green/teal/cyan are replaced by indigo or ink.
+ACCENT_BLUE = ACCENT_TEAL          # the signature accent (deep indigo #3A3AD6)
+ACCENT_CYAN = "#6E6EE0"            # lighter indigo tint, distinct from ACCENT_BLUE
+ACCENT_GREEN = "#3A3AD6"           # improve reads as indigo on light, not green
+ACCENT_AMBER = "#A34A08"           # muted amber, used sparingly for caution (AA on its own tint)
+ACCENT_RED = "#B4231F"             # muted clinical red for decline/critical
+ACCENT_PURPLE = "#5B5BD0"          # indigo-violet, distinct from ACCENT_BLUE
+ACCENT_INDIGO = "#3A3AD6"          # canonical indigo accent
+ACCENT_PINK = "#8A4FB0"            # muted violet, distinct from ACCENT_PURPLE
+ACCENT_ORANGE = "#B45309"          # shares the amber tone for warm channels
 
-# Status mapping
+# Status mapping. One improve / one decline / one caution colour. On light we
+# prefer indigo + ink; improve is indigo (not green), caution/decline lean on
+# muted amber/red used sparingly.
 STATUS_COLORS = {
-    "normal": ACCENT_GREEN,
-    "good": ACCENT_GREEN,
+    "normal": ACCENT_INDIGO,
+    "good": ACCENT_INDIGO,
     "warning": ACCENT_AMBER,
+    "serious": "#C2410C",
     "critical": ACCENT_RED,
     "info": ACCENT_BLUE,
     "neutral": "transparent",
 }
 
-# Biometric-specific (clinical monitor standard)
-C_HR = ACCENT_GREEN       # Heart rate — green on patient monitors
-C_SPO2 = ACCENT_CYAN      # SpO2 — cyan on pulse oximeters
-C_HRV = ACCENT_PURPLE     # HRV/RMSSD — autonomic nervous system
-C_SLEEP = ACCENT_INDIGO   # Sleep — calming, sleep-associated
-C_TEMP = ACCENT_ORANGE    # Temperature — warmth association
-C_ACTIVITY = "#34D399"    # Activity — energy/movement (light emerald)
+# Semantic status aliases (0.1): use these in new code instead of raw
+# STATUS_COLORS keys or hex literals.
+IMPROVE = ACCENT_INDIGO
+DECLINE = ACCENT_RED
+CAUTION = ACCENT_AMBER
+NEUTRAL = TEXT_SECONDARY
+ACCENT = ACCENT_INDIGO
 
-# Period/series colors (for treatment effect plots)
-C_PRE_TX = TEXT_SECONDARY
-C_POST_TX = ACCENT_BLUE
-C_BASELINE = "#60A5FA"
-C_COUNTERFACTUAL = "#93C5FD"
-C_FORECAST = ACCENT_CYAN
-C_RUX_LINE = ACCENT_BLUE
-C_EFFECT = ACCENT_GREEN
+# Semantic channels, reconciled to the light palette so a chart and its KPI
+# card share a hue per signal. HRV leads in indigo; HR is a muted ink.
+C_HR = TEXT_SECONDARY
+C_HRV = ACCENT_INDIGO
+C_SLEEP = ACCENT_PURPLE
+C_TEMP = ACCENT_ORANGE
+C_ACTIVITY = ACCENT_INDIGO
+C_SPO2 = TEXT_PRIMARY
+C_BREATH = ACCENT_AMBER
 
-# Plotly colorway (8 colors, colorblind-safe)
+# Treatment overlay colors
+C_PRE_TX = TEXT_TERTIARY
+C_POST_TX = ACCENT_INDIGO
+C_COUNTERFACTUAL = "rgba(58,58,214,0.35)"
+C_FORECAST = ACCENT_INDIGO
+C_BASELINE = "#8A909C"
+C_RUX_LINE = C_POST_TX
+C_EFFECT = C_FORECAST
+
+# Plotly colorway, fixed order. Indigo leads, then ink/greys and a sparing
+# amber; no green/teal/cyan.
 COLORWAY = [
-    ACCENT_BLUE, ACCENT_GREEN, ACCENT_AMBER, ACCENT_PURPLE,
-    ACCENT_PINK, ACCENT_CYAN, ACCENT_ORANGE, ACCENT_INDIGO,
+    ACCENT_INDIGO, TEXT_PRIMARY, TEXT_SECONDARY, ACCENT_PURPLE,
+    ACCENT_AMBER, ACCENT_RED, ACCENT_PINK, TEXT_TERTIARY,
 ]
 
-# Backward-compatible aliases (old config.py light-theme names → dark equivalents)
+RADIUS_SM = 6
+RADIUS_MD = 10
+RADIUS_LG = 14
+
+# Backward-compatible aliases for old config.py light-theme names.
 C_PRIMARY = ACCENT_BLUE
 C_SECONDARY = ACCENT_CYAN
 C_MUTED = TEXT_SECONDARY
-C_LIGHT = "#60A5FA"
-C_DARK = "#DBEAFE"
+C_LIGHT = TEXT_SECONDARY
+C_DARK = TEXT_PRIMARY
 C_ACCENT = ACCENT_BLUE
-C_CRITICAL = ACCENT_RED
-C_GOOD = ACCENT_GREEN
-C_WARNING = ACCENT_AMBER
+C_CRITICAL = STATUS_COLORS["critical"]
+C_GOOD = STATUS_COLORS["good"]
+C_WARNING = STATUS_COLORS["warning"]
 C_NEUTRAL = TEXT_SECONDARY
 C_BG = BG_PRIMARY
 C_CARD = BG_SURFACE
@@ -161,10 +205,10 @@ C_TEXT = TEXT_PRIMARY
 C_GRID = BORDER_SUBTLE
 C_TEXT_MUTED = TEXT_SECONDARY
 C_BG_LIGHT = BG_ELEVATED
-C_CAUTION = ACCENT_AMBER
+C_CAUTION = STATUS_COLORS["warning"]
 
 # ---------------------------------------------------------------------------
-# Metric Descriptions — reusable across reports
+# Metric Descriptions - reusable across reports
 # ---------------------------------------------------------------------------
 
 METRIC_DESCRIPTIONS = {
@@ -182,73 +226,91 @@ METRIC_DESCRIPTIONS = {
 
 
 def create_clinical_dark_template() -> go.layout.Template:
-    """Premium dark clinical dashboard Plotly template."""
+    """Premium LIGHT clinical dashboard Plotly template.
+
+    Name kept as create_clinical_dark_template (and template id "clinical_dark")
+    so the 30+ importing report generators keep working; the palette is the
+    approved light clinical-premium one (white plot on #F7F7F5 page, ink text,
+    single indigo accent).
+    """
     template = go.layout.Template()
 
-    # Layout
     template.layout.font = dict(
-        family=FONT_FAMILY, size=14, color=TEXT_PRIMARY,
+        family=FONT_FAMILY,
+        size=13,
+        color=TEXT_PRIMARY,
     )
-    template.layout.paper_bgcolor = BG_PRIMARY
+    template.layout.paper_bgcolor = BG_SURFACE
     template.layout.plot_bgcolor = BG_SURFACE
     template.layout.hovermode = "x unified"
     template.layout.hoverlabel = dict(
-        bgcolor="rgba(30, 35, 50, 0.92)",
+        bgcolor=BG_SURFACE,
         font_size=13,
         font_family=FONT_FAMILY,
-        bordercolor="rgba(255, 255, 255, 0.1)",
+        font_color=TEXT_PRIMARY,
+        bordercolor="rgba(20,22,26,0.08)",
         namelength=-1,
     )
-    template.layout.margin = dict(l=64, r=34, t=96, b=60, pad=4)
+    template.layout.margin = dict(l=56, r=16, t=48, b=40, pad=0)
 
-    # Title
     template.layout.title = dict(
-        font=dict(size=20, color="#FFFFFF", family=FONT_FAMILY),
+        font=dict(size=16, color=TEXT_PRIMARY, family=FONT_FAMILY, weight=600),
         x=0.0, xanchor="left",
-        pad=dict(l=10, t=10),
+        pad=dict(l=0, t=0, b=10),
     )
 
-    # Axes
-    for axis_name in ("xaxis", "yaxis"):
-        axis_obj = getattr(template.layout, axis_name)
-        axis_obj.showgrid = True
-        axis_obj.gridcolor = "rgba(255, 255, 255, 0.05)"
-        axis_obj.gridwidth = 1
-        axis_obj.griddash = "dot"
-        axis_obj.zeroline = False
-        axis_obj.showline = True
-        axis_obj.linecolor = BORDER_DEFAULT
-        axis_obj.linewidth = 1
-        axis_obj.tickfont = dict(size=12, color=TEXT_SECONDARY)
-        axis_obj.title = dict(
-            font=dict(size=13, color=TEXT_SECONDARY), standoff=16,
-        )
-        axis_obj.automargin = True
+    template.layout.xaxis = dict(
+        showgrid=False,
+        zeroline=False,
+        showline=True,
+        linecolor=BORDER_DEFAULT,
+        linewidth=1,
+        tickfont=dict(size=11, color=TEXT_TERTIARY),
+        title=dict(font=dict(size=12, color=TEXT_TERTIARY), standoff=12),
+        rangeselector=dict(
+            bgcolor="rgba(0,0,0,0)",
+            activecolor=BG_ELEVATED,
+            bordercolor="rgba(20,22,26,0.08)",
+            borderwidth=1,
+            font=dict(size=12, color=TEXT_SECONDARY, family=FONT_FAMILY),
+        ),
+        automargin=True,
+    )
+    template.layout.yaxis = dict(
+        showgrid=True,
+        gridcolor=BORDER_SUBTLE,
+        gridwidth=1,
+        zeroline=False,
+        showline=True,
+        linecolor=BORDER_DEFAULT,
+        linewidth=1,
+        tickfont=dict(size=11, color=TEXT_TERTIARY),
+        title=dict(font=dict(size=12, color=TEXT_TERTIARY), standoff=12),
+        automargin=True,
+    )
 
-    # Legend
     template.layout.legend = dict(
-        bgcolor="rgba(26, 29, 39, 0.85)",
-        bordercolor="rgba(255, 255, 255, 0.06)",
-        borderwidth=1,
+        bgcolor="rgba(0,0,0,0)",
+        borderwidth=0,
         font=dict(size=12, color=TEXT_PRIMARY),
         orientation="h",
-        yanchor="bottom", y=1.04,
-        xanchor="left", x=0,
+        yanchor="top",
+        y=1,
+        xanchor="right",
+        x=1,
         itemsizing="constant",
-        tracegroupgap=10,
     )
 
-    # Colorway
     template.layout.colorway = COLORWAY
 
-    # Colorscales
+    # Single-hue tonal ramp: light-to-indigo on light backgrounds.
     template.layout.colorscale.sequential = [
-        [0, BG_PRIMARY], [0.25, "#1E3A5F"], [0.5, ACCENT_BLUE],
-        [0.75, "#93C5FD"], [1.0, "#DBEAFE"],
+        [0, "#EDEDFB"], [0.25, "#C3C3F1"], [0.5, ACCENT_INDIGO],
+        [0.75, ACCENT_TEAL_DEEP], [1.0, TEXT_PRIMARY],
     ]
     template.layout.colorscale.diverging = [
-        [0, ACCENT_RED], [0.25, "#FCA5A5"], [0.5, "#F3F4F6"],
-        [0.75, "#6EE7B7"], [1.0, ACCENT_GREEN],
+        [0, ACCENT_RED], [0.25, "#E0A9A7"], [0.5, "#FFFFFF"],
+        [0.75, "#9E9EEC"], [1.0, ACCENT_INDIGO],
     ]
 
     # Annotation defaults
@@ -258,32 +320,371 @@ def create_clinical_dark_template() -> go.layout.Template:
         arrowhead=2, arrowwidth=1,
     )
 
-    # Shape defaults (reference bands)
+    # Shape defaults (reference bands): faint indigo tint on light.
     template.layout.shapedefaults = dict(
-        fillcolor="rgba(59, 130, 246, 0.1)",
-        line=dict(color="rgba(59, 130, 246, 0.3)", width=1),
+        fillcolor="rgba(58,58,214,0.06)",
+        line=dict(color=BORDER_DEFAULT, width=1),
     )
 
     # Trace defaults
     template.data.scatter = [go.Scatter(
         line=dict(width=2),
-        marker=dict(size=7, line=dict(width=0)),
+        marker=dict(size=8, line=dict(width=2, color=BG_SURFACE)),
     )]
     template.data.bar = [go.Bar(
         marker=dict(line=dict(width=0), opacity=0.9),
     )]
     template.data.heatmap = [go.Heatmap(
         colorscale=[
-            [0, BG_PRIMARY], [0.25, "#1E3A5F"], [0.5, ACCENT_BLUE],
-            [0.75, "#93C5FD"], [1.0, "#DBEAFE"],
+            [0, "#FFFFFF"], [0.25, "#E3E3F9"], [0.5, "#9E9EEC"],
+            [0.75, ACCENT_INDIGO], [1.0, ACCENT_TEAL_DEEP],
         ],
     )]
 
     return template
 
 
-# Auto-register at import time (does NOT set as default — each script opts in)
+# Auto-register at import time (does NOT set as default - each script opts in)
 pio.templates["clinical_dark"] = create_clinical_dark_template()
+
+PLOTLY_CONFIG = {
+    "responsive": True,
+    "displayModeBar": False,
+    "displaylogo": False,
+    "scrollZoom": True,
+    "modeBarButtonsToRemove": ["lasso2d", "select2d"],
+}
+
+
+def add_treatment_marker(fig: go.Figure, x, label: str) -> go.Figure:
+    """Add the standardized treatment/event marker to a Plotly figure."""
+    fig.add_vline(
+        x=x,
+        line_width=1,
+        line_dash="dot",
+        line_color=TEXT_PRIMARY,
+        opacity=1,
+    )
+    fig.add_annotation(
+        x=x,
+        y=1,
+        xref="x",
+        yref="paper",
+        text=label,
+        showarrow=False,
+        yanchor="top",
+        xanchor="left",
+        xshift=6,
+        yshift=-8,
+        bgcolor="rgba(255,255,255,0.92)",
+        bordercolor="rgba(20,22,26,0.08)",
+        borderwidth=1,
+        borderpad=4,
+        font=dict(size=11, color=TEXT_SECONDARY, family=FONT_FAMILY),
+    )
+    return fig
+
+
+def _last_trace_x(fig: go.Figure):
+    """Best-effort maximum x-value across Plotly traces for phase spans."""
+    import math
+
+    def _sort_key(value):
+        if value is None:
+            return None
+        try:
+            if hasattr(value, "to_pydatetime"):
+                value = value.to_pydatetime()
+        except (TypeError, ValueError):
+            return None
+
+        if isinstance(value, datetime):
+            return (0, value.timestamp())
+        if isinstance(value, date):
+            return (0, datetime(value.year, value.month, value.day).timestamp())
+
+        try:
+            number = float(value)
+            if math.isfinite(number):
+                return (1, number)
+        except (TypeError, ValueError):
+            pass
+
+        text = str(value).strip()
+        if not text or text.lower() == "nat":
+            return None
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+            return (0, parsed.timestamp())
+        except ValueError:
+            pass
+        try:
+            parsed = datetime.strptime(text[:10], "%Y-%m-%d")
+            return (0, parsed.timestamp())
+        except ValueError:
+            return (2, text)
+
+    best_key = None
+    best_value = None
+    for trace in fig.data:
+        xs = getattr(trace, "x", None)
+        if xs is None:
+            continue
+        try:
+            values = list(xs)
+        except TypeError:
+            continue
+        for value in values:
+            key = _sort_key(value)
+            if key is None:
+                continue
+            if best_key is None or key > best_key:
+                best_key = key
+                best_value = value
+    return best_value
+
+
+def add_phase_shading(
+    fig: go.Figure,
+    x0,
+    x1=None,
+    *,
+    row: int | str | None = None,
+    col: int | str | None = None,
+) -> go.Figure:
+    """Add a quiet post-intervention phase band from x0 to x1 or chart end."""
+    resolved_x1 = x1 if x1 is not None else _last_trace_x(fig)
+    if resolved_x1 is None:
+        return fig
+
+    kwargs = {}
+    if row is not None:
+        kwargs["row"] = row
+    if col is not None:
+        kwargs["col"] = col
+
+    fig.add_vrect(
+        x0=x0,
+        x1=resolved_x1,
+        fillcolor="rgba(58,58,214,0.06)",
+        line_width=0,
+        layer="below",
+        **kwargs,
+    )
+    return fig
+
+
+def add_end_labels(fig: go.Figure, max_series: int = 4) -> go.Figure:
+    """Direct-label up to max_series visible x/y traces at their last point."""
+    xy_traces = [
+        trace for trace in fig.data
+        if getattr(trace, "visible", True) is not False
+        and getattr(trace, "showlegend", True) is not False
+        and getattr(trace, "x", None) is not None
+        and getattr(trace, "y", None) is not None
+        and getattr(trace, "name", None)
+    ]
+    if not xy_traces or len(xy_traces) > max_series:
+        return fig
+
+    colorway_idx = 0
+    for trace in xy_traces:
+        xs = list(trace.x)
+        ys = list(trace.y)
+        last = next(
+            (
+                (x_val, y_val)
+                for x_val, y_val in zip(reversed(xs), reversed(ys))
+                if y_val is not None
+            ),
+            None,
+        )
+        if last is None:
+            continue
+        color = None
+        if getattr(trace, "line", None) is not None:
+            color = getattr(trace.line, "color", None)
+        if not color and getattr(trace, "marker", None) is not None:
+            color = getattr(trace.marker, "color", None)
+        if not color:
+            color = COLORWAY[colorway_idx % len(COLORWAY)]
+        colorway_idx += 1
+        fig.add_annotation(
+            x=last[0],
+            y=last[1],
+            xref=getattr(trace, "xaxis", None) or "x",
+            yref=getattr(trace, "yaxis", None) or "y",
+            text=escape(str(trace.name)),
+            showarrow=False,
+            xanchor="left",
+            yanchor="middle",
+            xshift=8,
+            font=dict(size=12, color=color, family=FONT_FAMILY),
+            bgcolor="rgba(255,255,255,0.85)",
+            borderpad=2,
+            name="odt-end-label",
+        )
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Hero Time-series (0.4)
+# ---------------------------------------------------------------------------
+
+
+def _query_daily_hrv_hr(
+    db_path: Path | str | None = None,
+) -> tuple[list[str], list[float | None], list[float | None]]:
+    """Query daily mean HRV (RMSSD) and heart rate from long-sleep periods.
+
+    Mirrors the query already used by analyze_patient_standalone.py /
+    analyze_mitch_changepoints.py: one row per night from oura_sleep_periods
+    where type='long_sleep', ordered by day. Returns parallel lists
+    (dates, hrv_values, hr_values); missing values are None, never fabricated.
+    """
+    path = str(db_path) if db_path is not None else str(DATABASE_PATH)
+    dates: list[str] = []
+    hrv: list[float | None] = []
+    hr: list[float | None] = []
+    try:
+        conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        rows = conn.execute(
+            "SELECT day, average_hrv, average_heart_rate "
+            "FROM oura_sleep_periods WHERE type = 'long_sleep' ORDER BY day"
+        ).fetchall()
+        conn.close()
+    except sqlite3.Error:
+        return dates, hrv, hr
+
+    for day, avg_hrv, avg_hr in rows:
+        dates.append(day)
+        hrv.append(float(avg_hrv) if avg_hrv is not None else None)
+        hr.append(float(avg_hr) if avg_hr is not None else None)
+    return dates, hrv, hr
+
+
+def make_hero_timeseries(
+    metrics: dict | None = None,
+    *,
+    db_path: Path | str | None = None,
+    show_hr: bool = True,
+    title: str = "HRV and heart rate over the full observation window",
+    height: int = 460,
+    div_id: str = "odt-hero-timeseries",
+) -> go.Figure:
+    """Build the flagship full-window HRV (+ optional HR) hero time-series.
+
+    This is the ONE reusable hero chart Phase-1 pages should embed above
+    their KPI grid: the full observation window, both treatment markers
+    (Ruxolitinib start + HEV diagnosis), and quiet shading for the three
+    clinical phases (baseline / Jakavi-only / Jakavi+beta-blocker). It never
+    computes or infers a data point; it only ever plots values it was given
+    or found verbatim in the database.
+
+    Args:
+        metrics: Optional dict with an explicit series, shaped as:
+            {
+                "dates": ["2026-01-08", ...],          # required, ISO YYYY-MM-DD
+                "hrv":   [16.2, 15.8, ...] | None,       # same length as dates
+                "hr":    [58.1, 59.0, ...] | None,       # same length as dates
+            }
+            Any of "hrv"/"hr" may be omitted or contain None for missing
+            nights; a missing/absent series is simply not plotted (never
+            fabricated). If `metrics` is None, the function queries
+            oura_sleep_periods (long_sleep rows) from `db_path` (defaults
+            to config.DATABASE_PATH) using the same query already used by
+            analyze_patient_standalone.py / analyze_mitch_changepoints.py.
+        db_path: Override DB path when metrics is None. Defaults to
+            config.DATABASE_PATH.
+        show_hr: Whether to add the heart-rate trace on a secondary y-axis
+            in addition to HRV. If no HR data exists, this is a no-op.
+        title: Plotly figure title.
+        height: Figure height in px.
+        div_id: Unused by the caller directly (Plotly figures don't carry
+            a DOM id) but documented here for callers that render via
+            fig.to_html(div_id=...) / include it in a chart_data lazy-load
+            key, so page generators have one canonical name to reach for.
+
+    Returns:
+        A go.Figure using create_clinical_dark_template, with
+        add_treatment_marker for Ruxolitinib (config.TREATMENT_START) and
+        HEV diagnosis (config.HEV_DIAGNOSIS_DATE), and add_phase_shading
+        covering the Jakavi-only window (TREATMENT_START to
+        BETA_BLOCKER_START) and the Jakavi+beta-blocker window
+        (BETA_BLOCKER_START to the last observed date). The baseline phase
+        (before TREATMENT_START) is left unshaded by design, consistent
+        with add_phase_shading's "quiet post-intervention band" contract.
+
+    Callers (Phase 1) should still wrap the returned figure in
+    make_chart_panel(...) / fig.to_html(...) themselves, since embedding
+    (full_html vs lazy-loaded chart_data) is a per-page decision.
+    """
+    if metrics is not None:
+        dates = metrics.get("dates") or []
+        hrv_values = metrics.get("hrv")
+        hr_values = metrics.get("hr")
+    else:
+        dates, hrv_values, hr_values = _query_daily_hrv_hr(db_path)
+
+    fig = go.Figure()
+    fig.update_layout(template="clinical_dark", height=height, title=dict(text=title))
+
+    has_hrv = bool(dates) and hrv_values and any(v is not None for v in hrv_values)
+    has_hr = bool(dates) and show_hr and hr_values and any(v is not None for v in hr_values)
+
+    if not has_hrv and not has_hr:
+        # No real series to plot. Render an empty, honestly-labeled figure
+        # rather than a fabricated line.
+        fig.add_annotation(
+            text="No HRV/HR series available for this window",
+            xref="paper", yref="paper", x=0.5, y=0.5,
+            showarrow=False, font=dict(size=13, color=TEXT_TERTIARY),
+        )
+        return fig
+
+    if has_hrv:
+        fig.add_trace(go.Scatter(
+            x=dates, y=hrv_values, mode="lines+markers", name="HRV (RMSSD, ms)",
+            line=dict(color=C_HRV, width=2),
+            marker=dict(size=5, color=C_HRV, line=dict(color=BG_SURFACE, width=1)),
+            connectgaps=False,
+        ))
+
+    if has_hr:
+        fig.add_trace(go.Scatter(
+            x=dates, y=hr_values, mode="lines+markers", name="Heart rate (bpm)",
+            line=dict(color=C_HR, width=2),
+            marker=dict(size=5, color=C_HR, line=dict(color=BG_SURFACE, width=1)),
+            yaxis="y2",
+            connectgaps=False,
+        ))
+        fig.update_layout(
+            yaxis2=dict(
+                overlaying="y", side="right", showgrid=False,
+                title=dict(text="bpm", font=dict(size=12, color=TEXT_TERTIARY)),
+                tickfont=dict(size=11, color=TEXT_TERTIARY),
+            ),
+        )
+
+    # Treatment / event markers - never inferred, always the config dates.
+    add_treatment_marker(fig, str(TREATMENT_START), "Ruxolitinib start")
+    if HEV_DIAGNOSIS_DATE:
+        add_treatment_marker(fig, str(HEV_DIAGNOSIS_DATE), "HEV diagnosed")
+
+    # Phase shading: baseline is left unshaded; Jakavi-only and
+    # Jakavi+beta-blocker each get a quiet band up to the next boundary
+    # (or to the last observed date for the final phase).
+    add_phase_shading(fig, str(TREATMENT_START), str(BETA_BLOCKER_START))
+    add_phase_shading(fig, str(BETA_BLOCKER_START))
+
+    add_end_labels(fig, max_series=2)
+
+    fig.update_layout(
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+        margin=dict(l=56, r=56, t=64, b=40),
+    )
+    return fig
+
 
 # ---------------------------------------------------------------------------
 # Inter Font Embed
@@ -292,126 +693,334 @@ pio.templates["clinical_dark"] = create_clinical_dark_template()
 _INTER_FONT_LINK = (
     '<link rel="preconnect" href="https://fonts.googleapis.com">\n'
     '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
-    '<link href="https://fonts.googleapis.com/css2'
-    '?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">'
+    '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"'
+    ' rel="stylesheet" media="print" onload="this.media=\'all\'">\n'
+    '<noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"'
+    ' rel="stylesheet"></noscript>'
 )
 
 
 def get_plotly_enhancer_js() -> str:
-    """Return a small runtime patch that improves chart spacing and legibility."""
+    """Return runtime Plotly defaults and responsive chart polishing."""
+    config_json = json.dumps(PLOTLY_CONFIG)
     return f"""
-<script>
-window.__odtEnhancePlotly = function(graphDiv) {{
-  if (!window.Plotly || !graphDiv || !graphDiv.layout) return;
-  try {{
-    const chartBox = graphDiv.closest(".chart-box");
-    if (chartBox) {{
-      chartBox.style.display = "block";
-      chartBox.style.width = "100%";
-      chartBox.style.overflowX = "hidden";
+<script type="module">
+(() => {{
+  const ODT_CONFIG = {config_json};
+  const ODT_COLORWAY = {json.dumps(COLORWAY)};
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  window.__ODT_PLOTLY_CONFIG = ODT_CONFIG;
+
+	  const mergeConfig = (config) => {{
+	    const next = Object.assign({{}}, ODT_CONFIG, config || {{}});
+	    next.displayModeBar = false;
+	    next.displaylogo = false;
+	    next.modeBarButtonsToRemove = Array.from(new Set([
+	      ...(ODT_CONFIG.modeBarButtonsToRemove || []),
+	      ...((config && config.modeBarButtonsToRemove) || []),
+	    ]));
+    return next;
+  }};
+
+  const patchNewPlot = () => {{
+    if (!window.Plotly || window.Plotly.__odtPatched) return;
+    const originalNewPlot = window.Plotly.newPlot.bind(window.Plotly);
+    const LAZY_MARGIN = 400;
+    const plotNow = (gd, data, layout, config) => {{
+      const nextLayout = Object.assign({{}}, layout || {{}});
+      nextLayout.hovermode = nextLayout.hovermode || "x unified";
+      if (reduceMotion) nextLayout.transition = {{ duration: 0 }};
+      return originalNewPlot(gd, data, nextLayout, mergeConfig(config)).then((graphDiv) => {{
+        window.__odtEnhancePlotly?.(graphDiv);
+        return graphDiv;
+      }});
+    }};
+    // Charts below the fold wait until they are about to scroll into view. Every
+    // caller gets the same promise it always got; it just resolves later.
+    window.Plotly.newPlot = (gd, data, layout, config) => {{
+      const el = typeof gd === "string" ? document.getElementById(gd) : gd;
+      if (!el || !("IntersectionObserver" in window)) return plotNow(gd, data, layout, config);
+      const rect = el.getBoundingClientRect();
+      const near = rect.bottom > -LAZY_MARGIN && rect.top < window.innerHeight + LAZY_MARGIN;
+      if (near) return plotNow(gd, data, layout, config);
+      const wanted = (layout && layout.height) || 420;
+      if (!el.style.minHeight) el.style.minHeight = wanted + "px";
+      return new Promise((resolve, reject) => {{
+        const io = new IntersectionObserver((entries) => {{
+          if (!entries.some((entry) => entry.isIntersecting)) return;
+          io.disconnect();
+          plotNow(gd, data, layout, config).then(resolve, reject);
+        }}, {{ rootMargin: LAZY_MARGIN + "px" }});
+        io.observe(el);
+      }});
+    }};
+    window.Plotly.__odtPatched = true;
+  }};
+
+  const asArray = (value) => {{
+    if (Array.isArray(value)) return value;
+    if (value && typeof value !== "string" && typeof value.length === "number") {{
+      return Array.from(value);
+    }}
+    return [];
+  }};
+
+  const escapeHtml = (value) => String(value || "").replace(/[&<>"']/g, (char) => ({{
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }}[char]));
+
+  const lastPoint = (trace) => {{
+    const xs = asArray(trace.x);
+    const ys = asArray(trace.y);
+    for (let index = Math.min(xs.length, ys.length) - 1; index >= 0; index -= 1) {{
+      const x = xs[index];
+      const y = ys[index];
+      if (x === null || x === undefined || y === null || y === undefined) continue;
+      if (typeof y === "number" && !Number.isFinite(y)) continue;
+      return {{ x, y }};
+    }}
+    return null;
+  }};
+
+  const traceColor = (trace, index) => {{
+    const lineColor = trace.line && typeof trace.line.color === "string" ? trace.line.color : "";
+    const markerColor = trace.marker && typeof trace.marker.color === "string" ? trace.marker.color : "";
+    return lineColor || markerColor || ODT_COLORWAY[index % ODT_COLORWAY.length];
+  }};
+
+  const chartTitleText = (layout) => {{
+    const title = layout && layout.title;
+    if (!title) return "";
+    if (typeof title === "string") return title.trim();
+    return String(title.text || "").trim();
+  }};
+
+  const normalizeTitle = (value) => String(value || "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\\s+/g, " ")
+    .trim()
+    .toLowerCase();
+
+  const ensureChartPanel = (graphDiv, titleText) => {{
+    if (!graphDiv || graphDiv.dataset.odtPanelized === "true") return;
+    const parent = graphDiv.parentElement;
+    if (!parent) return;
+
+    if (parent.classList.contains("odt-chart-panel")) {{
+      graphDiv.dataset.odtPanelized = "true";
+      return;
     }}
 
-    graphDiv.style.marginLeft = "auto";
-    graphDiv.style.marginRight = "auto";
-    graphDiv.style.display = "block";
-    graphDiv.style.width = "100%";
-    graphDiv.style.maxWidth = "100%";
+    const sectionTitle = graphDiv
+      .closest(".odt-section")
+      ?.querySelector(".odt-section-heading h2")
+      ?.textContent || "";
+    const showHeader = titleText && normalizeTitle(titleText) !== normalizeTitle(sectionTitle);
 
-    const plotContainer = graphDiv.querySelector(".plot-container");
-    if (plotContainer) {{
-      plotContainer.style.marginLeft = "auto";
-      plotContainer.style.marginRight = "auto";
-      plotContainer.style.display = "block";
-      plotContainer.style.width = "100%";
-      plotContainer.style.maxWidth = "100%";
+    const panel = document.createElement("div");
+    panel.className = `odt-chart-panel${{showHeader ? "" : " odt-chart-panel--compact"}}`;
+
+    if (showHeader) {{
+      const header = document.createElement("div");
+      header.className = "odt-chart-panel-header";
+      header.innerHTML = `<div class="odt-chart-panel-title">${{escapeHtml(titleText)}}</div>`;
+      panel.appendChild(header);
     }}
 
-    const svgContainer = graphDiv.querySelector(".svg-container");
-    if (svgContainer) {{
-      svgContainer.style.marginLeft = "auto";
-      svgContainer.style.marginRight = "auto";
-      svgContainer.style.display = "block";
-      svgContainer.style.width = "100%";
-      svgContainer.style.maxWidth = "100%";
-    }}
-  }} catch (e) {{
-    // Non-fatal: continue with relayout adjustments.
-  }}
+    parent.insertBefore(panel, graphDiv);
+    panel.appendChild(graphDiv);
+    graphDiv.dataset.odtPanelized = "true";
+  }};
 
-  const layout = graphDiv.layout || {{}};
-  const updates = {{}};
-  const axisKeys = Object.keys(layout).filter((key) => /^(x|y)axis\\d*$/.test(key));
+	  const labelableTraces = (graphDiv) => {{
+	    const blockedTypes = new Set(["heatmap", "contour", "histogram2d", "surface", "table", "pie", "indicator", "sunburst", "treemap"]);
+	    return (Array.isArray(graphDiv.data) ? graphDiv.data : []).filter((trace) => {{
+      if (!trace || trace.visible === false || trace.visible === "legendonly") return false;
+      if (trace.showlegend === false) return false;
+      if (!trace.name || String(trace.name).trim() === "") return false;
+      if (blockedTypes.has(trace.type)) return false;
+      if (!asArray(trace.x).length || !asArray(trace.y).length) return false;
+	      return Boolean(lastPoint(trace));
+	    }});
+	  }};
 
-  axisKeys.forEach((key) => {{
-    const axis = layout[key] || {{}};
-    updates[`${{key}}.automargin`] = true;
-    updates[`${{key}}.tickfont.size`] = Math.max(axis.tickfont?.size || 0, 11);
-    updates[`${{key}}.tickfont.color`] = axis.tickfont?.color || "{TEXT_SECONDARY}";
-    updates[`${{key}}.title.font.size`] = Math.max(axis.title?.font?.size || 0, 12);
-    updates[`${{key}}.title.font.color`] = axis.title?.font?.color || "{TEXT_SECONDARY}";
-    updates[`${{key}}.title.standoff`] = Math.max(axis.title?.standoff || 0, 14);
-  }});
+	  const compactEventText = (text) => {{
+	    const normalized = normalizeTitle(text);
+	    if (normalized.includes("acute")) return "Acute";
+	    if (normalized.includes("rux")) return "Rux";
+	    if (normalized.includes("hev")) return "HEV";
+	    return String(text || "").replace(/\\s+/g, " ").trim();
+	  }};
 
-  updates["font.size"] = Math.max(layout.font?.size || 0, 13);
-  updates["legend.font.size"] = Math.max(layout.legend?.font?.size || 0, 12);
-  updates["hoverlabel.font.size"] = Math.max(layout.hoverlabel?.font?.size || 0, 12);
-  updates["margin.t"] = Math.max(layout.margin?.t || 0, 126);
-  updates["margin.b"] = Math.max(layout.margin?.b || 0, 68);
-  updates["margin.l"] = Math.max(layout.margin?.l || 0, 64);
-  updates["margin.r"] = Math.max(layout.margin?.r || 0, 34);
+	  const baseAnnotations = (layout, isNarrow) => {{
+	    const source = Array.isArray(layout.annotations)
+	      ? layout.annotations.filter((annotation) => annotation && annotation.name !== "odt-end-label")
+	      : [];
+	    if (!isNarrow) return {{ annotations: source, changed: false }};
 
-  if (layout.title) {{
-    updates["title.yanchor"] = layout.title.yanchor || "top";
-    updates["title.pad.t"] = Math.max(layout.title?.pad?.t || 0, 6);
-    updates["title.pad.b"] = Math.max(layout.title?.pad?.b || 0, 10);
-  }}
+	    let eventIndex = 0;
+	    let changed = false;
+	    const annotations = source.map((annotation) => {{
+	      const y = Number(annotation.y);
+	      const yref = String(annotation.yref || "");
+	      const isTopEvent = annotation.text && yref === "paper" && Number.isFinite(y) && y >= 0.95;
+	      if (!isTopEvent) return annotation;
 
-  if (typeof layout.legend?.y === "number" && layout.legend.y < 0) {{
-    updates["legend.y"] = Math.min(layout.legend.y, -0.14);
-  }}
+	      const next = Object.assign({{}}, annotation);
+	      next.text = compactEventText(next.text);
+	      next.textangle = -45;
+	      next.xanchor = "left";
+	      next.yanchor = "bottom";
+	      next.yshift = -8 - (eventIndex % 3) * 14;
+	      next.font = Object.assign({{}}, next.font || {{}}, {{ size: 10 }});
+	      eventIndex += 1;
+	      changed = true;
+	      return next;
+	    }});
+	    return {{ annotations, changed }};
+	  }};
 
-  if (Array.isArray(layout.annotations) && layout.annotations.length) {{
-    updates.annotations = layout.annotations.map((annotation) => {{
-      const next = {{ ...annotation }};
-      const isSubplotTitle =
-        next.showarrow === false &&
-        next.xref === "paper" &&
-        next.yref === "paper" &&
-        typeof next.y === "number" &&
-        next.y >= 0.95;
-      if (isSubplotTitle) {{
-        next.font = {{
-          ...(next.font || {{}}),
-          size: Math.max(next.font?.size || 0, 13),
-          color: "{TEXT_PRIMARY}",
-          family: "{FONT_FAMILY}",
-        }};
-        next.yanchor = "bottom";
-        if (typeof next.y === "number" && next.y > 1.0) {{
-          next.y = 1.0;
-        }}
+	  const endLabelAnnotations = (graphDiv, layout, isNarrow) => {{
+	    const base = baseAnnotations(layout, isNarrow);
+	    const traces = labelableTraces(graphDiv);
+	    if (traces.length < 2 || traces.length > 4) {{
+	      return base.changed ? base.annotations : null;
+	    }}
+	    const labels = traces.map((trace, index) => {{
+	      const point = lastPoint(trace);
+	      return {{
+        x: point.x,
+        y: point.y,
+        xref: trace.xaxis || "x",
+        yref: trace.yaxis || "y",
+        text: escapeHtml(trace.name),
+        showarrow: false,
+        xanchor: "left",
+        yanchor: "middle",
+        xshift: 8,
+        font: {{ size: 12, color: traceColor(trace, index), family: "{FONT_FAMILY}" }},
+        bgcolor: "rgba(255,255,255,0.85)",
+        borderpad: 2,
+	        name: "odt-end-label",
+	      }};
+	    }});
+	    return base.annotations.concat(labels);
+	  }};
+
+	  window.__odtEnhancePlotly = function(graphDiv) {{
+	    if (!window.Plotly || !graphDiv || !graphDiv.layout) return;
+	    try {{
+      const chartBox = graphDiv.closest(".chart-box");
+      if (chartBox) {{
+        chartBox.style.display = "block";
+        chartBox.style.width = "100%";
+        chartBox.style.overflowX = "hidden";
       }}
-      return next;
-    }});
-  }}
 
-  Plotly.relayout(graphDiv, updates).catch(() => {{}});
-}};
+      graphDiv.style.marginLeft = "auto";
+      graphDiv.style.marginRight = "auto";
+      graphDiv.style.display = "block";
+      graphDiv.style.width = "100%";
+      graphDiv.style.maxWidth = "100%";
 
-window.addEventListener("load", () => {{
-  window.setTimeout(() => {{
-    document.querySelectorAll(".js-plotly-plot").forEach((graphDiv) => {{
-      window.__odtEnhancePlotly?.(graphDiv);
-    }});
-  }}, 80);
-}});
+      const plotContainer = graphDiv.querySelector(".plot-container");
+      if (plotContainer) {{
+        plotContainer.style.marginLeft = "auto";
+        plotContainer.style.marginRight = "auto";
+        plotContainer.style.width = "100%";
+        plotContainer.style.maxWidth = "100%";
+      }}
+    }} catch (e) {{
+      // Non-fatal: continue with relayout adjustments.
+    }}
 
-window.addEventListener("resize", () => {{
-  if (!window.Plotly) return;
-  document.querySelectorAll(".js-plotly-plot").forEach((graphDiv) => {{
-    Plotly.Plots.resize(graphDiv);
+	    const layout = graphDiv.layout || {{}};
+	    const externalTitle = chartTitleText(layout);
+	    ensureChartPanel(graphDiv, externalTitle);
+	    const isNarrow = window.matchMedia("(max-width: 560px)").matches;
+
+	    const traceCount = Array.isArray(graphDiv.data) ? graphDiv.data.length : 0;
+	    const updates = {{
+	      "title.text": "",
+      "paper_bgcolor": "{BG_SURFACE}",
+      "plot_bgcolor": "{BG_SURFACE}",
+      "hovermode": "x unified",
+      "font.family": "{FONT_FAMILY}",
+      "font.size": Math.max(layout.font?.size || 0, 13),
+      "font.color": "{TEXT_PRIMARY}",
+      "hoverlabel.bgcolor": "{BG_ELEVATED}",
+      "hoverlabel.font.size": 13,
+      "hoverlabel.font.family": "{FONT_FAMILY}",
+      "hoverlabel.font.color": "{TEXT_PRIMARY}",
+	      "margin.t": Math.max(layout.margin?.t || 0, 48),
+	      "margin.b": Math.max(layout.margin?.b || 0, isNarrow ? 104 : 40),
+	      "margin.l": Math.max(layout.margin?.l || 0, 56),
+	      "margin.r": Math.max(layout.margin?.r || 0, 16),
+	      "legend.orientation": "h",
+	      "legend.x": isNarrow ? 0 : 1,
+	      "legend.xanchor": isNarrow ? "left" : "right",
+	      "legend.y": isNarrow ? -0.24 : 1,
+	      "legend.yanchor": isNarrow ? "top" : "top",
+	      "legend.bgcolor": "rgba(0,0,0,0)",
+	      "legend.borderwidth": 0,
+	      "legend.font.size": isNarrow ? 11 : 12,
+	      "showlegend": traceCount > 1,
+	    }};
+
+	    const annotations = endLabelAnnotations(graphDiv, layout, isNarrow);
+    if (annotations) updates.annotations = annotations;
+
+    Object.keys(layout)
+      .filter((key) => /^(x|y)axis\\d*$/.test(key))
+      .forEach((key) => {{
+        const isX = key.startsWith("x");
+        updates[`${{key}}.automargin`] = true;
+        updates[`${{key}}.showgrid`] = !isX;
+        updates[`${{key}}.gridcolor`] = "{BORDER_SUBTLE}";
+        updates[`${{key}}.gridwidth`] = 1;
+        updates[`${{key}}.zeroline`] = false;
+        updates[`${{key}}.showline`] = true;
+        updates[`${{key}}.linecolor`] = "{BORDER_DEFAULT}";
+        updates[`${{key}}.linewidth`] = 1;
+        updates[`${{key}}.tickfont.size`] = 11;
+        updates[`${{key}}.tickfont.color`] = "{TEXT_TERTIARY}";
+        updates[`${{key}}.title.font.size`] = 12;
+        updates[`${{key}}.title.font.color`] = "{TEXT_TERTIARY}";
+        updates[`${{key}}.title.standoff`] = Math.max(layout[key]?.title?.standoff || 0, 12);
+        updates[`${{key}}.rangeselector.bgcolor`] = "rgba(0,0,0,0)";
+        updates[`${{key}}.rangeselector.activecolor`] = "{BG_ELEVATED}";
+        updates[`${{key}}.rangeselector.bordercolor`] = "rgba(20,22,26,0.08)";
+        updates[`${{key}}.rangeselector.borderwidth`] = 1;
+        updates[`${{key}}.rangeselector.font.size`] = 12;
+        updates[`${{key}}.rangeselector.font.color`] = "{TEXT_SECONDARY}";
+        updates[`${{key}}.rangeselector.font.family`] = "{FONT_FAMILY}";
+      }});
+
+    Plotly.relayout(graphDiv, updates).catch(() => {{}});
+  }};
+
+  patchNewPlot();
+  window.addEventListener("DOMContentLoaded", patchNewPlot);
+  window.addEventListener("load", () => {{
+    patchNewPlot();
+    window.setTimeout(() => {{
+      document.querySelectorAll(".js-plotly-plot").forEach((graphDiv) => {{
+        window.__odtEnhancePlotly?.(graphDiv);
+      }});
+    }}, 80);
   }});
-}});
+
+  window.addEventListener("resize", () => {{
+    if (!window.Plotly) return;
+    document.querySelectorAll(".js-plotly-plot").forEach((graphDiv) => {{
+      Plotly.Plots.resize(graphDiv);
+    }});
+  }});
+}})();
 </script>"""
 
 # ---------------------------------------------------------------------------
@@ -423,16 +1032,28 @@ def get_base_css() -> str:
     """Return full <style> block for dark clinical reports."""
     return f"""<style>
 :root {{
-  /* --- Color palette --- */
-  --bg-primary: {BG_PRIMARY};
-  --bg-surface: {BG_SURFACE};
+  /* Color tokens from the redesign spec */
+  --bg-page: {BG_PRIMARY};
+  --bg-card: {BG_SURFACE};
+  --bg-primary: var(--bg-page);
+  --bg-surface: var(--bg-card);
   --bg-elevated: {BG_ELEVATED};
+  --ink-primary: {TEXT_PRIMARY};
+  --ink-secondary: {TEXT_SECONDARY};
+  --ink-muted: {TEXT_TERTIARY};
   --text-primary: {TEXT_PRIMARY};
   --text-secondary: {TEXT_SECONDARY};
   --text-tertiary: {TEXT_TERTIARY};
-  --border-subtle: {BORDER_SUBTLE};
-  --border-default: {BORDER_DEFAULT};
+  --grid-hairline: {BORDER_SUBTLE};
+  --axis-baseline: {BORDER_DEFAULT};
+  --border-ring: rgba(20,22,26,0.08);
+  --border-subtle: var(--grid-hairline);
+  --border-default: var(--axis-baseline);
+  --accent-teal: {ACCENT_TEAL};
+  --accent-teal-deep: {ACCENT_TEAL_DEEP};
   --accent-blue: {ACCENT_BLUE};
+  --accent-aqua: {ACCENT_GREEN};
+  --accent-yellow: {ACCENT_AMBER};
   --accent-green: {ACCENT_GREEN};
   --accent-amber: {ACCENT_AMBER};
   --accent-red: {ACCENT_RED};
@@ -441,57 +1062,120 @@ def get_base_css() -> str:
   --accent-pink: {ACCENT_PINK};
   --accent-orange: {ACCENT_ORANGE};
   --accent-indigo: {ACCENT_INDIGO};
+  --series-blue: {ACCENT_BLUE};
+  --series-aqua: {ACCENT_GREEN};
+  --series-yellow: {ACCENT_AMBER};
+  --series-green: {C_SPO2};
+  --series-violet: {ACCENT_PURPLE};
+  --series-red: {ACCENT_RED};
+  --series-magenta: {ACCENT_PINK};
+  --series-orange: {ACCENT_ORANGE};
+  --channel-hr: {C_HR};
+  --channel-hrv: {C_HRV};
+  --channel-sleep: {C_SLEEP};
+  --channel-temperature: {C_TEMP};
+  --channel-activity: {C_ACTIVITY};
+  --channel-spo2: {C_SPO2};
+  --channel-breath: {C_BREATH};
+  --status-good: {STATUS_COLORS["good"]};
+  --status-warning: {STATUS_COLORS["warning"]};
+  --status-serious: {STATUS_COLORS["serious"]};
+  --status-critical: {STATUS_COLORS["critical"]};
+  /* Semantic status aliases (0.1) */
+  --improve: {IMPROVE};
+  --decline: {DECLINE};
+  --caution: {CAUTION};
+  --neutral: {NEUTRAL};
+  --accent: {ACCENT};
 
-  /* --- Type scale --- */
-  --text-2xl: 1.75rem;
-  --text-xl: 1.25rem;
-  --text-lg: 1.125rem;
-  --text-base: 0.9375rem;
-  --text-sm: 0.875rem;
-  --text-xs: 0.75rem;
-  --text-2xs: 0.6875rem;
-  --text-3xs: 0.625rem;
+  /* Elevation: three real surface levels (0.2) */
+  --elevation-0: var(--bg-page);
+  --elevation-1: var(--bg-surface);
+  --elevation-2: var(--bg-elevated);
+  --elevation-1-highlight: rgba(255,255,255,0);
+  --elevation-1-border: rgba(20,22,26,0.08);
+  --elevation-2-highlight: rgba(255,255,255,0);
+  --elevation-2-border: rgba(20,22,26,0.10);
+  --shadow-1: 0 1px 2px rgba(20,22,26,0.04), 0 8px 24px rgba(20,22,26,0.04);
+  --shadow-2: 0 1px 2px rgba(20,22,26,0.05), 0 12px 32px rgba(20,22,26,0.06);
+  --hero-gradient: linear-gradient(180deg, rgba(58,58,214,0.03) 0%, rgba(58,58,214,0) 42%);
 
-  /* --- Spacing rhythm --- */
-  --space-xs: 4px;
-  --space-sm: 8px;
-  --space-md: 16px;
-  --space-lg: 24px;
-  --space-xl: 32px;
-  --space-2xl: 48px;
-  --space-3xl: 72px;
+  /* Modular type scale (0.3): ~1.125 ratio, clamp()-based for hero numerals */
+  --text-12: 12px;
+  --text-13: 13px;
+  --text-14: 14px;
+  --text-16: 16px;
+  --text-18: 18px;
+  --text-22: 22px;
+  --text-28: 28px;
+  --text-40: 40px;
+  --text-48: 48px;
+  --text-3xs: var(--text-12);
+  --text-2xs: var(--text-12);
+  --text-xs: var(--text-12);
+  --text-sm: var(--text-14);
+  --text-base: var(--text-16);
+  --text-lg: var(--text-18);
+  --text-xl: var(--text-22);
+  --text-2xl: var(--text-28);
+  --scale-ratio: 1.125;
+  --step-eyebrow: var(--text-12);
+  --step-body: var(--text-14);
+  --step-heading: var(--text-22);
+  --step-title: var(--text-28);
+  --step-hero: clamp(2.25rem, 1.9rem + 1.4vw, 3rem);
+  --step-hero-lg: clamp(2.75rem, 2.2rem + 2vw, 3.75rem);
+  --tracking-eyebrow: 0.06em;
+  --tracking-hero: -0.02em;
+  --tabular-nums: "tnum" 1, "lnum" 1;
 
-  /* --- Radii --- */
+  /* Spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-xs: var(--space-1);
+  --space-sm: var(--space-2);
+  --space-md: var(--space-4);
+  --space-lg: var(--space-6);
+  --space-xl: var(--space-8);
+  --space-2xl: var(--space-12);
+  --space-3xl: var(--space-16);
+
+  /* Radius, layout, and motion */
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
-  --radius-xl: 20px;
-
-  /* --- Layout --- */
+  --radius-xl: var(--radius-lg);
   --nav-height: 56px;
-  --container-max: 1540px;
-
-  /* --- Transitions --- */
+  --container-max: 1200px;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --duration-fast: 150ms;
   --duration-normal: 250ms;
   --duration-slow: 400ms;
-
-  /* --- Glass morphism base --- */
-  --glass-bg: rgba(26, 29, 39, 0.55);
-  --glass-border: rgba(255, 255, 255, 0.06);
-  --glass-shadow: 0 4px 24px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --shadow-overlay: 0 8px 24px rgba(20,22,26,0.10);
+  /* Motion-ready hooks (0.6): reusable transition shorthands. No new
+     animation is wired up yet; Phase 2 owns actual motion/stagger. */
+  --transition-elevation: background var(--duration-fast) ease,
+    border-color var(--duration-fast) ease, box-shadow var(--duration-normal) var(--ease-out),
+    transform var(--duration-normal) var(--ease-out);
+  --transition-color: color var(--duration-fast) ease, background var(--duration-fast) ease,
+    border-color var(--duration-fast) ease;
 }}
 
 * {{ margin: 0; padding: 0; box-sizing: border-box; }}
 
 html {{
-  color-scheme: dark;
+  color-scheme: light;
   scroll-behavior: smooth;
 }}
 
 ::selection {{
-  background: rgba(59, 130, 246, 0.3);
+  background: rgba(58,58,214,0.16);
   color: var(--text-primary);
 }}
 
@@ -504,18 +1188,17 @@ html {{
 body {{
   font-family: {FONT_FAMILY};
   background:
-    radial-gradient(circle at top left, rgba(59, 130, 246, 0.08), transparent 32%),
-    radial-gradient(circle at top right, rgba(139, 92, 246, 0.05), transparent 28%),
-    linear-gradient(180deg, #0F1117 0%, #0C1018 100%);
+    radial-gradient(ellipse at top center, rgba(58,58,214,0.03) 0, rgba(58,58,214,0) 600px),
+    var(--bg-page);
   color: var(--text-primary);
-  line-height: 1.6;
+  font-size: var(--text-16);
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-variant-numeric: tabular-nums;
   min-height: 100vh;
 }}
 
-/* === Scrollbar (dark theme) === */
+/* === Scrollbar (light theme) === */
 ::-webkit-scrollbar {{ width: 8px; height: 8px; }}
 ::-webkit-scrollbar-track {{ background: var(--bg-primary); }}
 ::-webkit-scrollbar-thumb {{
@@ -529,28 +1212,25 @@ body {{
   position: sticky;
   top: 0;
   z-index: 1000;
-  background: rgba(15, 17, 23, 0.88);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border-bottom: 1px solid rgba(45, 51, 72, 0.5);
-  box-shadow: 0 1px 12px rgba(0, 0, 0, 0.2);
+  background: var(--bg-page);
+  border-bottom: 1px solid var(--border-ring);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 28px;
+  padding: 0 var(--space-6);
   height: var(--nav-height);
-  gap: 16px;
+  gap: var(--space-4);
 }}
 .odt-nav-brand {{
-  font-size: var(--text-base);
-  font-weight: 700;
+  font-size: var(--text-16);
+  font-weight: 600;
   color: var(--text-primary);
   text-decoration: none;
   white-space: nowrap;
   display: flex;
   align-items: center;
-  gap: 10px;
-  letter-spacing: -0.02em;
+  gap: var(--space-2);
+  letter-spacing: 0;
   transition: opacity var(--duration-fast) ease;
 }}
 .odt-nav-brand:hover {{ opacity: 0.85; }}
@@ -558,22 +1238,22 @@ body {{
   width: 24px;
   height: 24px;
   border-radius: var(--radius-sm);
-  background: linear-gradient(135deg, {ACCENT_BLUE}, {ACCENT_PURPLE});
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-ring);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--text-2xs);
-  font-weight: 800;
-  color: white;
+  font-size: var(--text-12);
+  font-weight: 700;
+  color: var(--accent-blue);
   letter-spacing: 0;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
 }}
 .odt-nav-brand span {{ color: var(--accent-blue); }}
 .odt-nav-links {{
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   flex: 1;
   min-width: 0;
   justify-content: flex-end;
@@ -581,7 +1261,7 @@ body {{
 .odt-nav-primary {{
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   min-width: 0;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -591,35 +1271,33 @@ body {{
 .odt-nav-primary::-webkit-scrollbar {{ display: none; }}
 .odt-nav-current {{
   flex-shrink: 0;
-  font-size: var(--text-2xs);
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-size: var(--text-12);
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-tertiary);
   padding: 0 2px;
   white-space: nowrap;
 }}
 .odt-nav-link {{
-  font-size: var(--text-xs);
+  font-size: var(--text-13);
   font-weight: 600;
   color: var(--text-secondary);
   text-decoration: none;
-  padding: 9px 12px;
+  padding: var(--space-2) var(--space-3);
   border: 1px solid transparent;
   white-space: nowrap;
-  transition: color var(--duration-fast) ease, border-color var(--duration-normal) ease, background var(--duration-fast) ease, transform var(--duration-fast) ease;
-  border-radius: 999px;
+  transition: color var(--duration-fast) ease, border-color var(--duration-fast) ease, background var(--duration-fast) ease;
+  border-radius: var(--radius-sm);
 }}
 .odt-nav-link:hover {{
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.04);
-  transform: translateY(-1px);
+  background: var(--bg-elevated);
 }}
 .odt-nav-link.active {{
   color: var(--accent-blue);
-  border-color: rgba(59, 130, 246, 0.25);
-  background: rgba(59, 130, 246, 0.1);
-  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.12);
+  border-color: var(--border-ring);
+  background: var(--bg-surface);
 }}
 .odt-nav-browse {{
   position: relative;
@@ -632,54 +1310,57 @@ body {{
   gap: 8px;
   cursor: pointer;
   color: var(--text-primary);
-  font-size: var(--text-xs);
+  font-size: var(--text-13);
   font-weight: 600;
-  padding: 9px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--border-subtle);
-  background: rgba(255, 255, 255, 0.03);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-ring);
+  background: var(--bg-surface);
   transition: border-color var(--duration-fast) ease, background var(--duration-fast) ease;
 }}
 .odt-nav-browse summary::-webkit-details-marker {{ display: none; }}
 .odt-nav-browse summary::after {{
-  content: '▾';
-  font-size: 0.72rem;
-  color: var(--text-tertiary);
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-right: 1px solid var(--text-tertiary);
+  border-bottom: 1px solid var(--text-tertiary);
+  transform: rotate(45deg);
+  margin-top: -3px;
   transition: transform var(--duration-fast) ease;
 }}
 .odt-nav-browse summary:hover,
 .odt-nav-browse[open] summary {{
-  border-color: rgba(59, 130, 246, 0.22);
-  background: rgba(59, 130, 246, 0.08);
+  border-color: var(--border-ring);
+  background: var(--bg-elevated);
 }}
 .odt-nav-browse[open] summary::after {{
-  transform: rotate(180deg);
+  transform: rotate(225deg);
+  margin-top: 3px;
 }}
 .odt-nav-panel {{
   position: absolute;
   top: calc(100% + 10px);
   right: 0;
   width: min(860px, calc(100vw - 32px));
-  padding: 18px;
+  padding: var(--space-4);
   border-radius: var(--radius-lg);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(18, 22, 32, 0.97);
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(22px) saturate(160%);
-  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  border: 1px solid var(--border-ring);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-overlay);
 }}
 .odt-nav-panel-header {{
-  margin-bottom: 14px;
+  margin-bottom: var(--space-3);
   color: var(--text-tertiary);
-  font-size: var(--text-2xs);
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-size: var(--text-12);
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }}
 .odt-nav-panel-grid {{
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+  gap: var(--space-4);
   max-height: 70vh;
   overflow-y: auto;
   padding-right: 4px;
@@ -689,10 +1370,10 @@ body {{
 }}
 .odt-nav-group {{
   display: block;
-  font-size: 0.625rem;
-  font-weight: 700;
+  font-size: var(--text-12);
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   color: var(--text-tertiary);
   margin-bottom: 8px;
 }}
@@ -702,35 +1383,35 @@ body {{
 }}
 .odt-nav-panel-link {{
   display: block;
-  font-size: var(--text-xs);
+  font-size: var(--text-13);
   font-weight: 500;
   color: var(--text-secondary);
   text-decoration: none;
-  padding: 7px 10px;
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
   transition: color var(--duration-fast) ease, background var(--duration-fast) ease, border-color var(--duration-fast) ease;
 }}
 .odt-nav-panel-link:hover {{
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-surface);
 }}
 .odt-nav-panel-link.active {{
   color: var(--accent-blue);
-  background: rgba(59, 130, 246, 0.1);
-  border-color: rgba(59, 130, 246, 0.18);
+  background: var(--bg-surface);
+  border-color: var(--border-ring);
 }}
 .odt-nav-toggle {{
   display: none;
   background: none;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-ring);
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
-  font-size: 1.125rem;
+  font-size: var(--text-18);
   cursor: pointer;
   padding: 6px 10px;
   margin-left: auto;
-  transition: all var(--duration-fast) ease;
+  transition: color var(--duration-fast) ease, border-color var(--duration-fast) ease, background var(--duration-fast) ease;
 }}
 .odt-nav-toggle:hover {{
   color: var(--text-primary);
@@ -742,12 +1423,12 @@ body {{
 .odt-container {{
   max-width: var(--container-max);
   margin: 0 auto;
-  padding: var(--space-xl) 32px var(--space-2xl);
+  padding: var(--space-8) var(--space-6) var(--space-12);
 }}
 
 /* === Report Header === */
 .odt-header {{
-  padding: 52px 32px 36px;
+  padding: var(--space-12) var(--space-6) var(--space-8);
   max-width: var(--container-max);
   margin: 0 auto;
   position: relative;
@@ -756,38 +1437,34 @@ body {{
   content: '';
   position: absolute;
   bottom: 0;
-  left: 32px;
-  right: 32px;
+  left: var(--space-6);
+  right: var(--space-6);
   height: 1px;
-  background: linear-gradient(90deg, var(--accent-blue) 0%, var(--accent-purple) 30%, var(--border-subtle) 60%, transparent 100%);
+  background: var(--border-ring);
 }}
 .odt-header h1 {{
-  font-size: clamp(2rem, 3vw, 2.75rem);
-  font-weight: 800;
-  background: linear-gradient(135deg, #FFFFFF 0%, #E0E7FF 50%, #C7D2FE 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  margin-bottom: 10px;
-  letter-spacing: -0.03em;
-  line-height: 1.08;
+  font-size: var(--text-28);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-2);
+  letter-spacing: 0;
+  line-height: 1.2;
   max-width: 980px;
 }}
 .odt-header .subtitle {{
-  font-size: 1rem;
+  font-size: var(--text-16);
   font-weight: 500;
   color: var(--text-secondary);
-  line-height: 1.65;
+  line-height: 1.5;
   max-width: 760px;
 }}
 .odt-header .metadata {{
-  font-size: var(--text-xs);
+  font-size: var(--text-13);
   color: var(--text-tertiary);
-  margin-top: 16px;
+  margin-top: var(--space-4);
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-variant-numeric: tabular-nums;
+  gap: var(--space-2);
 }}
 .odt-header .metadata::before {{
   content: '';
@@ -796,181 +1473,171 @@ body {{
   height: 6px;
   border-radius: 50%;
   background: var(--accent-green);
-  box-shadow: 0 0 6px rgba(16, 185, 129, 0.5);
   flex-shrink: 0;
-  animation: metadataPulse 3s ease-in-out infinite;
-}}
-@keyframes metadataPulse {{
-  0%, 100% {{ opacity: 0.7; }}
-  50% {{ opacity: 1; }}
 }}
 
 /* === KPI Cards === */
 .odt-kpi-row {{
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 14px;
-  margin-bottom: 22px;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
 }}
 .odt-kpi {{
-  background: rgba(17, 20, 30, 0.75);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: var(--bg-surface);
   border-radius: var(--radius-md);
-  padding: 20px 22px 18px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: var(--space-4);
+  border: 1px solid var(--border-ring);
   position: relative;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  transition: transform var(--duration-normal) var(--ease-out),
-              box-shadow var(--duration-normal) ease,
-              border-color var(--duration-normal) ease;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+  transition: background var(--duration-fast) ease, border-color var(--duration-fast) ease;
 }}
 .odt-kpi:hover {{
-  transform: translateY(-2px);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: var(--bg-elevated);
+  border-color: var(--border-ring);
 }}
 .odt-kpi-status {{
-  position: absolute; top: 0; left: 0;
-  width: 100%; height: 3px;
+  display: none;
 }}
-.odt-kpi--critical {{ border-left: 3px solid {ACCENT_RED}; }}
-.odt-kpi--warning  {{ border-left: 3px solid {ACCENT_AMBER}; }}
-.odt-kpi--normal   {{ border-left: 3px solid {ACCENT_GREEN}; }}
-.odt-kpi--good     {{ border-left: 3px solid {ACCENT_GREEN}; }}
-.odt-kpi--info     {{ border-left: 3px solid {ACCENT_BLUE}; }}
+.odt-kpi--critical,
+.odt-kpi--warning,
+.odt-kpi--normal,
+.odt-kpi--good,
+.odt-kpi--info {{ border-color: var(--border-ring); }}
 .odt-kpi-head {{
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 10px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
 }}
 .odt-kpi-status-label {{
   display: inline-flex;
   align-items: center;
-  font-size: 0.6875rem;
-  font-weight: 700;
+  gap: 6px;
+  font-size: var(--text-12);
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 3px 10px;
-  border-radius: 4px;
+  letter-spacing: 0.06em;
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-sm);
   flex-shrink: 0;
   line-height: 1.2;
 }}
+.odt-kpi-status-label::before {{
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}}
 .odt-kpi-label {{
-  font-size: 0.6875rem;
+  font-size: var(--text-12);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
   font-weight: 600;
 }}
 .odt-kpi-value {{
-  font-size: clamp(1.75rem, 2.4vw, 2.125rem);
-  font-weight: 700;
-  margin-top: 2px;
-  color: #FFFFFF;
-  line-height: 1.15;
-  letter-spacing: -0.02em;
+  font-size: var(--text-40);
+  font-weight: 600;
+  margin-top: var(--space-1);
+  color: var(--text-primary);
+  line-height: 1.05;
+  letter-spacing: var(--tracking-hero);
   overflow-wrap: break-word;
-  font-variant-numeric: tabular-nums;
   display: flex;
   align-items: baseline;
-  gap: 5px;
+  gap: var(--space-1);
   flex-wrap: wrap;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: var(--tabular-nums);
 }}
 .odt-kpi-unit {{
-  font-size: 0.8125rem;
-  color: rgba(255, 255, 255, 0.4);
+  font-size: var(--text-14);
+  color: var(--text-secondary);
   font-weight: 400;
 }}
 .odt-kpi-detail {{
-  font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.4);
-  margin-top: 8px;
-  line-height: 1.45;
-  padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: var(--text-13);
+  color: var(--text-secondary);
+  margin-top: var(--space-2);
+  line-height: 1.5;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-ring);
 }}
 
 /* === Sections === */
 .odt-section {{
   background: var(--bg-surface);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-subtle);
-  padding: 28px 30px 30px;
-  margin-bottom: 22px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-ring);
+  padding: var(--space-6);
+  margin-bottom: var(--space-6);
   position: relative;
   scroll-margin-top: 112px;
-  transition: border-color var(--duration-normal) ease;
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.18);
+  transition: border-color var(--duration-fast) ease;
 }}
 .odt-section::before {{
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 30px;
-  right: 30px;
-  height: 2px;
-  border-radius: 0 0 2px 2px;
-  background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple) 50%, transparent 100%);
-  opacity: 0.5;
+  content: none;
 }}
 .odt-section h2 {{
-  font-size: 1.25rem;
-  font-weight: 700;
+  font-size: var(--text-22);
+  font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 20px;
-  padding-bottom: 12px;
-  padding-left: 16px;
-  border-bottom: 1px solid var(--border-subtle);
-  border-left: 4px solid var(--accent-blue);
-  letter-spacing: -0.01em;
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3);
+  padding-left: 0;
+  border-bottom: 1px solid var(--border-ring);
+  border-left: 0;
+  letter-spacing: 0;
   line-height: 1.2;
 }}
 .odt-section h3 {{
-  font-size: 1.05rem;
+  font-size: var(--text-18);
   font-weight: 600;
   color: var(--text-primary);
-  margin-top: 20px;
-  margin-bottom: 10px;
+  margin-top: var(--space-6);
+  margin-bottom: var(--space-2);
 }}
 .odt-section p {{
-  margin-bottom: 18px;
-  font-size: 0.96875rem;
+  margin-bottom: var(--space-4);
+  font-size: var(--text-14);
   color: var(--text-secondary);
-  line-height: 1.75;
+  line-height: 1.5;
 }}
 
 /* === Tables === */
 table {{
   width: 100%;
+  max-width: 100%;
   border-collapse: collapse;
   margin: var(--space-md) 0;
   font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
 }}
 th {{
   text-align: left;
-  padding: 12px 14px;
+  padding: var(--space-3) var(--space-4);
   background: var(--bg-elevated);
   color: var(--text-primary);
   font-weight: 600;
-  font-size: var(--text-2xs);
+  font-size: var(--text-12);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  border-bottom: 2px solid var(--border-default);
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--border-default);
+  font-variant-numeric: tabular-nums;
 }}
 td {{
-  padding: 11px 14px;
+  padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border-subtle);
   color: var(--text-secondary);
   transition: background var(--duration-fast) ease;
+  font-variant-numeric: tabular-nums;
 }}
-tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
+tr:hover td {{ background: var(--bg-elevated); }}
 
 /* === Plotly overrides === */
 .plotly-graph-div {{
@@ -993,15 +1660,26 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
 }}
 .js-plotly-plot .plotly .modebar {{
   right: 8px !important;
-  opacity: 0.5;
-  transition: opacity var(--duration-fast) ease;
+  display: none !important;
+  opacity: 0;
+  pointer-events: none;
 }}
-.js-plotly-plot:hover .plotly .modebar {{ opacity: 1; }}
+.js-plotly-plot:hover .plotly .modebar {{ opacity: 0; }}
 .js-plotly-plot .plotly .modebar-btn {{ font-size: 14px; }}
+.js-plotly-plot .scatterlayer .js-line {{
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}}
 /* Prevent subplot-title annotations from being clipped */
 .odt-section .js-plotly-plot {{ overflow: visible; }}
 .odt-section .plot-container {{ overflow: visible; }}
 .odt-section .svg-container {{ overflow: visible !important; }}
+.js-plotly-plot .xtick text,
+.js-plotly-plot .ytick text,
+.odt-axis,
+.odt-tick {{
+  font-variant-numeric: tabular-nums;
+}}
 .js-plotly-plot .main-svg text {{
   text-rendering: geometricPrecision;
 }}
@@ -1009,8 +1687,8 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
 /* === Chart boxes (lazy-loaded) === */
 .chart-box {{
   background: var(--bg-surface);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-ring);
   min-height: 200px;
   margin-bottom: var(--space-md);
   display: block;
@@ -1037,27 +1715,27 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
 
 /* === Narrative callout === */
 .odt-narrative {{
-  padding: 20px 22px;
-  background: rgba(59, 130, 246, 0.06);
-  border-left: 3px solid var(--accent-blue);
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
-  font-size: 0.875rem;
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-ring);
+  border-radius: var(--radius-md);
+  font-size: var(--text-14);
   color: var(--text-primary);
-  line-height: 1.7;
+  line-height: 1.5;
   margin-bottom: var(--space-lg);
-  box-shadow: inset 4px 0 12px -4px rgba(59, 130, 246, 0.1);
 }}
 
 /* === Context Strip (disclaimer + confound merged) === */
 .odt-context-strip {{
-  background: rgba(26, 29, 39, 0.7);
-  border-bottom: 1px solid var(--border-subtle);
-  padding: 10px 28px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-ring);
+  min-height: 32px;
+  padding: 0 var(--space-6);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  font-size: var(--text-2xs);
+  gap: var(--space-3);
+  font-size: var(--text-12);
   line-height: 1.4;
   flex-wrap: wrap;
 }}
@@ -1093,22 +1771,22 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
 
 /* === Metric Explainer === */
 .odt-kpi-explainer {{
-  font-size: 0.6875rem;
-  color: rgba(255, 255, 255, 0.35);
-  margin-top: 6px;
-  line-height: 1.45;
+  font-size: var(--text-12);
+  color: var(--text-tertiary);
+  margin-top: var(--space-2);
+  line-height: 1.5;
 }}
 .odt-kpi-explainer b {{
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-secondary);
   font-weight: 600;
 }}
 
 /* === Footer === */
 .odt-footer {{
   text-align: center;
-  padding: 34px 32px 36px;
+  padding: var(--space-8) var(--space-6);
   color: var(--text-tertiary);
-  font-size: var(--text-xs);
+  font-size: var(--text-13);
   margin-top: var(--space-3xl);
   position: relative;
 }}
@@ -1119,8 +1797,7 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
   left: 10%;
   right: 10%;
   height: 1px;
-  background: linear-gradient(90deg, transparent 0%, var(--border-subtle) 20%, var(--accent-blue) 50%, var(--border-subtle) 80%, transparent 100%);
-  opacity: 0.6;
+  background: var(--border-ring);
 }}
 .odt-footer div {{
   margin-bottom: var(--space-sm);
@@ -1128,7 +1805,7 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
 }}
 .odt-footer div:last-child {{ margin-bottom: 0; }}
 .odt-footer .odt-footer-fine {{
-  font-size: var(--text-2xs);
+  font-size: var(--text-12);
   opacity: 0.7;
 }}
 .odt-footer a {{
@@ -1137,7 +1814,7 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
   transition: color var(--duration-fast) ease;
 }}
 .odt-footer a:hover {{
-  color: #60A5FA;
+  color: var(--accent-blue);
   text-decoration: underline;
   text-underline-offset: 2px;
 }}
@@ -1163,7 +1840,7 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
     flex-direction: column;
     align-items: stretch;
     padding: var(--space-sm) 0 4px;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    border-top: 1px solid var(--border-ring);
   }}
   .odt-nav-links.open {{ display: flex; }}
   .odt-nav-primary {{
@@ -1174,12 +1851,12 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
   }}
   .odt-nav-link {{
     padding: 10px 12px;
-    border-color: var(--border-subtle);
-    background: rgba(255, 255, 255, 0.02);
+    border-color: var(--border-ring);
+    background: var(--bg-surface);
   }}
   .odt-nav-link.active {{
-    background: rgba(59, 130, 246, 0.12);
-    border-radius: 999px;
+    background: var(--bg-surface);
+    border-radius: var(--radius-sm);
     padding: 10px 12px;
   }}
   .odt-nav-current {{ display: none; }}
@@ -1198,16 +1875,15 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
   .odt-nav-panel-grid {{ grid-template-columns: 1fr; max-height: none; }}
   .odt-context-strip {{ padding: var(--space-sm) 16px; gap: var(--space-sm); flex-direction: column; }}
   .odt-context-strip .odt-ctx-dot {{ display: none; }}
-  .odt-container {{ padding: 20px 16px 32px; }}
-  .odt-header {{ padding: 34px 16px 24px; }}
+  .odt-container {{ padding: var(--space-6) var(--space-4) var(--space-8); }}
+  .odt-header {{ padding: var(--space-8) var(--space-4) var(--space-6); }}
   .odt-header::after {{ left: 16px; right: 16px; }}
   .odt-header h1 {{ line-height: 1.1; }}
-  .odt-kpi-row {{ grid-template-columns: repeat(2, 1fr); gap: 10px; }}
-  .odt-kpi {{ padding: 16px 16px 14px; }}
-  .odt-kpi:hover {{ transform: none; }}
-  .odt-kpi-value {{ font-size: 1.5rem; }}
+  .odt-kpi-row {{ grid-template-columns: repeat(2, 1fr); gap: var(--space-3); }}
+  .odt-kpi {{ padding: var(--space-4); }}
+  .odt-kpi-value {{ font-size: var(--text-28); }}
   .odt-section {{
-    padding: 22px 18px 20px;
+    padding: var(--space-4);
     scroll-margin-top: 132px;
   }}
   .odt-section::before {{ left: 16px; right: 16px; }}
@@ -1217,7 +1893,7 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
 @media (max-width: 480px) {{
   .odt-kpi-row {{ grid-template-columns: 1fr; }}
   .odt-nav-primary {{ grid-template-columns: 1fr; }}
-  .odt-header h1 {{ font-size: 1.625rem; }}
+  .odt-header h1 {{ font-size: var(--text-28); }}
   .odt-kpi-head {{
     flex-direction: column;
     align-items: flex-start;
@@ -1247,29 +1923,6 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
   to {{ opacity: 1; transform: translateX(0); }}
 }}
 
-/* === Utility: Glass Morphism === */
-.odt-glass {{
-  background: var(--glass-bg);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow);
-}}
-
-/* === Utility: Gradient Text === */
-.odt-gradient-text {{
-  background: linear-gradient(135deg, {ACCENT_BLUE}, {ACCENT_PURPLE}, {ACCENT_CYAN});
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}}
-
-/* === Utility: Glow Effects === */
-.odt-glow-blue {{ box-shadow: 0 0 20px rgba(59,130,246,0.15), 0 0 60px rgba(59,130,246,0.05); }}
-.odt-glow-green {{ box-shadow: 0 0 20px rgba(16,185,129,0.15), 0 0 60px rgba(16,185,129,0.05); }}
-.odt-glow-red {{ box-shadow: 0 0 20px rgba(239,68,68,0.15), 0 0 60px rgba(239,68,68,0.05); }}
-.odt-glow-amber {{ box-shadow: 0 0 20px rgba(245,158,11,0.15), 0 0 60px rgba(245,158,11,0.05); }}
-
 /* === Skeleton Loading === */
 .odt-skeleton {{
   background: linear-gradient(90deg, var(--bg-surface) 25%, var(--bg-elevated) 50%, var(--bg-surface) 75%);
@@ -1293,297 +1946,777 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
 .odt-badge {{
   display: inline-flex;
   align-items: center;
-  padding: 3px 10px;
-  border-radius: 20px;
-  font-size: var(--text-2xs);
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-12);
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-ring);
   transition: opacity var(--duration-fast) ease;
 }}
 .odt-badge:hover {{ opacity: 0.85; }}
-.odt-badge-blue {{
-  background: rgba(59,130,246,0.12);
-  color: #60A5FA;
-  border: 1px solid rgba(59,130,246,0.25);
+.odt-badge-blue {{ color: var(--accent-blue); }}
+.odt-badge-green {{ color: var(--status-good); }}
+.odt-badge-red {{ color: var(--status-critical); }}
+.odt-badge-amber {{ color: var(--status-warning); }}
+
+/* === Redesign core layer === */
+.odt-nav {{
+  height: var(--nav-height);
+  padding: 0 var(--space-6);
+  background: rgba(247, 247, 245, 0.85);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-ring);
+  box-shadow: none;
+  gap: var(--space-6);
+  flex-wrap: nowrap;
 }}
-.odt-badge-green {{
-  background: rgba(16,185,129,0.12);
-  color: #34D399;
-  border: 1px solid rgba(16,185,129,0.25);
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {{
+  .odt-nav {{ background: var(--bg-page); }}
 }}
-.odt-badge-red {{
-  background: rgba(239,68,68,0.12);
-  color: #FCA5A5;
-  border: 1px solid rgba(239,68,68,0.25);
+.odt-nav-brand {{
+  font-size: var(--text-16);
+  font-weight: 600;
+  letter-spacing: 0;
+  gap: 10px;
 }}
-.odt-badge-amber {{
-  background: rgba(245,158,11,0.12);
-  color: #FCD34D;
-  border: 1px solid rgba(245,158,11,0.25);
+.odt-nav-brand .odt-logo {{
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-ring);
+  color: var(--ink-primary);
+  box-shadow: none;
+}}
+.odt-brand-text {{ color: var(--ink-primary); }}
+.odt-brand-mark {{
+  color: var(--ink-muted);
+  font-size: var(--text-12);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}}
+.odt-nav-links {{
+  justify-content: flex-end;
+  gap: var(--space-4);
+}}
+.odt-nav-primary {{
+  justify-content: flex-end;
+  gap: 2px;
+  overflow: visible;
+}}
+.odt-nav-current,
+.odt-nav-toggle {{ display: none !important; }}
+.odt-nav-link {{
+  height: var(--nav-height);
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-secondary);
+  font-size: var(--text-13);
+  font-weight: 500;
+  letter-spacing: 0;
+  transform: none;
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
+}}
+.odt-nav-link:hover {{
+  color: var(--ink-primary);
+  background: rgba(20,22,26,0.04);
+  transform: none;
+}}
+.odt-nav-link.active {{
+  color: var(--ink-primary);
+  border-bottom-color: var(--accent-blue);
+  background: transparent;
+  box-shadow: none;
+}}
+.odt-nav-browse summary {{
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-ring);
+  background: rgba(255,255,255,0.9);
+  color: var(--ink-primary);
+  font-size: var(--text-13);
+  font-weight: 600;
+  transition: background 120ms ease, border-color 120ms ease;
+}}
+.odt-nav-browse summary::after {{ content: ""; }}
+.odt-nav-panel {{
+  top: calc(100% + 8px);
+  width: min(840px, calc(100vw - 32px));
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-ring);
+  background: rgba(255,255,255,0.98);
+  box-shadow: var(--shadow-overlay);
+}}
+.odt-nav-panel-header {{
+  margin-bottom: var(--space-4);
+  color: var(--ink-muted);
+  font-size: var(--text-12);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}}
+.odt-nav-panel-grid {{
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 20px;
+}}
+.odt-nav-group {{
+  font-size: var(--text-12);
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+}}
+.odt-nav-panel-link {{
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--ink-secondary);
+}}
+.odt-nav-panel-title {{
+  display: inline;
+  color: inherit;
+  font-size: var(--text-13);
+  font-weight: 600;
+  line-height: 1.3;
+}}
+.odt-nav-panel-separator {{
+  color: var(--ink-muted);
+}}
+.odt-nav-panel-desc {{
+  display: inline;
+  margin-top: 0;
+  color: var(--ink-muted);
+  font-size: var(--text-12);
+  line-height: 1.35;
+}}
+.odt-nav-panel-link:hover,
+.odt-nav-panel-link:focus-visible {{
+  color: var(--ink-primary);
+  background: rgba(20,22,26,0.04);
+}}
+.odt-nav-panel-link.active {{
+  color: var(--ink-primary);
+  background: rgba(58,58,214,0.08);
+  border-color: rgba(58,58,214,0.24);
 }}
 
-/* === Clinical Summary v2 — Enhanced === */
-
-/* CSS Houdini: register custom angle for animated border */
-@property --verdict-angle {{
-  syntax: '<angle>';
-  initial-value: 0deg;
-  inherits: false;
+.odt-context-strip {{
+  display: block;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 var(--space-6);
+  background: var(--bg-surface);
+  border-bottom: 0;
+  box-sizing: border-box;
+  color: var(--ink-secondary);
+  font-size: var(--text-12);
+  line-height: 1.4;
+  overflow: hidden;
 }}
-
-/* --- CS Keyframes --- */
-@keyframes csVerdictPulse {{
-  0%, 100% {{ opacity: 0.6; box-shadow: 0 0 8px rgba(239,68,68,0.4); }}
-  50%      {{ opacity: 1;   box-shadow: 0 0 16px rgba(239,68,68,0.7); }}
-}}
-@keyframes verdictBorderSpin {{
-  to {{ --verdict-angle: 360deg; }}
-}}
-@keyframes verdictGlow {{
-  0%, 100% {{
-    box-shadow: 0 0 18px 2px rgba(239,68,68,0.18),
-                0 0 40px 4px rgba(239,120,50,0.10),
-                0 0 80px 8px rgba(239,68,68,0.06);
-  }}
-  50% {{
-    box-shadow: 0 0 24px 4px rgba(239,68,68,0.28),
-                0 0 50px 8px rgba(239,120,50,0.16),
-                0 0 90px 12px rgba(239,68,68,0.10);
-  }}
-}}
-@keyframes cs-fade-in-up {{
-  from {{ opacity: 0; transform: translateY(12px); }}
-  to   {{ opacity: 1; transform: translateY(0); }}
-}}
-@keyframes cs-scale-in {{
-  from {{ opacity: 0; transform: scale(0.8); }}
-  to   {{ opacity: 1; transform: scale(1.0); }}
-}}
-@keyframes csMarkerSlideIn {{
-  0%   {{ left: 0% !important; opacity: 0; transform: translateX(-3px) scaleY(0.6); }}
-  60%  {{ opacity: 1; transform: translateX(-3px) scaleY(1); }}
-  100% {{ opacity: 1; transform: translateX(-3px) scaleY(1); }}
-}}
-@keyframes csMarkerGlow {{
-  0%, 100% {{ filter: brightness(1); }}
-  50%      {{ filter: brightness(1.2); }}
-}}
-@keyframes csBarTrackReveal {{
-  0%   {{ opacity: 0; transform: scaleX(0); transform-origin: left; }}
-  100% {{ opacity: 1; transform: scaleX(1); transform-origin: left; }}
-}}
-
-/* --- Verdict Banner — Animated gradient border with outer glow --- */
-.cs-verdict {{
-  border: none;
-  position: relative;
-  isolation: isolate;
-  padding: 20px 24px;
-  border-radius: 12px;
-  margin-bottom: 28px;
+.odt-context-strip summary {{
+  min-height: 32px;
   display: flex;
   align-items: center;
-  gap: 16px;
-  background: rgba(15, 17, 23, 0.92);
-  box-shadow:
-    0 0 18px 2px rgba(239,68,68,0.18),
-    0 0 40px 4px rgba(239,120,50,0.10),
-    0 0 80px 8px rgba(239,68,68,0.06);
-  animation:
-    verdictBorderSpin 7s linear infinite,
-    verdictGlow 7s ease-in-out infinite;
+  justify-content: center;
+  gap: 10px;
+  list-style: none;
+  cursor: pointer;
 }}
-.cs-verdict::before {{
+.odt-context-strip summary::-webkit-details-marker {{ display: none; }}
+.odt-context-strip .odt-ctx-hev {{
+  color: var(--status-warning);
+  font-weight: 600;
+}}
+.odt-context-strip .odt-ctx-dot {{
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-muted);
+}}
+.odt-ctx-more-label {{
+  display: inline-flex;
+  color: var(--ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-left: 2px;
+}}
+.odt-context-more {{
+  display: none;
+  max-width: var(--container-max);
+  margin: 0 auto;
+  padding: 0 0 10px;
+  color: var(--ink-muted);
+  text-align: center;
+}}
+.odt-context-strip[open] {{
+  height: auto;
+  overflow: visible;
+}}
+.odt-context-strip[open] .odt-context-more {{ display: block; }}
+
+.odt-container {{
+  max-width: var(--container-max);
+  padding: var(--space-8) var(--space-6) var(--space-12);
+}}
+.odt-header {{
+  max-width: var(--container-max);
+  padding: var(--space-12) var(--space-6) var(--space-6);
+}}
+.odt-header::after {{ display: none; }}
+.odt-header h1 {{
+  max-width: 920px;
+  margin-bottom: 8px;
+  color: var(--ink-primary);
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  font-size: var(--text-28);
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.2;
+}}
+.odt-header .subtitle {{
+  max-width: 760px;
+  color: var(--ink-secondary);
+  font-size: var(--text-14);
+  line-height: 1.5;
+}}
+.odt-header .metadata {{
+  margin-top: 12px;
+  color: var(--ink-muted);
+  font-size: var(--text-13);
+}}
+.odt-header .metadata::before {{ display: none; }}
+
+.odt-kpi-row {{
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}}
+.odt-kpi {{
+  min-height: 164px;
+  padding: var(--space-4);
+  background: var(--elevation-1);
+  border: 1px solid var(--elevation-1-border);
+  border-radius: var(--radius-md);
+  box-shadow: inset 0 1px 0 var(--elevation-1-highlight), var(--shadow-1);
+  backdrop-filter: none;
+  overflow: visible;
+  transition: var(--transition-elevation);
+}}
+.odt-kpi:hover {{
+  transform: none;
+  box-shadow: inset 0 1px 0 var(--elevation-1-highlight), var(--shadow-1);
+  border-color: rgba(20,22,26,0.14);
+  background: var(--elevation-2);
+}}
+.odt-kpi--critical::before {{
   content: '';
   position: absolute;
-  inset: 0;
-  border-radius: 12px;
-  padding: 1.5px;
-  z-index: -1;
-  background: conic-gradient(
-    from var(--verdict-angle),
-    rgba(239,68,68,0.85), rgba(239,120,50,0.70),
-    rgba(220,80,40,0.55), rgba(239,68,68,0.40),
-    rgba(200,60,60,0.55), rgba(239,120,50,0.70),
-    rgba(239,68,68,0.85)
-  );
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  mask-composite: exclude;
+  left: 0;
+  top: var(--space-3);
+  bottom: var(--space-3);
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--status-critical);
 }}
-.cs-verdict::after {{
-  content: '';
-  position: absolute;
-  inset: -2px;
-  border-radius: 14px;
-  z-index: -2;
-  opacity: 0.35;
-  background: conic-gradient(
-    from var(--verdict-angle),
-    rgba(239,68,68,0.50), rgba(239,120,50,0.35),
-    rgba(239,68,68,0.20), rgba(239,120,50,0.35),
-    rgba(239,68,68,0.50)
-  );
-  filter: blur(10px);
-  animation: verdictBorderSpin 7s linear infinite;
+.odt-kpi-status {{ display: none; }}
+.odt-kpi-head {{
+  align-items: flex-start;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
 }}
-.cs-verdict-dot {{
-  width: 10px; height: 10px;
+.odt-kpi-label {{
+  color: var(--ink-muted);
+  font-size: var(--text-12);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+}}
+.odt-kpi-status-label {{
+  gap: 6px;
+  padding: 3px 7px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-ring);
+  background: var(--bg-elevated);
+  color: var(--ink-secondary);
+  font-size: var(--text-12);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}}
+.odt-kpi-status-label::before {{
+  content: none;
+}}
+.odt-kpi-status-dot {{
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: var(--accent-red);
-  box-shadow: 0 0 8px rgba(239,68,68,0.5);
-  animation: csVerdictPulse 2s ease-in-out infinite;
+  background: var(--status-color, var(--ink-muted));
+}}
+.odt-kpi-status-label--dot {{
+  width: 18px;
+  height: 18px;
+  justify-content: center;
+  padding: 0;
+}}
+.odt-kpi-value {{
+  margin-top: 0;
+  color: var(--ink-primary);
+  font-size: 32px;
+  font-weight: 650;
+  letter-spacing: var(--tracking-hero);
+  line-height: 1.05;
+  overflow-wrap: normal;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: var(--tabular-nums);
+}}
+.odt-kpi-unit {{
+  color: var(--ink-secondary);
+  font-size: var(--text-13);
+  font-weight: 400;
+}}
+.odt-kpi-delta {{
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 10px;
+  padding: 3px 7px;
+  border-radius: var(--radius-sm);
+  background: rgba(20,22,26,0.05);
+  color: var(--ink-secondary);
+  font-size: 11px;
+  font-weight: 500;
+}}
+.odt-kpi-delta b {{ font-weight: 600; }}
+.odt-kpi-delta em {{
+  color: var(--ink-muted);
+  font-style: normal;
+}}
+.odt-kpi-delta--good {{
+  color: var(--status-good);
+  background: rgba(58,58,214,0.08);
+}}
+.odt-kpi-delta--bad {{
+  color: var(--status-critical);
+  background: rgba(180,35,31,0.10);
+}}
+.odt-kpi-delta--flat {{ color: var(--ink-secondary); }}
+.odt-kpi-detail {{
+  margin-top: 8px;
+  padding-top: 0;
+  border-top: 0;
+  color: var(--ink-secondary);
+  font-size: var(--text-13);
+}}
+.odt-kpi-trend {{
+  width: 100%;
+  height: 42px;
+  margin-top: auto;
+  padding-top: var(--space-2);
+  display: block;
+}}
+
+.odt-section {{
+  margin: 0 0 var(--space-16);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  scroll-margin-top: 104px;
+}}
+.odt-section::before {{ display: none; }}
+.odt-section-heading {{ margin-bottom: var(--space-6); }}
+.odt-section-kicker {{
+  color: var(--ink-muted);
+  font-size: var(--text-12);
+  font-weight: 600;
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}}
+.odt-section-title-row {{
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: var(--space-4);
+}}
+.odt-section-title-row span {{
+  height: 1px;
+  background: linear-gradient(90deg, var(--border-ring), rgba(20,22,26,0));
+}}
+.odt-section h2 {{
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: var(--ink-primary);
+  font-size: var(--text-22);
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.2;
+}}
+.odt-section h3 {{
+  color: var(--ink-primary);
+  font-size: var(--text-18);
+  font-weight: 600;
+}}
+.odt-section p {{
+  color: var(--ink-secondary);
+  font-size: var(--text-14);
+  line-height: 1.5;
+}}
+.chart-box,
+.odt-chart-panel {{
+  background: var(--elevation-1);
+  border: 1px solid var(--elevation-1-border);
+  border-radius: var(--radius-md);
+  box-shadow: inset 0 1px 0 var(--elevation-1-highlight), var(--shadow-1);
+  transition: var(--transition-elevation);
+}}
+.chart-box:hover,
+.odt-chart-panel:hover {{
+  border-color: rgba(20,22,26,0.14);
+}}
+.odt-chart-panel {{
+  margin-bottom: var(--space-6);
+  overflow: hidden;
+}}
+.odt-chart-panel .chart-box {{
+  margin-bottom: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}}
+.odt-chart-panel > .js-plotly-plot,
+.odt-chart-panel > .plotly-graph-div {{
+  margin-bottom: 0;
+}}
+.odt-chart-panel-header {{
+  display: grid;
+  gap: 4px;
+  padding: 18px 20px 0;
+}}
+.odt-chart-panel-title {{
+  color: var(--ink-primary);
+  font-size: var(--text-14);
+  font-weight: 600;
+  line-height: 1.35;
+}}
+.odt-chart-panel-subtitle {{
+  color: var(--ink-muted);
+  font-size: var(--text-12);
+  line-height: 1.45;
+}}
+.odt-chart-panel--compact {{
+  padding-top: 0;
+}}
+
+/* === Hero card (0.2): reusable elevation-2 surface with top-down gradient,
+   used by hero KPI/summary blocks (e.g. the Bayesian-twin hero, the index
+   dashboard hero). Generalised from the ad-hoc styling that already worked
+   well on the digital-twin hero. === */
+.odt-hero-card {{
+  position: relative;
+  background: var(--elevation-2);
+  background-image: var(--hero-gradient);
+  border: 1px solid var(--elevation-2-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  box-shadow: inset 0 1px 0 var(--elevation-2-highlight), var(--shadow-2);
+  transition: var(--transition-elevation);
+}}
+.odt-hero-card:hover {{
+  border-color: rgba(20,22,26,0.16);
+}}
+table {{
+  border-collapse: collapse;
+  border-spacing: 0;
+  margin: var(--space-4) 0 var(--space-6);
+  font-variant-numeric: tabular-nums;
+}}
+th {{
+  background: transparent;
+  color: var(--ink-muted);
+  border-bottom: 1px solid var(--border-ring);
+  font-size: var(--text-12);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}}
+td {{
+  border-bottom: 1px solid rgba(20,22,26,0.06);
+  color: var(--ink-secondary);
+}}
+tr:hover td {{
+  background: rgba(20,22,26,0.025);
+}}
+.odt-table-scroll {{
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}}
+.odt-narrative {{
+  background: transparent;
+  border-left: 1px solid var(--border-default);
+  border-radius: 0;
+  box-shadow: none;
+  color: var(--ink-secondary);
+  font-size: var(--text-13);
+}}
+.odt-kpi-explainer {{
+  margin-top: 8px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border-default);
+  color: var(--ink-secondary);
+  font-size: var(--text-13);
+}}
+.odt-kpi-explainer b {{
+  color: var(--ink-primary);
+  font-weight: 600;
+}}
+.odt-footer {{
+  max-width: var(--container-max);
+  margin: var(--space-4) auto 0;
+  padding: var(--space-6);
+  color: var(--ink-muted);
+  text-align: left;
+  font-size: var(--text-12);
+}}
+.odt-footer::before {{ display: none; }}
+.odt-footer div {{
+  margin-bottom: 4px;
+  line-height: 1.45;
+}}
+
+@media (max-width: 900px) {{
+  .odt-nav {{
+    height: var(--nav-height);
+    padding: 0 var(--space-4);
+  }}
+  .odt-nav-links {{
+    display: flex;
+    width: auto;
+    padding: 0;
+    border-top: 0;
+  }}
+  .odt-nav-primary {{ display: none; }}
+  .odt-nav-browse {{ width: auto; }}
+  .odt-nav-browse summary {{
+    width: auto;
+    justify-content: center;
+    font-size: var(--text-13);
+  }}
+  .odt-nav-panel {{
+    position: absolute;
+    right: 0;
+    width: min(360px, calc(100vw - 32px));
+    max-height: calc(100vh - 88px);
+    overflow: auto;
+  }}
+  .odt-nav-panel-grid {{ grid-template-columns: 1fr; }}
+  .odt-context-strip {{ padding: 0 var(--space-4); }}
+  .odt-context-strip[open] {{
+    height: auto;
+    overflow: visible;
+  }}
+  .odt-context-strip summary {{
+    justify-content: flex-start;
+    overflow: hidden;
+    white-space: nowrap;
+    cursor: pointer;
+  }}
+  .odt-context-strip summary span:not(:first-child):not(.odt-ctx-more-label),
+  .odt-context-strip .odt-ctx-dot {{
+    display: none;
+  }}
+  .odt-ctx-more-label {{
+    display: inline-flex;
+    margin-left: auto;
+  }}
+  .odt-context-more {{ text-align: left; }}
+  .odt-container {{ padding: var(--space-6) var(--space-4) var(--space-12); }}
+  .odt-header {{ padding: var(--space-8) var(--space-4) var(--space-6); }}
+  .odt-kpi-row {{ grid-template-columns: 1fr; }}
+  .odt-section {{ margin-bottom: var(--space-16); }}
+  table {{
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+  }}
+  .odt-footer {{ padding: var(--space-6) var(--space-4) var(--space-8); }}
+}}
+
+@media (prefers-reduced-motion: reduce) {{
+  html {{
+    scroll-behavior: auto;
+  }}
+  *,
+  *::before,
+  *::after {{
+    animation: none !important;
+    transition: none !important;
+  }}
+}}
+
+/* === Clinical Summary v2 === */
+.cs-verdict {{
+  position: relative;
+  padding: var(--space-4) var(--space-6);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-6);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-ring);
+}}
+.cs-verdict::before,
+.cs-verdict::after {{ content: none; }}
+.cs-verdict-dot {{
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--status-critical);
   flex-shrink: 0;
 }}
 .cs-verdict-text {{
-  font-size: 0.9375rem;
+  font-size: var(--text-14);
   color: var(--text-primary);
   line-height: 1.5;
 }}
 .cs-verdict-text strong {{
-  color: var(--accent-red);
+  color: var(--text-primary);
   font-weight: 700;
 }}
 
-/* --- Glassmorphism base for all card types --- */
-.cs-dev-card, .cs-finding, .cs-stat {{
-  background: rgba(30, 34, 49, 0.55);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255,255,255,0.06);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.03);
-  transition: transform 0.2s ease-out, box-shadow 0.2s ease-out, border-color 0.2s ease-out;
-  animation: cs-fade-in-up 0.4s ease-out backwards;
+.cs-dev-card,
+.cs-finding,
+.cs-stat {{
+  background: var(--bg-surface);
+  border: 1px solid var(--border-ring);
+  border-radius: var(--radius-md);
+  transition: background var(--duration-fast) ease, border-color var(--duration-fast) ease;
 }}
-/* Staggered entrance — dev cards */
-.cs-dev-card:nth-child(1) {{ animation-delay: 0s; }}
-.cs-dev-card:nth-child(2) {{ animation-delay: 0.1s; }}
-.cs-dev-card:nth-child(3) {{ animation-delay: 0.2s; }}
-.cs-dev-card:nth-child(4) {{ animation-delay: 0.3s; }}
-/* Staggered entrance — findings */
-.cs-finding:nth-child(1) {{ animation-delay: 0.15s; }}
-.cs-finding:nth-child(2) {{ animation-delay: 0.25s; }}
-.cs-finding:nth-child(3) {{ animation-delay: 0.35s; }}
-.cs-finding:nth-child(4) {{ animation-delay: 0.45s; }}
-/* Staggered entrance — stats */
-.cs-stat:nth-child(1) {{ animation-delay: 0.4s; }}
-.cs-stat:nth-child(2) {{ animation-delay: 0.5s; }}
-.cs-stat:nth-child(3) {{ animation-delay: 0.6s; }}
-
-/* --- Hover effects --- */
-.cs-dev-card:hover {{
-  transform: translateY(-2px);
-  border-color: rgba(251,191,36,0.35);
-  box-shadow: 0 4px 16px rgba(251,191,36,0.12), 0 1px 4px rgba(0,0,0,0.4);
-}}
-.cs-finding:hover {{
-  transform: translateY(-2px);
-  border-color: rgba(96,165,250,0.3);
-  box-shadow: 0 4px 16px rgba(96,165,250,0.1), 0 1px 4px rgba(0,0,0,0.4);
-}}
+.cs-dev-card:hover,
+.cs-finding:hover,
 .cs-stat:hover {{
-  transform: translateY(-2px);
-  border-color: rgba(45,212,191,0.3);
-  box-shadow: 0 4px 16px rgba(45,212,191,0.1), 0 1px 4px rgba(0,0,0,0.4);
+  background: var(--bg-elevated);
+  border-color: var(--border-ring);
 }}
 
-/* --- Deviation bar grid --- */
-.cs-dev-grid {{
+.cs-dev-grid,
+.cs-findings-grid,
+.cs-stats-row {{
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 12px;
-  margin-bottom: 28px;
-  padding-bottom: 28px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+  padding-bottom: var(--space-6);
   position: relative;
 }}
-.cs-dev-grid::after {{
+.cs-dev-grid::after,
+.cs-findings-grid::after,
+.cs-stats-row::after {{
   content: '';
   position: absolute;
-  bottom: 0; left: 8%; right: 8%;
+  bottom: 0;
+  left: 0;
+  right: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 15%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.06) 85%, transparent 100%);
+  background: var(--border-ring);
 }}
-.cs-dev-card {{
-  background: rgba(30, 34, 49, 0.5);
-  border-radius: 10px;
-  padding: 16px 18px;
+.cs-dev-card,
+.cs-finding,
+.cs-stat {{
+  padding: var(--space-4);
 }}
-.cs-dev-header {{
+.cs-dev-header,
+.cs-finding-header {{
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 2px;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border-ring);
 }}
-.cs-dev-label {{
-  font-size: 0.6875rem;
+.cs-dev-label,
+.cs-stat-label {{
+  font-size: var(--text-12);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-secondary);
-  font-weight: 500;
-}}
-.cs-dev-pct {{
-  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
   font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 4px;
 }}
-.cs-dev-pct.critical {{ color: #FCA5A5; background: rgba(239,68,68,0.12); }}
-.cs-dev-pct.warning {{ color: #FCD34D; background: rgba(245,158,11,0.12); }}
-.cs-dev-pct.info {{ color: #93C5FD; background: rgba(59,130,246,0.12); }}
-/* Gradient text on deviation values */
+.cs-dev-pct,
+.cs-sev {{
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-12);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-ring);
+}}
+.cs-dev-pct.critical,
+.cs-sev.critical,
+.cs-sev.severe {{ color: var(--status-critical); }}
+.cs-dev-pct.warning,
+.cs-sev.moderate {{ color: var(--status-warning); }}
+.cs-dev-pct.info,
+.cs-sev.low-normal {{ color: var(--accent-blue); }}
 .cs-dev-value {{
-  font-size: 1.5rem;
-  font-weight: 700;
+  font-size: var(--text-28);
+  font-weight: 600;
   line-height: 1.2;
-  margin-bottom: 8px;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  background-image: linear-gradient(135deg, #94A3B8, #CBD5E1);
+  margin-bottom: var(--space-2);
+  color: var(--text-primary);
+  letter-spacing: var(--tracking-hero);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: var(--tabular-nums);
 }}
 .cs-dev-value .unit {{
-  font-size: 0.75rem;
-  -webkit-text-fill-color: var(--text-tertiary);
+  font-size: var(--text-14);
+  color: var(--text-secondary);
   font-weight: 400;
-  margin-left: 2px;
+  margin-left: var(--space-1);
 }}
 
-/* --- Enhanced deviation bars --- */
 .cs-bar {{
   position: relative;
   width: 100%;
   height: 12px;
-  background: linear-gradient(90deg, rgba(255,255,255,0.025) 0%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.025) 100%);
-  border-radius: 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-ring);
+  border-radius: var(--radius-sm);
   overflow: visible;
-  margin-bottom: 4px;
-  animation: csBarTrackReveal 0.5s ease-out both;
+  margin-bottom: var(--space-1);
 }}
-.cs-bar::before {{
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 6px;
-  box-shadow: inset 0 1px 2px rgba(0,0,0,0.3), inset 0 -1px 1px rgba(255,255,255,0.02);
-  pointer-events: none;
-  z-index: 0;
-}}
+.cs-bar::before,
+.cs-bar-normal::after,
+.cs-bar-marker::before {{ content: none; }}
 .cs-bar-normal {{
   position: absolute;
   height: 100%;
-  background: linear-gradient(90deg, rgba(16,185,129,0.08) 0%, rgba(16,185,129,0.28) 30%, rgba(52,211,153,0.32) 50%, rgba(16,185,129,0.28) 70%, rgba(16,185,129,0.08) 100%);
-  border-radius: 6px;
+  background: var(--status-good);
+  border-radius: var(--radius-sm);
   z-index: 1;
-  transition: opacity 0.3s ease;
-}}
-.cs-bar-normal::after {{
-  content: '';
-  position: absolute;
-  inset: 1px;
-  border-radius: 5px;
-  box-shadow: inset 0 0 6px rgba(16,185,129,0.15);
-  pointer-events: none;
+  opacity: 0.35;
 }}
 .cs-bar-marker {{
   position: absolute;
@@ -1593,132 +2726,44 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
   border-radius: 3px;
   z-index: 3;
   transform: translateX(-3px);
-  transition: box-shadow 0.3s ease;
-  animation: csMarkerSlideIn 0.8s cubic-bezier(0.16,1,0.3,1) both;
+  background: var(--text-tertiary);
 }}
-.cs-bar-marker::before {{
-  content: '';
-  position: absolute;
-  top: 1px; left: 1px; right: 1px;
-  height: 4px;
-  border-radius: 2px 2px 0 0;
-  background: linear-gradient(180deg, rgba(255,255,255,0.35) 0%, transparent 100%);
-  pointer-events: none;
-}}
-.cs-dev-card:nth-child(2) .cs-bar-marker {{ animation-delay: 0.06s; }}
-.cs-dev-card:nth-child(3) .cs-bar-marker {{ animation-delay: 0.12s; }}
-.cs-dev-card:nth-child(4) .cs-bar-marker {{ animation-delay: 0.18s; }}
-.cs-bar-marker.critical {{
-  background: linear-gradient(180deg, #F87171 0%, #EF4444 40%, #DC2626 100%);
-  box-shadow: 0 0 10px rgba(239,68,68,0.7), 0 0 20px rgba(239,68,68,0.3), 0 0 2px rgba(239,68,68,0.9);
-  animation: csMarkerSlideIn 0.8s cubic-bezier(0.16,1,0.3,1) both, csMarkerGlow 2.5s ease-in-out 1s infinite;
-}}
-.cs-bar-marker.critical:hover {{
-  box-shadow: 0 0 14px rgba(239,68,68,0.85), 0 0 28px rgba(239,68,68,0.4), 0 0 3px rgba(239,68,68,1);
-}}
-.cs-bar-marker.warning {{
-  background: linear-gradient(180deg, #FBBF24 0%, #F59E0B 40%, #D97706 100%);
-  box-shadow: 0 0 10px rgba(245,158,11,0.6), 0 0 18px rgba(245,158,11,0.2), 0 0 2px rgba(245,158,11,0.8);
-}}
-.cs-bar-marker.warning:hover {{
-  box-shadow: 0 0 14px rgba(245,158,11,0.75), 0 0 24px rgba(245,158,11,0.35), 0 0 3px rgba(245,158,11,0.9);
-}}
-.cs-bar-marker.info {{
-  background: linear-gradient(180deg, #60A5FA 0%, #3B82F6 40%, #2563EB 100%);
-  box-shadow: 0 0 10px rgba(59,130,246,0.6), 0 0 18px rgba(59,130,246,0.2), 0 0 2px rgba(59,130,246,0.8);
-}}
-.cs-bar-marker.info:hover {{
-  box-shadow: 0 0 14px rgba(59,130,246,0.75), 0 0 24px rgba(59,130,246,0.35), 0 0 3px rgba(59,130,246,0.9);
-}}
+.cs-bar-marker.critical {{ background: var(--status-critical); }}
+.cs-bar-marker.warning {{ background: var(--status-warning); }}
+.cs-bar-marker.info {{ background: var(--accent-blue); }}
 .cs-bar-scale {{
   display: flex;
   justify-content: space-between;
-  font-size: 0.5625rem;
+  font-size: var(--text-12);
   color: var(--text-tertiary);
-  opacity: 0.7;
-  margin-top: 1px;
+  margin-top: var(--space-1);
 }}
 .cs-bar-context {{
-  font-size: 0.6875rem;
+  font-size: var(--text-12);
   color: var(--text-tertiary);
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }}
 
-/* --- Findings grid --- */
-.cs-findings-grid {{
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 12px;
-  margin-bottom: 28px;
-  padding-bottom: 28px;
-  position: relative;
-}}
-.cs-findings-grid::after {{
-  content: '';
-  position: absolute;
-  bottom: 0; left: 8%; right: 8%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 15%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.06) 85%, transparent 100%);
-}}
-.cs-finding {{
-  background: rgba(32, 38, 56, 0.5);
-  border-radius: 10px;
-  padding: 16px 18px;
-}}
-.cs-finding-header {{
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--border-subtle);
-}}
 .cs-finding-title {{
-  font-size: 0.875rem;
+  font-size: var(--text-14);
   font-weight: 600;
   color: var(--text-primary);
 }}
-/* Severity badges */
-.cs-sev {{
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 0.5625rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}}
-.cs-sev.critical {{ background: rgba(239,68,68,0.12); color: #FCA5A5; }}
-.cs-sev.moderate {{ background: rgba(245,158,11,0.12); color: #FCD34D; }}
-.cs-sev.severe   {{ background: rgba(249,115,22,0.12); color: #FDBA74; }}
-.cs-sev.low-normal {{ background: rgba(6,182,212,0.12); color: #67E8F9; }}
-/* Severity-colored left border accents (:has) */
-.cs-finding:has(.cs-sev.critical) {{
-  border-left: 3px solid rgba(252,165,165,0.4);
-  background: linear-gradient(to right, rgba(252,165,165,0.03), transparent 40%), rgba(32,38,56,0.5);
-}}
-.cs-finding:has(.cs-sev.severe) {{
-  border-left: 3px solid rgba(253,186,116,0.4);
-  background: linear-gradient(to right, rgba(253,186,116,0.03), transparent 40%), rgba(32,38,56,0.5);
-}}
-.cs-finding:has(.cs-sev.moderate) {{
-  border-left: 3px solid rgba(252,211,77,0.4);
-  background: linear-gradient(to right, rgba(252,211,77,0.03), transparent 40%), rgba(32,38,56,0.5);
-}}
+.cs-finding:has(.cs-sev.critical),
+.cs-finding:has(.cs-sev.severe),
+.cs-finding:has(.cs-sev.moderate),
 .cs-finding:has(.cs-sev.low-normal) {{
-  border-left: 3px solid rgba(103,232,249,0.4);
-  background: linear-gradient(to right, rgba(103,232,249,0.03), transparent 40%), rgba(32,38,56,0.5);
+  border-color: var(--border-ring);
+  background: var(--bg-surface);
 }}
 
-/* Metrics */
 .cs-metric {{
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  padding: 6px 0;
-  border-bottom: 1px solid rgba(45,51,72,0.3);
-  font-size: 0.8125rem;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border-ring);
+  font-size: var(--text-13);
 }}
 .cs-metric:last-child {{ border-bottom: none; }}
 .cs-metric-name {{ color: var(--text-secondary); }}
@@ -1726,102 +2771,67 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
   font-weight: 600;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
+  font-feature-settings: var(--tabular-nums);
 }}
-.cs-metric-val.critical {{ color: #FCA5A5; }}
-.cs-metric-val.warning  {{ color: #FCD34D; }}
+.cs-metric-val.critical {{ color: var(--status-critical); }}
+.cs-metric-val.warning {{ color: var(--status-warning); }}
 
-/* --- Stat callouts --- */
-.cs-stats-row {{
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px;
-  margin-bottom: 28px;
-  padding-bottom: 28px;
-  position: relative;
-}}
-.cs-stats-row::after {{
-  content: '';
-  position: absolute;
-  bottom: 0; left: 10%; right: 10%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.05) 20%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.05) 80%, transparent 100%);
-}}
 .cs-stat {{
-  background: rgba(34, 40, 58, 0.6);
-  border: 1px solid rgba(255,255,255,0.08);
   text-align: center;
-  padding: 20px 16px;
-  border-radius: 10px;
 }}
-/* Gradient text stat numbers */
 .cs-stat-number {{
-  font-size: 2rem;
-  font-weight: 800;
-  line-height: 1;
-  margin-bottom: 4px;
+  font-size: var(--text-40);
+  font-weight: 600;
+  line-height: 1.05;
+  margin-bottom: var(--space-1);
+  color: var(--text-primary);
+  letter-spacing: var(--tracking-hero);
   font-variant-numeric: tabular-nums;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  font-feature-settings: var(--tabular-nums);
 }}
-.cs-stat-number.critical {{ background-image: linear-gradient(135deg, #EF4444, #F97316); }}
-.cs-stat-number.warning  {{ background-image: linear-gradient(135deg, #F59E0B, #FCD34D); }}
-.cs-stat-number.info     {{ background-image: linear-gradient(135deg, #3B82F6, #06B6D4); }}
-.cs-stat-label {{
-  font-size: 0.6875rem;
-  color: var(--text-secondary);
-  line-height: 1.4;
-}}
-/* Scale-in animation for stat numbers */
-.cs-stat .cs-stat-number {{
-  animation: cs-scale-in 0.35s ease-out backwards;
-}}
-.cs-stat:nth-child(1) .cs-stat-number {{ animation-delay: 0.5s; }}
-.cs-stat:nth-child(2) .cs-stat-number {{ animation-delay: 0.6s; }}
-.cs-stat:nth-child(3) .cs-stat-number {{ animation-delay: 0.7s; }}
+.cs-stat-number.critical {{ color: var(--status-critical); }}
+.cs-stat-number.warning {{ color: var(--status-warning); }}
+.cs-stat-number.info {{ color: var(--accent-blue); }}
 
-/* --- Conclusion --- */
 .cs-conclusion {{
   position: relative;
-  padding: 18px 24px 18px 27px;
-  background: linear-gradient(135deg, rgba(59,130,246,0.08) 0%, rgba(99,102,241,0.06) 100%);
-  border: 1px solid rgba(59,130,246,0.15);
-  border-left: 3px solid #6366F1;
-  border-radius: 0 8px 8px 0;
-  font-size: 0.8125rem;
-  line-height: 1.6;
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-ring);
+  border-radius: var(--radius-md);
+  font-size: var(--text-13);
+  line-height: 1.5;
   color: var(--text-secondary);
   margin-bottom: 0;
-  animation: cs-fade-in-up 0.4s ease-out 0.7s backwards;
 }}
 .cs-conclusion strong {{
-  color: #93C5FD;
-  background: linear-gradient(135deg, rgba(59,130,246,0.18), rgba(99,102,241,0.12));
-  padding: 2px 8px;
-  border-radius: 4px;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
   font-weight: 600;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
 }}
 
-/* --- Collapsible references --- */
 .cs-refs {{
-  margin-top: 16px;
-  border-radius: 8px;
+  margin-top: var(--space-4);
+  border-radius: var(--radius-md);
   overflow: hidden;
 }}
 .cs-refs summary {{
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   cursor: pointer;
-  padding: 10px 16px;
-  font-size: 0.6875rem;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-12);
   font-weight: 600;
   letter-spacing: 0.06em;
-  color: rgba(148,163,184,0.7);
-  background: rgba(30,34,49,0.5);
-  border-radius: 8px;
-  transition: color 0.2s ease, background 0.2s ease;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-ring);
+  border-radius: var(--radius-md);
+  transition: color var(--duration-fast) ease, background var(--duration-fast) ease;
   list-style: none;
   user-select: none;
 }}
@@ -1831,41 +2841,37 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px; height: 18px;
-  font-size: 0.75rem;
+  width: 18px;
+  height: 18px;
+  font-size: var(--text-12);
   font-weight: 700;
-  color: #6366F1;
-  background: rgba(99,102,241,0.1);
-  border-radius: 4px;
-  transition: transform 0.3s cubic-bezier(0.4,0,0.2,1), background 0.2s ease;
+  color: var(--accent-blue);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
   flex-shrink: 0;
 }}
 .cs-refs[open] summary::before {{
   content: '\\2212';
-  transform: rotate(180deg);
-  background: rgba(99,102,241,0.18);
 }}
-.cs-refs summary:hover {{
-  color: rgba(148,163,184,0.95);
-  background: rgba(30,34,49,0.8);
-}}
+.cs-refs summary:hover,
 .cs-refs[open] summary {{
-  border-radius: 8px 8px 0 0;
-  background: rgba(30,34,49,0.7);
+  color: var(--text-primary);
+  background: var(--bg-elevated);
 }}
 .cs-refs .cs-refs-inner {{
   overflow: hidden;
   max-height: 0;
   opacity: 0;
-  transition: max-height 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease 0.05s, padding 0.3s ease;
-  padding: 0 16px;
+  transition: max-height var(--duration-normal) ease, opacity var(--duration-fast) ease, padding var(--duration-fast) ease;
+  padding: 0 var(--space-4);
 }}
 .cs-refs[open] .cs-refs-inner {{
   max-height: 600px;
   opacity: 1;
-  padding: 14px 16px 16px;
+  padding: var(--space-3) var(--space-4) var(--space-4);
 }}
-.cs-refs ol, .cs-refs ul {{
+.cs-refs ol,
+.cs-refs ul {{
   margin: 0;
   padding-left: 0;
   list-style: none;
@@ -1874,66 +2880,187 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
 .cs-refs li {{
   counter-increment: ref-counter;
   position: relative;
-  padding: 8px 12px 8px 36px;
-  margin-bottom: 4px;
-  font-size: 0.75rem;
-  line-height: 1.55;
-  color: rgba(148,163,184,0.75);
-  background: rgba(30,34,49,0.35);
-  border-radius: 6px;
-  border-left: 2px solid rgba(99,102,241,0.15);
-  transition: background 0.15s ease, border-color 0.15s ease;
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-8);
+  margin-bottom: var(--space-1);
+  font-size: var(--text-12);
+  line-height: 1.5;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-ring);
+  transition: background var(--duration-fast) ease;
 }}
 .cs-refs li:hover {{
-  background: rgba(30,34,49,0.6);
-  border-left-color: rgba(99,102,241,0.35);
+  background: var(--bg-elevated);
 }}
 .cs-refs li::before {{
   content: counter(ref-counter);
   position: absolute;
-  left: 10px; top: 8px;
-  font-size: 0.6875rem;
+  left: var(--space-3);
+  top: var(--space-2);
+  font-size: var(--text-12);
   font-weight: 700;
-  color: #6366F1;
-  opacity: 0.7;
-  font-variant-numeric: tabular-nums;
+  color: var(--accent-blue);
+  opacity: 0.9;
 }}
 .cs-refs li:last-child {{ margin-bottom: 0; }}
 
-/* --- Accessibility: disable all CS animations --- */
+/* === Page-specific legacy card overrides === */
+.idx-hero,
+.idx-panel,
+.idx-fact-card,
+.idx-priority-card,
+.idx-card,
+.tx-summary-box,
+.tx-kpi,
+.weekly-card,
+.doctor-summary {{
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--border-ring) !important;
+  border-left: 1px solid var(--border-ring) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: none !important;
+}}
+.idx-priority-card:hover,
+.idx-priority-card:focus-visible,
+.idx-card:hover,
+.idx-card:focus-visible,
+.weekly-card:hover {{
+  background: var(--bg-elevated) !important;
+  border-color: var(--border-ring) !important;
+  transform: none !important;
+  box-shadow: none !important;
+}}
+.weekly-card .status-bar {{
+  display: none !important;
+}}
+.weekly-card .card-header,
+.weekly-card .metric-value,
+.weekly-card .last-week-label {{
+  padding-left: 0 !important;
+}}
+.idx-hero-kicker,
+.idx-fact-label,
+.idx-panel-label,
+.idx-priority-eyebrow,
+.idx-group-chip,
+.tx-kpi-label,
+.tx-traj-title,
+.weekly-card .metric-name,
+.odt-section-kicker {{
+  font-size: var(--text-12) !important;
+  font-weight: 600 !important;
+  letter-spacing: var(--tracking-eyebrow) !important;
+  text-transform: uppercase !important;
+  color: var(--text-tertiary) !important;
+}}
+.idx-hero-title {{
+  font-size: var(--text-28) !important;
+  font-weight: 600 !important;
+  line-height: 1.2 !important;
+  letter-spacing: var(--tracking-hero) !important;
+}}
+.idx-hero-copy,
+.idx-group-copy,
+.idx-card-desc,
+.idx-priority-reason,
+.idx-priority-desc,
+.tx-intro,
+.tx-kpi-detail,
+.weekly-card .metric-unit,
+.weekly-card .last-week-label {{
+  color: var(--text-secondary) !important;
+  line-height: 1.5 !important;
+}}
+.idx-fact-value,
+.idx-card-title,
+.idx-priority-title,
+.tx-kpi-value,
+.weekly-card .metric-value,
+.doctor-summary h3,
+.doctor-summary li {{
+  color: var(--text-primary) !important;
+}}
+.idx-fact-value,
+.tx-kpi-value,
+.weekly-card .metric-value {{
+  font-variant-numeric: tabular-nums !important;
+  font-feature-settings: var(--tabular-nums) !important;
+}}
+.tx-kpi-value,
+.weekly-card .metric-value {{
+  font-size: var(--text-28) !important;
+  font-weight: 600 !important;
+  line-height: 1.05 !important;
+  letter-spacing: var(--tracking-hero) !important;
+}}
+.tx-traj-table th,
+.tx-traj-table td {{
+  border-color: var(--border-ring) !important;
+  color: var(--text-secondary) !important;
+  font-variant-numeric: tabular-nums !important;
+}}
+
 @media (prefers-reduced-motion: reduce) {{
-  .cs-dev-card, .cs-finding, .cs-stat, .cs-conclusion {{ animation: none; }}
-  .cs-stat .cs-stat-number {{ animation: none; }}
-  .cs-verdict {{ animation: none; }}
-  .cs-verdict::before, .cs-verdict::after {{ animation: none; }}
-  .cs-bar {{ animation: none; }}
-  .cs-bar-marker {{ animation: none; }}
+  html {{
+    scroll-behavior: auto;
+  }}
+  *,
+  *::before,
+  *::after {{
+    animation: none !important;
+    transition: none !important;
+  }}
 }}
 
 /* === Print === */
 @media print {{
   .odt-nav, .odt-context-strip {{ display: none; }}
-  body {{ background: white; color: #111; }}
-  .odt-header h1 {{ color: #111; }}
-  .odt-header .subtitle {{ color: #333; }}
-  .odt-header .metadata {{ color: #555; }}
-  .odt-header::after {{ background: #ccc; }}
-  .odt-section, .odt-kpi {{ border: 1px solid #ddd; background: white; }}
-  .odt-section h2 {{ color: #111; border-bottom-color: #ddd; }}
-  .odt-section h3 {{ color: #222; }}
-  .odt-section p {{ color: #333; }}
-  .odt-kpi-value {{ color: #111; }}
-  .odt-kpi-label {{ color: #555; }}
-  .odt-kpi-detail {{ color: #444; }}
-  th {{ background: #f3f4f6; color: #111; border-bottom-color: #ccc; }}
-  td {{ color: #333; border-bottom-color: #eee; }}
-  .odt-footer {{ color: #666; border-top-color: #ddd; }}
-  .odt-footer a {{ color: #2563EB; }}
-  .odt-narrative {{ background: #f0f4ff; border-left-color: #2563EB; color: #111; }}
-  .clinical-subsection {{ background: #f9f9f9; border-color: #ddd; }}
-  .clinical-patient {{ background: #f3f4f6; }}
-  .clinical-severity {{ border-color: #ccc; }}
-  .odt-badge {{ border-color: #ccc; }}
+  body {{
+    background: var(--bg-page);
+    color: var(--text-primary);
+  }}
+  .odt-header h1,
+  .odt-section h2,
+  .odt-section h3,
+  .odt-kpi-value {{
+    color: var(--text-primary);
+  }}
+  .odt-header .subtitle,
+  .odt-section p,
+  .odt-kpi-detail,
+  td {{
+    color: var(--text-secondary);
+  }}
+  .odt-header .metadata,
+  .odt-kpi-label,
+  .odt-footer {{
+    color: var(--text-tertiary);
+  }}
+  .odt-header::after {{
+    background: var(--border-ring);
+  }}
+  .odt-section,
+  .odt-kpi,
+  .odt-narrative {{
+    border: 1px solid var(--border-ring);
+    background: var(--bg-surface);
+  }}
+  .odt-section h2,
+  th,
+  td {{
+    border-color: var(--border-ring);
+  }}
+  th {{
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+  }}
+  .odt-footer a {{
+    color: var(--accent-blue);
+  }}
+  .odt-badge {{
+    border-color: var(--border-ring);
+  }}
 }}
 </style>"""
 
@@ -1944,13 +3071,12 @@ tr:hover td {{ background: rgba(36, 40, 55, 0.5); }}
 
 
 def get_navigation_html(current_report_id: str) -> str:
-    """Sticky top navigation bar with curated primary links and grouped browse menu."""
+    """Sticky top navigation with native details fallback and JS keyboard polish."""
     groups: dict[str, list[dict]] = {}
     for r in REPORT_REGISTRY:
         groups.setdefault(r["group"], []).append(r)
 
     report_lookup = {r["id"]: r for r in REPORT_REGISTRY}
-    current_report = report_lookup.get(current_report_id, report_lookup.get("home"))
 
     def _is_active(report: dict) -> bool:
         return report["id"] == current_report_id
@@ -1976,9 +3102,13 @@ def get_navigation_html(current_report_id: str) -> str:
         panel_links = []
         for r in reports:
             active = " active" if _is_active(r) else ""
+            desc = r.get("desc") or "Clinical research report."
             panel_links.append(
                 f'<a class="odt-nav-panel-link{active}" data-nav-report-id="{escape(r["id"])}" href="{r["file"]}">'
-                f'{escape(r["title"])}</a>'
+                f'<span class="odt-nav-panel-title">{escape(r["title"])}</span>'
+                f'<span class="odt-nav-panel-separator" aria-hidden="true"> - </span>'
+                f'<span class="odt-nav-panel-desc">{escape(desc)}</span>'
+                f'</a>'
             )
         group_blocks.append(
             f'<div class="odt-nav-panel-group">'
@@ -1987,23 +3117,17 @@ def get_navigation_html(current_report_id: str) -> str:
             f'</div>'
         )
 
-    current_label = escape(current_report["title"]) if current_report is not None else "Dashboard"
-    total_reports = sum(1 for report in REPORT_REGISTRY if report["id"] != "home")
+    total_reports = len(REPORT_REGISTRY)
 
     return (
         '<nav class="odt-nav">\n'
         '  <a class="odt-nav-brand" href="index.html">'
         '<span class="odt-logo">DT</span>'
-        'Oura <span>Digital Twin</span></a>\n'
-        '  <button class="odt-nav-toggle" '
-        "onclick=\"let n=this.nextElementSibling;n.classList.toggle('open');"
-        "this.setAttribute('aria-expanded',n.classList.contains('open'))\" "
-        'aria-label="Menu" aria-expanded="false">&#9776;</button>\n'
+        '<span class="odt-brand-text">Digital Twin</span><span class="odt-brand-mark">Oura</span></a>\n'
         f'  <div class="odt-nav-links">'
         f'<div class="odt-nav-primary">{"".join(primary_links)}</div>'
-        f'<div class="odt-nav-current" data-default-label="{current_label}">Viewing: {current_label}</div>'
         f'<details class="odt-nav-browse">'
-        f'<summary>Browse reports</summary>'
+        f'<summary aria-label="Open report navigation">All reports</summary>'
         f'<div class="odt-nav-panel">'
         f'<div class="odt-nav-panel-header">All reports · {total_reports} destinations</div>'
         f'<div class="odt-nav-panel-grid">{"".join(group_blocks)}</div>'
@@ -2052,20 +3176,28 @@ def _coerce_date(value: str | date | datetime | None) -> date | None:
 
 
 def disclaimer_banner(post_days: int | None = None) -> str:
-    """Compact context strip: data source + confound note in one line."""
+    """Compact context strip: data source + confound note in one expandable line."""
     if post_days is None:
         latest = _resolve_latest_data_date()
         post_days = max(0, (latest - TREATMENT_START).days + 1)
 
+    hev_date = HEV_DIAGNOSIS_DATE.strftime("%b %d") if HEV_DIAGNOSIS_DATE else "N/A"
     return (
-        '<div class="odt-context-strip">'
-        '<span class="odt-ctx-item">Oura Ring Gen 4 sensor data — not clinical measurements</span>'
-        '<span class="odt-ctx-dot"></span>'
-        '<span class="odt-ctx-item">N=1 case study — not validated for clinical decisions</span>'
-        '<span class="odt-ctx-dot"></span>'
-        f'<span class="odt-ctx-item warn">HEV diagnosed {HEV_DIAGNOSIS_DATE.strftime("%b %d") if HEV_DIAGNOSIS_DATE else "N/A"}; interpret findings cautiously '
-        f'in this Day {post_days} post-ruxolitinib window</span>'
+        '<details class="odt-context-strip">'
+        '<summary>'
+        '<span>Oura Ring Gen 4 sensor data, not clinical measurements</span>'
+        '<span class="odt-ctx-dot" aria-hidden="true">&middot;</span>'
+        '<span>N=1 case study, not validated for clinical decisions</span>'
+        '<span class="odt-ctx-dot" aria-hidden="true">&middot;</span>'
+        f'<span>HEV diagnosed <span class="odt-ctx-hev">{escape(hev_date)}</span>; '
+        f'Day {post_days} post-ruxolitinib</span>'
+        '<span class="odt-ctx-more-label">More</span>'
+        '</summary>'
+        '<div class="odt-context-more">'
+        'Consumer wearable data can support exploratory review only. '
+        'The HEV diagnosis, temporally confounded with treatment start, remains a material confounder.'
         '</div>'
+        '</details>'
     )
 
 
@@ -2076,11 +3208,14 @@ def disclaimer_banner(post_days: int | None = None) -> str:
 
 def metric_explainer(name: str, description: str) -> str:
     """Inline explainer for a metric. Use inside sections or tables."""
-    return f'<div class="odt-kpi-explainer"><b>{name}:</b> {description}</div>'
+    return (
+        '<div class="odt-kpi-explainer odt-metric-explainer">'
+        f'<b>{escape(name)}:</b> {escape(description)}</div>'
+    )
 
 
 # ---------------------------------------------------------------------------
-# P-value Formatting — single source of truth for all reports
+# P-value Formatting - single source of truth for all reports
 # ---------------------------------------------------------------------------
 
 
@@ -2108,6 +3243,106 @@ def format_p_value(value: float | None, decimals: int = 3) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _format_kpi_value(value: float | str, decimals: int) -> str:
+    """Compact KPI values without forcing tabular figures."""
+    if isinstance(value, (int, float)):
+        if abs(float(value)) >= 1000:
+            return f"{value:,.0f}"
+        if decimals <= 0:
+            return f"{value:.0f}"
+        return f"{value:.{decimals}f}"
+    return str(value)
+
+
+def _status_label(status: str, override: str | None = None) -> str:
+    if override is not None:
+        return override
+    return {
+        "normal": "In range",
+        "good": "In range",
+        "warning": "Watch",
+        "serious": "Elevated",
+        "critical": "Alert",
+        "info": "Info",
+    }.get(status, "")
+
+
+_SPARKLINE_SEQ = 0
+
+
+def _sparkline_svg(values: list[float] | None, color: str) -> str:
+    """Render a KPI sparkline: gradient area fill, rounded caps, end-dot.
+
+    The whole line and its area fill are drawn in the metric's own channel
+    hue (`color`), fading to transparent toward the top of the fill so it
+    reads as a soft gradient rather than a flat tint. Never fabricates
+    points; only real values passed in are plotted, in order.
+    """
+    if not values:
+        return ""
+    import math
+
+    clean = []
+    for value in values:
+        if value is None:
+            continue
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(number):
+            clean.append(number)
+    if len(clean) < 2:
+        return ""
+
+    global _SPARKLINE_SEQ
+    _SPARKLINE_SEQ += 1
+    gradient_id = f"odt-spark-grad-{_SPARKLINE_SEQ}"
+
+    width = 120
+    height = 36
+    pad = 4
+    lo = min(clean)
+    hi = max(clean)
+    span = hi - lo if hi != lo else 1.0
+    step = (width - pad * 2) / (len(clean) - 1)
+    points = []
+    for idx, value in enumerate(clean):
+        x = pad + idx * step
+        y = height - pad - ((value - lo) / span) * (height - pad * 2)
+        points.append((x, y))
+
+    def _path(segment: list[tuple[float, float]]) -> str:
+        start = segment[0]
+        rest = " ".join(f"L{x:.1f},{y:.1f}" for x, y in segment[1:])
+        return f"M{start[0]:.1f},{start[1]:.1f} {rest}".strip()
+
+    base_path = _path(points)
+    last_path = _path(points[-2:])
+    x_last, y_last = points[-1]
+    area_path = (
+        f"M{points[0][0]:.1f},{height - pad:.1f} "
+        f"L{points[0][0]:.1f},{points[0][1]:.1f} "
+        + " ".join(f"L{x:.1f},{y:.1f}" for x, y in points[1:])
+        + f" L{points[-1][0]:.1f},{height - pad:.1f} Z"
+    )
+    safe_color = escape(color)
+    return (
+        '<svg class="odt-kpi-trend" viewBox="0 0 120 36" aria-hidden="true" focusable="false">'
+        '<defs>'
+        f'<linearGradient id="{gradient_id}" x1="0" y1="0" x2="0" y2="1">'
+        f'<stop offset="0%" stop-color="{safe_color}" stop-opacity="0.32"/>'
+        f'<stop offset="100%" stop-color="{safe_color}" stop-opacity="0"/>'
+        '</linearGradient>'
+        '</defs>'
+        f'<path d="{area_path}" fill="url(#{gradient_id})"/>'
+        f'<path d="{base_path}" fill="none" stroke="{safe_color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.55"/>'
+        f'<path d="{last_path}" fill="none" stroke="{safe_color}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>'
+        f'<circle cx="{x_last:.1f}" cy="{y_last:.1f}" r="3" fill="{safe_color}" stroke="{BG_SURFACE}" stroke-width="2"/>'
+        '</svg>'
+    )
+
+
 def make_kpi_card(
     label: str,
     value: float | str,
@@ -2116,9 +3351,14 @@ def make_kpi_card(
     detail: str = "",
     decimals: int = 1,
     explainer: str = "",
-    status_label: str = "",
+    status_label: str | None = None,
+    delta: float | None = None,
+    delta_label: str = "vs last week",
+    good_direction: str = "up",
+    trend: list[float] | None = None,
+    channel_color: str = ACCENT_BLUE,
 ) -> str:
-    """Single KPI card with optional colored status bar on the right edge.
+    """Single KPI card with neutral border, optional delta, and status chip.
 
     Args:
         label: Short uppercase label (e.g. "MEAN RMSSD")
@@ -2128,57 +3368,70 @@ def make_kpi_card(
         detail: Optional small text below the value
         decimals: Decimal places when value is numeric
         explainer: Optional one-liner explaining what this metric means
-        status_label: Override display text (e.g. "Low", "Elevated", "Insufficient")
+        status_label: Override display text (e.g. "Low", "Elevated", "Insufficient").
+            Pass an empty string to suppress the chip entirely.
+        delta: Signed percent delta against a named period.
+        delta_label: Label for the delta comparison period.
+        good_direction: "up" or "down" indicating which delta direction is clinically good.
+        trend: Optional 12-30 point sparkline.
+        channel_color: Color for the sparkline last segment.
     """
-    if isinstance(value, (int, float)):
-        val_str = f"{value:.{decimals}f}"
-    else:
-        val_str = str(value)
-
-    color = STATUS_COLORS.get(status, "transparent")
-    status_bar = (
-        f'<div class="odt-kpi-status" style="background:{color}"></div>'
-        if status != "neutral" else ""
-    )
+    val_str = _format_kpi_value(value, decimals)
     unit_html = f'<span class="odt-kpi-unit">{unit}</span>' if unit else ""
     detail_html = (
-        f'<div class="odt-kpi-detail">{detail}</div>' if detail else ""
+        f'<div class="odt-kpi-detail">{escape(detail)}</div>' if detail else ""
     )
     explainer_html = (
-        f'<div class="odt-kpi-explainer">{explainer}</div>' if explainer else ""
+        f'<div class="odt-kpi-explainer">{escape(explainer)}</div>' if explainer else ""
     )
 
-    # Status text label with colored badge
-    STATUS_LABELS = {
-        "critical": ("Critical", "color:#FCA5A5;background:rgba(239,68,68,0.15)"),
-        "warning": ("Abnormal", "color:#FCD34D;background:rgba(245,158,11,0.15)"),
-        "normal": ("Normal", "color:#34D399;background:rgba(16,185,129,0.15)"),
-        "good": ("Normal", "color:#34D399;background:rgba(16,185,129,0.15)"),
-        "info": ("Info", "color:#93C5FD;background:rgba(59,130,246,0.15)"),
-    }
+    normalized_status = "good" if status == "normal" else status
+    color = STATUS_COLORS.get(normalized_status, "transparent")
     status_label_html = ""
-    if status_label:
-        _, label_style = STATUS_LABELS.get(status, ("", ""))
+    label_text = _status_label(status, status_label)
+    if normalized_status == "neutral" and status_label is None:
         status_label_html = (
-            f'<span class="odt-kpi-status-label" style="{label_style}">'
-            f'{status_label}</span>'
+            f'<span class="odt-kpi-status-label odt-kpi-status-label--dot" '
+            f'style="--status-color:{TEXT_TERTIARY}" aria-label="Neutral">'
+            f'<span class="odt-kpi-status-dot"></span></span>'
         )
-    elif status in STATUS_LABELS:
-        label_text, label_style = STATUS_LABELS[status]
+    elif label_text:
         status_label_html = (
-            f'<span class="odt-kpi-status-label" style="{label_style}">'
-            f'{label_text}</span>'
+            f'<span class="odt-kpi-status-label" style="--status-color:{color}">'
+            f'<span class="odt-kpi-status-dot"></span>{escape(label_text)}</span>'
         )
 
-    status_cls = f" odt-kpi--{status}" if status != "neutral" else ""
+    delta_html = ""
+    if delta is not None:
+        try:
+            delta_value = float(delta)
+            if abs(delta_value) < 1:
+                delta_state = "flat"
+                triangle = "&#9656;"
+            else:
+                is_good = (delta_value > 0 and good_direction == "up") or (
+                    delta_value < 0 and good_direction == "down"
+                )
+                delta_state = "good" if is_good else "bad"
+                triangle = "&#9650;" if delta_value > 0 else "&#9660;"
+            delta_html = (
+                f'<div class="odt-kpi-delta odt-kpi-delta--{delta_state}">'
+                f'<span>{triangle}</span><b>{delta_value:+.1f}%</b>'
+                f'<em>{escape(delta_label)}</em></div>'
+            )
+        except (TypeError, ValueError):
+            delta_html = ""
+
+    trend_html = _sparkline_svg(trend, channel_color)
+    status_cls = f" odt-kpi--{normalized_status}" if normalized_status != "neutral" else ""
 
     return (
-        f'<div class="odt-kpi{status_cls}">{status_bar}'
+        f'<div class="odt-kpi{status_cls}">'
         f'<div class="odt-kpi-head">'
-        f'<div class="odt-kpi-label">{label}</div>'
+        f'<div class="odt-kpi-label">{escape(label.rstrip(":"))}</div>'
         f'{status_label_html}</div>'
         f'<div class="odt-kpi-value">{val_str}{unit_html}</div>'
-        f'{detail_html}{explainer_html}</div>'
+        f'{delta_html}{detail_html}{explainer_html}{trend_html}</div>'
     )
 
 
@@ -2193,17 +3446,83 @@ def make_kpi_row(*cards: str) -> str:
 
 
 def make_section(title: str, content: str, section_id: str = "") -> str:
-    """Wrap content in a styled card section with title."""
+    """Wrap content in a report section with kicker, title, and hairline rule."""
     id_attr = f' id="{section_id}"' if section_id else ""
+    kicker = section_id.replace("-", " ").upper() if section_id else "REPORT SECTION"
     return (
-        f'<div class="odt-section"{id_attr}>'
-        f'<h2>{title}</h2>{content}</div>'
+        f'<section class="odt-section"{id_attr}>'
+        f'<div class="odt-section-heading">'
+        f'<div class="odt-section-kicker">{escape(kicker)}</div>'
+        f'<div class="odt-section-title-row"><h2>{escape(title)}</h2><span></span></div>'
+        f'</div>{content}</section>'
     )
+
+
+def make_chart_panel(title: str, subtitle: str = "", fig_html: str = "") -> str:
+    """Wrap a Plotly embed in an external-title chart panel."""
+    title_html = (
+        f'<div class="odt-chart-panel-title">{escape(title)}</div>' if title else ""
+    )
+    subtitle_html = (
+        f'<div class="odt-chart-panel-subtitle">{escape(subtitle)}</div>'
+        if subtitle else ""
+    )
+    header_html = (
+        f'<div class="odt-chart-panel-header">{title_html}{subtitle_html}</div>'
+        if title_html or subtitle_html else ""
+    )
+    compact = " odt-chart-panel--compact" if not header_html else ""
+    return f'<div class="odt-chart-panel{compact}">{header_html}{fig_html}</div>'
 
 
 # ---------------------------------------------------------------------------
 # Page Assembly
 # ---------------------------------------------------------------------------
+
+
+def site_head_meta(title: str, description: str, page_file: str = "") -> str:
+    """Robots, description, canonical and Open Graph tags shared by every page.
+
+    ``SITE_INDEXABLE`` in config.py is the single switch for indexing.
+    ``page_file`` is the path relative to the site root (empty for the homepage).
+    """
+    url = f"{SITE_URL}/{page_file}" if page_file else f"{SITE_URL}/"
+    robots = "index, follow" if SITE_INDEXABLE else "noindex, nofollow"
+    image = f"{SITE_URL}/{OG_IMAGE_PATH}"
+    t = escape(title)
+    d = escape(description)
+    return (
+        f'<meta name="robots" content="{robots}">\n'
+        f'<meta name="description" content="{d}">\n'
+        f'<link rel="canonical" href="{url}">\n'
+        '<link rel="icon" href="data:,">\n'
+        '<meta property="og:type" content="website">\n'
+        f'<meta property="og:site_name" content="{escape(SITE_NAME)}">\n'
+        f'<meta property="og:title" content="{t}">\n'
+        f'<meta property="og:description" content="{d}">\n'
+        f'<meta property="og:url" content="{url}">\n'
+        f'<meta property="og:image" content="{image}">\n'
+        '<meta property="og:image:width" content="1200">\n'
+        '<meta property="og:image:height" content="630">\n'
+        '<meta name="twitter:card" content="summary_large_image">\n'
+        f'<meta name="twitter:title" content="{t}">\n'
+        f'<meta name="twitter:description" content="{d}">\n'
+        f'<meta name="twitter:image" content="{image}">'
+    )
+
+
+def site_footer_links() -> str:
+    """The shared identity line: source, tool, programme, companion site."""
+    return (
+        '<div class="odt-footer-links">'
+        f'<a href="{REPO_URL}">Source code on GitHub</a> &middot; '
+        'Built with Claude Code &middot; '
+        f'<a href="{HEALTH_EQUITY_URL}">TEEI Health Equity</a> &middot; '
+        f'Companion project: <a href="{COMPANION_URL}">{escape(COMPANION_LABEL)}</a> &middot; '
+        '<a href="how_built.html">How this was built</a> &middot; '
+        '<a href="claims.html">Every number, checked</a>'
+        '</div>'
+    )
 
 
 def wrap_html(
@@ -2222,7 +3541,7 @@ def wrap_html(
 
     Args:
         title: Report title (shown in header and <title>)
-        body_content: Main HTML — KPI rows, sections, chart divs
+        body_content: Main HTML - KPI rows, sections, chart divs
         report_id: Must match an id in REPORT_REGISTRY for nav highlighting
         subtitle: Optional subtitle below title
         header_meta: Optional header metadata text after the generated timestamp.
@@ -2241,15 +3560,28 @@ def wrap_html(
         max(0, (data_end_date - TREATMENT_START).days + 1)
         if post_days is None else post_days
     )
+    escaped_title = escape(title)
+    registry_entry = next((r for r in REPORT_REGISTRY if r["id"] == report_id), None)
+    page_file = registry_entry["file"].split("#")[0] if registry_entry else ""
+    if page_file == "index.html":
+        page_file = ""
+    page_description = subtitle or (registry_entry["desc"] if registry_entry else SITE_DESCRIPTION)
+    head_meta = site_head_meta(f"{title} | {SITE_NAME}", page_description, page_file)
 
     subtitle_html = (
         f'\n      <div class="subtitle">{subtitle}</div>' if subtitle else ""
     )
     meta_label = PATIENT_LABEL if header_meta is None else header_meta
-    meta_suffix = f" &middot; {meta_label}" if meta_label else ""
+    meta_items = [f"Generated {generated}"]
+    if meta_label:
+        meta_items.append(str(meta_label))
+    meta_items.append(
+        f"Data {DATA_START.strftime('%b %d, %Y')} to {data_end_date.strftime('%b %d, %Y')}"
+    )
+    meta_items.append(f"Day {footer_post_days} post-treatment")
     metadata_html = (
         f'\n      <div class="metadata">'
-        f'Generated {generated}{meta_suffix}</div>'
+        f'{" &middot; ".join(escape(item) for item in meta_items)}</div>'
     )
 
     extra_style = f"\n<style>\n{extra_css}\n</style>" if extra_css else ""
@@ -2271,13 +3603,7 @@ const observer = new IntersectionObserver((entries) => {{
           const d = JSON.parse(chartData[key]);
           el.innerHTML = '';
           el.style.height = (d.layout.height || 450) + 'px';
-          Plotly.newPlot(el.id, d.data, d.layout, {{
-            responsive: true,
-            displayModeBar: true,
-            scrollZoom: true,
-            modeBarButtonsToRemove: ['lasso2d', 'select2d'],
-            displaylogo: false,
-          }}).then((graphDiv) => {{
+          Plotly.newPlot(el.id, d.data, d.layout, window.__ODT_PLOTLY_CONFIG || {{}}).then((graphDiv) => {{
             window.__odtEnhancePlotly?.(graphDiv);
             Plotly.Plots.resize(graphDiv);
           }});
@@ -2295,6 +3621,43 @@ document.querySelectorAll('.chart-box').forEach(el => observer.observe(el));
 
     nav_hash_script = """
 <script>
+const setupOdtNavigation = () => {
+  const browse = document.querySelector(".odt-nav-browse");
+  if (!browse) return;
+  const summary = browse.querySelector("summary");
+  const links = Array.from(browse.querySelectorAll(".odt-nav-panel-link"));
+
+  summary?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      browse.open = !browse.open;
+      if (browse.open) links[0]?.focus();
+    }
+  });
+
+  browse.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      browse.open = false;
+      summary?.focus();
+      return;
+    }
+    if (!["ArrowDown", "ArrowUp"].includes(event.key)) return;
+    event.preventDefault();
+    if (!browse.open) browse.open = true;
+    const activeIndex = links.indexOf(document.activeElement);
+    if (activeIndex === -1) {
+      links[event.key === "ArrowDown" ? 0 : links.length - 1]?.focus();
+      return;
+    }
+    const offset = event.key === "ArrowDown" ? 1 : -1;
+    links[(activeIndex + offset + links.length) % links.length]?.focus();
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!browse.contains(event.target)) browse.open = false;
+  });
+};
+
 const syncRoadmapNavState = () => {
   const path = window.location.pathname || "";
   if (!path.endsWith("/roadmap.html") && !path.endsWith("roadmap.html")) return;
@@ -2305,37 +3668,38 @@ const syncRoadmapNavState = () => {
   document.querySelectorAll("[data-nav-report-id='about'], [data-nav-report-id='roadmap']").forEach((el) => {
     el.classList.toggle("active", el.dataset.navReportId === activeId);
   });
-
-  const current = document.querySelector(".odt-nav-current");
-  if (current) {
-    current.textContent = `Viewing: ${currentLabel}`;
-  }
 };
 
+window.addEventListener("DOMContentLoaded", setupOdtNavigation);
 window.addEventListener("DOMContentLoaded", syncRoadmapNavState);
 window.addEventListener("hashchange", syncRoadmapNavState);
 </script>"""
 
     extra_script = f"\n<script>\n{extra_js}\n</script>" if extra_js else ""
+    plotly_bundle_url = _choose_plotly_bundle(
+        body_content + (json.dumps(chart_data) if chart_data else "") + extra_js
+    )
 
-    return f"""<!DOCTYPE html>
-<html lang="en" data-theme="dark">
+    return _defer_plotly_scripts(f"""<!DOCTYPE html>
+<html lang="en" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="{BG_PRIMARY}">
-<meta name="robots" content="noindex, nofollow">
-<title>{title} — Oura Digital Twin</title>
+{head_meta}
+<title>{escaped_title} | {escape(SITE_NAME)}</title>
 {_INTER_FONT_LINK}
-<script src="{PLOTLY_CDN_URL}"></script>
+<script defer src="{plotly_bundle_url}"></script>
+{get_plotly_enhancer_js()}
 {get_base_css()}{extra_style}
 </head>
 <body>
 {get_navigation_html(report_id)}
 {disclaimer_banner(post_days=footer_post_days)}
+<main id="main-content" class="odt-main">
 
 <div class="odt-header">
-  <h1>{title}</h1>{subtitle_html}{metadata_html}
+  <h1>{escaped_title}</h1>{subtitle_html}{metadata_html}
 </div>
 
 <div class="odt-container">
@@ -2343,13 +3707,60 @@ window.addEventListener("hashchange", syncRoadmapNavState);
 </div>
 
 <div class="odt-footer">
-  <div>All metrics derived from Oura Ring Gen 4 consumer wearable data. Not clinical-grade measurements.</div>
-  <div>Single-patient case study (N=1). Not validated for clinical decision-making. Not a medical device.</div>
-  <div>Data: {DATA_START.strftime('%B %d')} &ndash; {data_end_date.strftime('%B %d, %Y')} &middot; Post-intervention: {footer_post_days} days (ruxolitinib, {TREATMENT_START.strftime('%B %d')})</div>
-  <div>Open source under MIT License &middot; &copy; 2026 <a href="https://theeducationalequalityinstitute.org">The Educational Equality Institute</a> &middot; <a href="https://github.com/theeducationalequalityinstitute/oura-digital-twin">GitHub</a></div>
-  <div class="odt-footer-fine">Updated daily at 06:15 CET &middot; Last generated: {generated}</div>
-  <div class="odt-footer-fine">This project is not affiliated with, endorsed by, or sponsored by Oura Health Oy. Oura&reg; is a registered trademark of Oura Health Oy.</div>
+  <div>Data window: {DATA_START.strftime('%B %d')} to {data_end_date.strftime('%B %d, %Y')} &middot; Post-treatment: day {footer_post_days} on ruxolitinib &middot; Generated: {generated}</div>
+  <div>Oura Ring Gen 4 consumer wearable data; N=1 exploratory case study; not a medical device. MIT License &middot; &copy; 2026 <a href="https://theeducationalequalityinstitute.org">The Educational Equality Institute</a> &middot; Oura&reg; is a registered trademark of Oura Health Oy.</div>
+  {site_footer_links()}
 </div>
-{get_plotly_enhancer_js()}{chart_js}{nav_hash_script}{extra_script}
+</main>
+{chart_js}{nav_hash_script}{extra_script}
 </body>
-</html>"""
+</html>""")
+
+
+_TRACE_TYPE_RE = re.compile(r'\\?"type\\?"\s*:\s*\\?"([a-z0-9]+)\\?"')
+# "type" also names layout shapes, axis kinds and updatemenus; none of those need a trace module.
+_NOT_TRACE_TYPES = {
+    "rect", "line", "circle", "path", "date", "linear", "log", "category",
+    "multicategory", "data", "layout", "buttons", "dropdown", "auto", "domain",
+}
+_BASIC_TRACES = {"scatter", "bar", "pie"}
+_CARTESIAN_TRACES = _BASIC_TRACES | {
+    "box", "heatmap", "histogram", "histogram2d", "histogram2dcontour", "image",
+    "contour", "scatterternary", "violin",
+}
+
+
+def _choose_plotly_bundle(page_source: str) -> str:
+    """Return the CDN URL of the smallest Plotly bundle that draws every trace on the page.
+
+    basic (about 1 MB) covers scatter, bar and pie; cartesian (about 2 MB) adds box,
+    heatmap, histogram, contour and violin; anything else (3D, WebGL, maps, finance,
+    indicators) gets the full bundle. Trace types are read from the serialised figures.
+    """
+    types = set(_TRACE_TYPE_RE.findall(page_source)) - _NOT_TRACE_TYPES
+    if not types or types <= _BASIC_TRACES:
+        return PLOTLY_CDN_URL.replace("plotly-", "plotly-basic-")
+    if types <= _CARTESIAN_TRACES:
+        return PLOTLY_CDN_URL.replace("plotly-", "plotly-cartesian-")
+    return PLOTLY_CDN_URL
+
+
+_INLINE_SCRIPT_RE = re.compile(r"<script(?![^>]*\bsrc=)([^>]*)>(.*?)</script>", re.S)
+
+
+def _defer_plotly_scripts(page: str) -> str:
+    """Make every inline script that calls Plotly a module script.
+
+    The Plotly bundle is loaded with ``defer`` so the page paints before the
+    3.6 MB library arrives. Module scripts execute after deferred scripts, in
+    document order, so a chart script that was written as a classic inline
+    script keeps working once it is a module. The enhancer in <head> stays
+    classic: it guards on ``window.Plotly`` and re-runs on DOMContentLoaded.
+    """
+    def _convert(match: re.Match) -> str:
+        attrs, body = match.group(1), match.group(2)
+        if "Plotly." not in body or "ODT_CONFIG" in body or "module" in attrs:
+            return match.group(0)
+        return f'<script type="module">{body}</script>'
+
+    return _INLINE_SCRIPT_RE.sub(_convert, page)

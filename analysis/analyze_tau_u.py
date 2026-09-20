@@ -205,15 +205,27 @@ def load_daily_metrics() -> pd.DataFrame:
     )
 
     # Sleep periods (long_sleep only)
+    # A date can carry several long_sleep periods (a split night); keep the
+    # longest so every date appears exactly once, matching the convention in
+    # analyze_oura_causal.py. Two such dates exist in the current data
+    # (2026-05-19, 2026-06-01) and without this they are counted twice.
     sleep = pd.read_sql_query(
-        """SELECT day as date, lowest_heart_rate, average_heart_rate, efficiency
+        """SELECT day as date, lowest_heart_rate, average_heart_rate, efficiency,
+                  total_sleep_duration
            FROM oura_sleep_periods
            WHERE type = 'long_sleep'
            ORDER BY day""",
         conn,
     )
-    for col in ["lowest_heart_rate", "average_heart_rate", "efficiency"]:
+    for col in ["lowest_heart_rate", "average_heart_rate", "efficiency",
+                "total_sleep_duration"]:
         sleep[col] = pd.to_numeric(sleep[col], errors="coerce")
+    sleep = (
+        sleep.sort_values(["date", "total_sleep_duration"], ascending=[True, False])
+        .drop_duplicates(subset="date", keep="first")
+        .drop(columns=["total_sleep_duration"])
+        .reset_index(drop=True)
+    )
     sleep = sleep.rename(columns={"efficiency": "sleep_efficiency"})
 
     conn.close()
@@ -435,7 +447,7 @@ def _insufficient_data_result(n_a: int, n_b: int) -> dict[str, Any]:
 
 
 # ===========================================================================
-# NAP (Nonoverlap of All Pairs) — Mann-Whitney U based
+# NAP (Nonoverlap of All Pairs) - Mann-Whitney U based
 # ===========================================================================
 
 def compute_nap(
@@ -901,9 +913,6 @@ EXTRA_CSS = f"""
 def generate_report(df: pd.DataFrame, results: dict[str, Any]) -> str:
     """Assemble the complete HTML report."""
     body = ""
-
-    # Disclaimer
-    body += disclaimer_banner()
 
     # KPI cards for combined A vs B+C
     body += make_section(

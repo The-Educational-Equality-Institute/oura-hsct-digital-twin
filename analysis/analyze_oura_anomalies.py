@@ -77,7 +77,7 @@ JSON_OUTPUT = REPORTS_DIR / "anomaly_detection_metrics.json"
 # ---------------------------------------------------------------------------
 KNOWN_EVENT_DATE_STR = str(KNOWN_EVENT_DATE)
 CONTAMINATION_RATE = 0.1  # Isolation Forest expected anomaly rate
-HSCT_TYPICAL_RMSSD = HSCT_RMSSD_RANGE  # (25, 40) ms range — imported from config
+HSCT_TYPICAL_RMSSD = HSCT_RMSSD_RANGE  # (25, 40) ms range - imported from config
 
 # Anomaly detection parameters
 MP_WINDOW_SIZES = [3, 5, 7]
@@ -277,7 +277,7 @@ def run_matrix_profile(daily: pd.DataFrame) -> dict[str, Any]:
     try:
         import stumpy
     except ImportError:
-        logging.warning("stumpy not installed — Matrix Profile will be skipped")
+        logging.warning("stumpy not installed - Matrix Profile will be skipped")
         return {
             "method": "Matrix Profile",
             "anomalies_by_window": {},
@@ -517,7 +517,7 @@ def run_lstm_autoencoder(daily: pd.DataFrame) -> dict[str, Any]:
         import torch.nn as nn
         from torch.utils.data import DataLoader, TensorDataset
     except ImportError:
-        logging.warning("torch not installed — LSTM Autoencoder will be skipped")
+        logging.warning("torch not installed - LSTM Autoencoder will be skipped")
         return {
             "method": "LSTM Autoencoder",
             "anomalies": [],
@@ -906,7 +906,7 @@ def run_tsfresh_clustering(data: dict[str, pd.DataFrame]) -> dict[str, Any]:
         from tsfresh import extract_features
         from tsfresh.feature_extraction import MinimalFCParameters
     except ImportError:
-        logging.warning("tsfresh not installed — tsfresh clustering will be skipped")
+        logging.warning("tsfresh not installed - tsfresh clustering will be skipped")
         return {
             "method": "tsfresh + DBSCAN",
             "anomalies": [],

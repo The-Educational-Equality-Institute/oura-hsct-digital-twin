@@ -23,7 +23,7 @@ from profiles import PROFILES
 from analysis._hardening import safe_connect, safe_read_sql
 from analysis._theme import (
     make_kpi_card, make_kpi_row, make_section, get_base_css,
-    get_plotly_enhancer_js,
+    get_plotly_enhancer_js, get_navigation_html,
     BG_PRIMARY, TEXT_SECONDARY,
     ACCENT_BLUE, ACCENT_GREEN, ACCENT_PURPLE, ACCENT_CYAN,
     C_HRV, C_SLEEP, C_ACTIVITY,
@@ -48,6 +48,7 @@ def standalone_wrap_html(
     body_content: str,
     profile_label: str,
     condition: str,
+    report_id: str,
 ) -> str:
     """Assemble a standalone HTML page with the project's dark clinical theme."""
     generated = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -56,24 +57,35 @@ def standalone_wrap_html(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="data:,">
 <meta name="theme-color" content="{BG_PRIMARY}">
 <meta name="robots" content="noindex, nofollow">
-<title>{title} — Oura Digital Twin</title>
+<title>{title} | Oura Digital Twin</title>
 {_INTER_FONT_LINK}
 <script src="{PLOTLY_CDN_URL}"></script>
 {get_base_css()}
 </head>
 <body>
+{get_navigation_html(report_id)}
+<main id="main-content" class="odt-main">
 
-<div class="odt-context-strip">
-<span class="odt-ctx-item">Oura Ring sensor data — not clinical measurements</span>
-<span class="odt-ctx-dot"></span>
-<span class="odt-ctx-item">Single-patient standalone dashboard</span>
-</div>
+<details class="odt-context-strip">
+  <summary>
+    <span>Oura Ring sensor data, not clinical measurements</span>
+    <span class="odt-ctx-dot" aria-hidden="true">&middot;</span>
+    <span>Single-patient standalone dashboard</span>
+    <span class="odt-ctx-dot" aria-hidden="true">&middot;</span>
+    <span>Exploratory comparison support only</span>
+    <span class="odt-ctx-more-label">More</span>
+  </summary>
+  <div class="odt-context-more">
+    Consumer wearable data can support exploratory review only. This standalone dashboard is not validated for clinical decisions.
+  </div>
+</details>
 
 <div class="odt-header">
   <h1>{title}</h1>
-  <div class="subtitle">{profile_label} &mdash; {condition}</div>
+  <div class="subtitle">{profile_label} - {condition}</div>
   <div class="metadata">Generated {generated}</div>
 </div>
 
@@ -82,11 +94,10 @@ def standalone_wrap_html(
 </div>
 
 <div class="odt-footer">
-  <div>All metrics derived from Oura Ring consumer wearable data. Not clinical-grade.</div>
-  <div>Single-patient overview. Not validated for clinical decision-making.</div>
-  <div>Open source under MIT License &middot; &copy; 2026
-  <a href="https://theeducationalequalityinstitute.org">The Educational Equality Institute</a></div>
+  <div>Oura Ring consumer wearable data &middot; Single-patient exploratory dashboard &middot; Generated: {generated}</div>
+  <div>Not a medical device. MIT License &middot; &copy; 2026 <a href="https://theeducationalequalityinstitute.org">The Educational Equality Institute</a></div>
 </div>
+</main>
 {get_plotly_enhancer_js()}
 </body>
 </html>"""
@@ -297,15 +308,23 @@ def build_trajectory_html(traj: dict) -> str:
         rows = ""
         for entry in traj["yearly"]:
             delta_str = f'{entry["change"]:+.1f}' if entry["change"] is not None else "--"
-            arrow = {"UP": "&#9650;", "DOWN": "&#9660;", "FLAT": "&#9654;", "--": ""}.get(
-                entry["direction"], "")
-            color = {"UP": "#4ade80", "DOWN": "#f87171", "FLAT": "#94a3b8", "--": "#94a3b8"}.get(
-                entry["direction"], "#94a3b8")
+            direction_text = {
+                "UP": "Up",
+                "DOWN": "Down",
+                "FLAT": "Flat",
+                "--": "--",
+            }.get(entry["direction"], entry["direction"])
+            color = {
+                "UP": C_ACTIVITY,
+                "DOWN": C_HRV,
+                "FLAT": TEXT_SECONDARY,
+                "--": TEXT_SECONDARY,
+            }.get(entry["direction"], TEXT_SECONDARY)
             rows += (
                 f'<tr><td>{entry["year"]}</td>'
                 f'<td>{entry["mean_rmssd"]:.1f} ms</td>'
                 f'<td>{delta_str} ms</td>'
-                f'<td style="color:{color}">{arrow} {entry["direction"]}</td></tr>'
+                f'<td style="color:{color}">{direction_text}</td></tr>'
             )
         parts.append(
             '<table style="width:100%;border-collapse:collapse;margin:1em 0">'
@@ -323,7 +342,7 @@ def build_trajectory_html(traj: dict) -> str:
         parts.append(
             '<div style="background:#7f1d1d;border:1px solid #991b1b;'
             'border-radius:8px;padding:12px 16px;margin:1em 0">'
-            '<strong style="color:#fca5a5">&#9888; Clinical Flags</strong>'
+            '<strong style="color:#fca5a5">Clinical Flags</strong>'
             f'<ul style="margin:8px 0 0 0;padding-left:20px;color:#fecaca">'
             f'{flag_items}</ul></div>'
         )
@@ -598,6 +617,7 @@ def main() -> None:
         body_content=body,
         profile_label=label,
         condition=condition,
+        report_id=f"{profile_key}_standalone",
     )
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)

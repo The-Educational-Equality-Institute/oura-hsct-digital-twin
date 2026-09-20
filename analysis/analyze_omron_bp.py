@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OMRON M7 Intelli IT AFib — blood pressure analysis.
+"""OMRON M7 Intelli IT AFib - blood pressure analysis.
 
 Produces clinical BP metrics from `omron_bp_readings`:
 
@@ -11,8 +11,8 @@ Produces clinical BP metrics from `omron_bp_readings`:
   - Drug-response split pre/post bisoprolol start (from profile metadata)
 
 Outputs:
-  reports/omron_bp_report.html  — interactive dashboard (dark clinical theme)
-  reports/omron_bp_report.json  — structured metrics for other scripts
+  reports/omron_bp_report.html  - interactive dashboard (dark clinical theme)
+  reports/omron_bp_report.json  - structured metrics for other scripts
 
 Usage:
   python analysis/analyze_omron_bp.py
@@ -371,7 +371,7 @@ def main() -> int:
     if bp.empty:
         # Still write an empty but valid report so the pipeline doesn't crash
         html = wrap_html(
-            title=f"{PATIENT_LABEL} — OMRON BP",
+            title=f"{PATIENT_LABEL} - OMRON BP",
             body_content="<p>No BP readings ingested yet. Run <code>python api/import_omron.py</code>.</p>",
             report_id="omron_bp_report",
         )
@@ -433,7 +433,7 @@ def main() -> int:
     )
 
     html = wrap_html(
-        title=f"{PATIENT_LABEL} — OMRON M7 Blood Pressure",
+        title=f"{PATIENT_LABEL} - OMRON M7 Blood Pressure",
         body_content=body,
         report_id="omron_bp_report",
     )

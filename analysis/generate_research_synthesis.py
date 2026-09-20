@@ -215,7 +215,7 @@ def build_executive_summary(k: dict) -> str:
     ruxolitinib + bisoprolol, reaching {k['biso_rmssd_mean']} ms{pct} during the combined period.</p>
     <p><b style="color:{TEXT_PRIMARY}">Mechanism hypothesis:</b> Ruxolitinib suppressed the inflammatory
     driver (Hit 1), bisoprolol unmasked recovered vagal tone (Hit 2). The ITS slope change is significant
-    (p&lt;0.001) while the level shift is not (p=0.19) — consistent with accelerating emergence from the
+    (p&lt;0.001) while the level shift is not (p=0.19) - consistent with accelerating emergence from the
     PPG noise floor rather than a sudden pharmacological jump.</p>
     <p><b style="color:{ACCENT_AMBER}">Key caveat:</b> Pre-treatment RMSSD values (~10 ms) are at the
     Oura Ring PPG noise floor. Quantitative pre-treatment values should be interpreted as qualitative
@@ -260,7 +260,7 @@ def build_two_hit_model() -> str:
         <li>De-suppresses brainstem vagal nuclei</li>
         <li>Restores macrophage cholinergic sensitivity</li>
         <li>Evidence: HR dropped significantly (p=0.009)</li>
-        <li><b>HRV did NOT improve measurably</b> — masked by sympathetic saturation + PPG noise floor</li></ul>""")
+        <li><b>HRV did NOT improve measurably</b> - masked by sympathetic saturation + PPG noise floor</li></ul>""")
 
     hit2 = _card(ACCENT_GREEN, "Hit 2: Bisoprolol (beta-1 selective blocker)", f"""
         <ul style="color:{TEXT_SECONDARY};font-size:.85rem;padding-left:18px;line-height:1.7">
@@ -292,7 +292,7 @@ def build_alternative_explanations() -> str:
                 border-left:4px solid {ACCENT_AMBER};border-radius:10px;padding:20px;margin-bottom:24px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
         <span style="font-size:1.3rem">&#9888;</span>
-        <b style="color:{ACCENT_AMBER};font-size:1rem">PPG Measurement Floor — Primary Caveat</b></div>
+        <b style="color:{ACCENT_AMBER};font-size:1rem">PPG Measurement Floor - Primary Caveat</b></div>
     <div style="color:{TEXT_SECONDARY};font-size:.88rem;line-height:1.7">
     <p>At RMSSD ~10 ms, PPG noise (~5-10 ms IBI error) equals the physiological signal.
     <b>RMSSD<sub>measured</sub> = sqrt(RMSSD<sub>true</sub><sup>2</sup> + RMSSD<sub>noise</sub><sup>2</sup>)</b>.
@@ -300,15 +300,15 @@ def build_alternative_explanations() -> str:
     <p style="margin-top:8px"><b>No published PPG validation study has tested accuracy at RMSSD &lt;15 ms.</b>
     Cao 2022, Liang 2024, and Dial 2025 all used healthy populations (RMSSD 20-80 ms).</p>
     <p style="margin-top:8px">ITS confirms: level shift NOT significant (b4 p=0.19) but slope change
-    highly significant (b5 p&lt;0.001) — accelerating emergence from noise floor.</p></div></div>"""
+    highly significant (b5 p&lt;0.001) - accelerating emergence from noise floor.</p></div></div>"""
 
     alts = [
-        ("Baseline compression / floor effect (Stein 2005)", "Patients with lowest baseline HRV show largest relative improvements. The 134% relative increase is only +13 ms — patient remains well below normal (42 ms median)."),
+        ("Baseline compression / floor effect (Stein 2005)", "Patients with lowest baseline HRV show largest relative improvements. The 134% relative increase is only +13 ms - patient remains well below normal (42 ms median)."),
         ("Cycle-length dependence", "RMSSD scales with RR interval. HR dropping ~80 to ~70 bpm mechanically amplifies vagal modulation. Estimated 15-25% of observed increase is cycle-length effect."),
-        ("Iron clearance / phlebotomy", "Ferritin 2225 to 1247 ug/L. Iron overload causes direct cardiac toxicity. Cardiac T2* never measured — <b>not addressable from available data.</b>"),
+        ("Iron clearance / phlebotomy", "Ferritin 2225 to 1247 ug/L. Iron overload causes direct cardiac toxicity. Cardiac T2* never measured - <b>not addressable from available data.</b>"),
         ("HEV resolution", "Hepatitis E diagnosed D+2 of ruxolitinib. Viral load decline would independently reduce inflammatory burden. <b>HEV PCR trajectory needed.</b>"),
         ("Regression to the mean", "Placebo tests show 100% Mann-Whitney false positive rate on pre-treatment data, confirming ITS with trend control is the valid primary analysis."),
-        ("Seasonal / activity confounding", "Jan to Apr in Norway — increasing daylight and outdoor activity. Not addressable from available data."),
+        ("Seasonal / activity confounding", "Jan to Apr in Norway - increasing daylight and outdoor activity. Not addressable from available data."),
     ]
     items = "".join(f'<li style="margin-bottom:12px"><b style="color:{TEXT_PRIMARY}">{t}:</b> {d}</li>' for t, d in alts)
     return ppg_warn + f"""<div style="color:{TEXT_SECONDARY};font-size:.88rem;line-height:1.7">
@@ -355,8 +355,8 @@ def build_why_it_matters() -> str:
     </div>
     <h3 style="color:{TEXT_PRIMARY};font-size:.95rem;margin:16px 0 10px">What is novel (no published precedent):</h3>
     <ol style="padding-left:20px;font-size:.85rem">
-    <li style="margin-bottom:6px">JAK inhibitor + beta-blocker with HRV as an outcome — in any disease</li>
-    <li style="margin-bottom:6px">Wearable-tracked autonomic recovery trajectory during ruxolitinib — in any context</li>
+    <li style="margin-bottom:6px">JAK inhibitor + beta-blocker with HRV as an outcome - in any disease</li>
+    <li style="margin-bottom:6px">Wearable-tracked autonomic recovery trajectory during ruxolitinib - in any context</li>
     <li style="margin-bottom:6px">Quantitative "two-hit" autonomic restoration pattern in a GvHD patient</li>
     <li style="margin-bottom:6px">Continuous 96-day HRV series spanning both interventions with formal causal inference</li></ol>
     <p style="margin-top:16px;color:{TEXT_TERTIARY};font-size:.82rem;font-style:italic">
@@ -480,8 +480,7 @@ def main() -> None:
     print(f"  Jakavi+BB RMSSD:     {kpis['biso_rmssd_mean']} ms (n={kpis['n_biso']})")
     print(f"  Latest RMSSD:        {kpis['latest_rmssd']} ms")
 
-    body = disclaimer_banner()
-    body += make_section("Executive Summary", build_executive_summary(kpis), section_id="executive")
+    body = make_section("Executive Summary", build_executive_summary(kpis), section_id="executive")
     body += make_section("RMSSD Timeline: Three-Phase Observation",
                          '<div class="chart-box">' + build_hero_chart(daily) + "</div>", section_id="timeline")
     body += make_section("The Two-Hit Model (Hypothesis)", build_two_hit_model(), section_id="two-hit")

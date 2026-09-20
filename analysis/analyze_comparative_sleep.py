@@ -1596,9 +1596,6 @@ def build_html(
         ))
     sections.append(make_kpi_row(*kpi_cards))
 
-    # -- Disclaimer --
-    sections.append(disclaimer_banner())
-
     # -- Section 1: Sleep Architecture --
     sections.append(section_html_or_placeholder(
         "Sleep Architecture",

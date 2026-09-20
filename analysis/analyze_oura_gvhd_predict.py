@@ -124,7 +124,7 @@ def _resolve_data_end() -> str:
     print("ERROR: No data found in database. Run: python api/import_oura.py --days 90", file=sys.stderr)
     sys.exit(1)
 
-# BOS risk score — loaded at runtime from SpO2/BOS analysis output
+# BOS risk score - loaded at runtime from SpO2/BOS analysis output
 SPO2_BOS_METRICS_PATH = REPORTS_DIR / "spo2_bos_metrics.json"
 
 
@@ -172,7 +172,7 @@ YELLOW_CONSEC_DAYS = 3
 RED_PREFLARE_PROB = 0.50
 RED_FLARE_PROB = 0.20
 
-# Visual palette (used by chart traces — NOT the HTML layout)
+# Visual palette (used by chart traces - NOT the HTML layout)
 COLORS = {
     "pre": ACCENT_BLUE,
     "post": ACCENT_RED,
@@ -1731,7 +1731,7 @@ def evaluate_alerts(
             validation["yellow_lead_time_days"] = lead_days_y
             log("ALERTS", f"  First YELLOW alert: {first_yellow['date']} ({lead_days_y}d before event)")
 
-        # N=1 case study — descriptive detection statistics only.
+        # N=1 case study - descriptive detection statistics only.
         # Sensitivity/specificity require an external validation cohort
         # and cannot be computed from a single retrospective event.
         event_window = set()
@@ -2130,7 +2130,7 @@ def bos_risk_integration(
     if BOS_RISK_SCORE is not None:
         log("BOS", f"  Loaded BOS score from SpO2 analysis: {BOS_RISK_SCORE} ({BOS_RISK_LEVEL})")
     else:
-        log("BOS", "  WARNING: spo2_bos_metrics.json unavailable — BOS score will be N/A")
+        log("BOS", "  WARNING: spo2_bos_metrics.json unavailable - BOS score will be N/A")
 
     result: dict[str, Any] = {
         "bos_risk_score": BOS_RISK_SCORE if BOS_RISK_SCORE is not None else "N/A",
@@ -2200,7 +2200,7 @@ def bos_risk_integration(
                 else "MODERATE" if systemic_mean > 40
                 else "LOW"
             ),
-            "note": "BOS component unavailable — systemic score only",
+            "note": "BOS component unavailable - systemic score only",
         }
     log("BOS", f"  Combined risk: {result['combined_risk']['combined_score']:.1f} ({result['combined_risk']['interpretation']})")
 

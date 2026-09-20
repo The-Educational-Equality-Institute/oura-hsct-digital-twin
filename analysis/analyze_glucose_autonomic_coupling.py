@@ -8,10 +8,10 @@ deliberately stubbed until real CGM data is imported after sensor activation
 produces a data-availability report, not fabricated stats.
 
 Data contract:
-  - glucose_readings    — created by api/import_glucose.py
-  - symptom_events      — created by api/import_symptom.py
-  - oura_hrv            — existing, 5-min RMSSD during sleep
-  - oura_heart_rate     — existing, 5-min HR samples
+  - glucose_readings    - created by api/import_glucose.py
+  - symptom_events      - created by api/import_symptom.py
+  - oura_hrv            - existing, 5-min RMSSD during sleep
+  - oura_heart_rate     - existing, 5-min HR samples
 
 Usage:
     python analysis/analyze_glucose_autonomic_coupling.py
@@ -24,12 +24,15 @@ import sqlite3
 import sys
 from dataclasses import dataclass
 from datetime import datetime
+from html import escape
 from pathlib import Path
 
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from config import DATABASE_PATH, REPORTS_DIR, PATIENT_LABEL
+from _theme import make_kpi_card, make_kpi_row, make_section, wrap_html  # noqa: E402
 
 REPORT_ID = "glucose_autonomic_coupling"
 REPORT_HTML = REPORTS_DIR / f"{REPORT_ID}.html"
@@ -152,7 +155,7 @@ def summarize_glucose(df: pd.DataFrame) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Hypothesis tests — stubbed until real data exists
+# Hypothesis tests - stubbed until real data exists
 # Each function maps to a hypothesis in reports/cgm_hypotheses_pre_registered.md
 # ---------------------------------------------------------------------------
 def test_h1_postprandial_hyperglycemia(
@@ -211,62 +214,104 @@ def _render_availability_html(
     summary: dict,
 ) -> str:
     ready = availability.trial_ready()
-    status_color = "#28A745" if ready else "#6C757D"
     status_label = "Trial data loaded" if ready else "Awaiting trial data"
+
+    def table(rows: list[tuple[str, object]]) -> str:
+        body = "".join(
+            f"<tr><td>{escape(str(label))}</td><td>{escape(str(value))}</td></tr>"
+            for label, value in rows
+        )
+        return f'<div class="odt-table-scroll"><table>{body}</table></div>'
 
     summary_rows = (
         "".join(
-            f"<tr><td>{k.replace('_', ' ')}</td><td>{v:.2f}</td></tr>"
+            f"<tr><td>{escape(k.replace('_', ' '))}</td><td>{v:.2f}</td></tr>"
             for k, v in summary.items()
             if isinstance(v, (int, float))
         )
         if summary
-        else '<tr><td colspan="2"><em>No glucose readings imported yet.</em></td></tr>'
+        else '<tr><td colspan="2">No glucose readings imported yet.</td></tr>'
+    )
+    body = make_kpi_row(
+        make_kpi_card(
+            "Trial status",
+            "Ready" if ready else "Pending",
+            status="good" if ready else "info",
+            status_label="Ready" if ready else "Pending",
+            detail=status_label,
+        ),
+        make_kpi_card(
+            "Glucose rows",
+            availability.glucose_rows,
+            status="good" if availability.glucose_rows else "neutral",
+            status_label="Loaded" if availability.glucose_rows else "Awaiting",
+            detail="Rows in glucose_readings",
+            decimals=0,
+        ),
+        make_kpi_card(
+            "Symptom events",
+            availability.symptom_rows,
+            status="info",
+            status_label="Logged",
+            detail="Rows in symptom_events",
+            decimals=0,
+        ),
+        make_kpi_card(
+            "Oura HRV rows",
+            availability.hrv_rows,
+            status="good" if availability.hrv_rows else "neutral",
+            status_label="Available" if availability.hrv_rows else "Missing",
+            detail="Rows in oura_hrv",
+            decimals=0,
+        ),
     )
 
-    return f"""<!doctype html>
-<html><head><meta charset="utf-8"><title>Glucose-Autonomic Coupling — {PATIENT_LABEL}</title>
-<style>
-  body {{ font-family: Inter, system-ui, sans-serif; max-width: 900px; margin: 2em auto; padding: 0 1em; color: #343A40; }}
-  h1 {{ color: #0056B3; }}
-  .status {{ padding: 0.5em 1em; border-left: 4px solid {status_color}; background: #F8F9FA; margin: 1em 0; }}
-  table {{ border-collapse: collapse; width: 100%; margin: 1em 0; }}
-  td, th {{ padding: 0.5em; border-bottom: 1px solid #E9ECEF; text-align: left; }}
-  .muted {{ color: #6C757D; font-size: 0.9em; }}
-</style>
-</head><body>
-<h1>Glucose–Autonomic Coupling</h1>
-<p class="muted">Patient: {PATIENT_LABEL} · Generated {datetime.now().isoformat(timespec="seconds")}</p>
-
-<div class="status"><strong>{status_label}.</strong></div>
-
-<h2>Data availability</h2>
-<table>
-  <tr><td>glucose_readings rows</td><td>{availability.glucose_rows}</td></tr>
-  <tr><td>glucose range</td><td>{availability.glucose_start or "—"} → {availability.glucose_end or "—"}</td></tr>
-  <tr><td>symptom_events rows</td><td>{availability.symptom_rows}</td></tr>
-  <tr><td>oura_hrv rows</td><td>{availability.hrv_rows}</td></tr>
-  <tr><td>oura_heart_rate rows</td><td>{availability.hr_rows}</td></tr>
-</table>
-
-<h2>Glucose summary</h2>
-<table>{summary_rows}</table>
-
-<h2>Hypotheses (pre-registered)</h2>
+    body += make_section(
+        "Data Availability",
+        table(
+            [
+                ("glucose_readings rows", availability.glucose_rows),
+                ("glucose range", f"{availability.glucose_start or '-'} to {availability.glucose_end or '-'}"),
+                ("symptom_events rows", availability.symptom_rows),
+                ("oura_hrv rows", availability.hrv_rows),
+                ("oura_heart_rate rows", availability.hr_rows),
+            ]
+        ),
+        "data-availability",
+    )
+    body += make_section(
+        "Glucose Summary",
+        f'<div class="odt-table-scroll"><table>{summary_rows}</table></div>',
+        "glucose-summary",
+    )
+    body += make_section(
+        "Pre-Registered Hypotheses",
+        """
+<div class="odt-narrative">
 <p>See <a href="cgm_hypotheses_pre_registered.md">cgm_hypotheses_pre_registered.md</a>
 for the analysis plan. Hypothesis tests are stubbed in this script until
 the trial produces data.</p>
 <ul>
-  <li>H1 — Postprandial hyperglycemia (&ge; 10.0 mmol/L within 120 min of meal)</li>
-  <li>H2 — Glycemic excursions followed by HRV depression (paired Wilcoxon)</li>
-  <li>H3 — Chest-pain events cluster in post-hyperglycemic windows (binomial)</li>
-  <li>H4 — Daily glucose CV correlates negatively with nightly RMSSD (Spearman)</li>
+  <li>H1 - Postprandial hyperglycemia (&ge; 10.0 mmol/L within 120 min of meal)</li>
+  <li>H2 - Glycemic excursions followed by HRV depression (paired Wilcoxon)</li>
+  <li>H3 - Chest-pain events cluster in post-hyperglycemic windows (binomial)</li>
+  <li>H4 - Daily glucose CV correlates negatively with nightly RMSSD (Spearman)</li>
 </ul>
-
-<p class="muted">This report re-computes from the current database on every run.
+<p>This report re-computes from the current database on every run.
 Not validated for clinical decision-making. Not a medical device.</p>
-</body></html>
-"""
+</div>
+""",
+        "hypotheses",
+    )
+
+    return wrap_html(
+        "Glucose-Autonomic Coupling",
+        body,
+        report_id=REPORT_ID,
+        subtitle="CGM x Oura readiness and pre-registered analysis plan",
+        header_meta=PATIENT_LABEL,
+        data_end=availability.glucose_end,
+    )
 
 
 def main() -> int:

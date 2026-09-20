@@ -38,7 +38,7 @@ try:
     )
 except ImportError:
     ACCENT_BLUE = "#3B82F6"
-    ACCENT_GREEN = "#10B981"
+    ACCENT_GREEN = "#3A3AD6"
     ACCENT_PURPLE = "#8B5CF6"
     ACCENT_CYAN = "#06B6D4"
     ACCENT_AMBER = "#F59E0B"

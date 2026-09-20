@@ -56,7 +56,8 @@ from _theme import (
     TEXT_PRIMARY, TEXT_SECONDARY, TEXT_TERTIARY,
     C_CRITICAL, C_WARNING, C_GOOD, C_CAUTION, C_NEUTRAL, C_BG_LIGHT,
     C_LIGHT, C_DARK, BG_ELEVATED, ACCENT_RED, ACCENT_BLUE, ACCENT_CYAN,
-    ACCENT_AMBER, ACCENT_GREEN,
+    ACCENT_AMBER, ACCENT_GREEN, ACCENT_ORANGE,
+    C_HR, C_HRV, C_SLEEP, C_TEMP, C_ACTIVITY, C_SPO2, C_BREATH,
 )
 
 pio.templates.default = "clinical_dark"
@@ -73,6 +74,10 @@ SLEEP_AVG_HR_NORMAL = 65  # bpm  - average HR during sleep for healthy adult
 C_OK = C_GOOD
 C_BLUE = ACCENT_BLUE
 C_BG = C_BG_LIGHT
+SERIES_OK = ACCENT_GREEN
+SERIES_WARNING = ACCENT_AMBER
+SERIES_SERIOUS = ACCENT_ORANGE
+SERIES_CRITICAL = ACCENT_RED
 
 
 # ---------------------------------------------------------------------------
@@ -385,7 +390,7 @@ def compute_stats(data: dict) -> dict:
 # Figure builders
 # ---------------------------------------------------------------------------
 
-## Removed: fig_executive_summary (Plotly indicators) — replaced by make_kpi_card HTML cards
+## Removed: fig_executive_summary (Plotly indicators) - replaced by make_kpi_card HTML cards
 
 
 def fig_hrv_deep_dive(data: dict) -> go.Figure:
@@ -425,7 +430,7 @@ def fig_hrv_deep_dive(data: dict) -> go.Figure:
     fig.add_trace(go.Scatter(
         x=daily["date"], y=daily["mean"],
         mode="lines+markers", name="Daily Mean RMSSD",
-        line=dict(color=C_CRITICAL, width=2),
+        line=dict(color=C_HRV, width=2),
         marker=dict(size=4, line=dict(width=0)),
         hovertemplate="<b>%{x|%b %d}</b><br>RMSSD: %{y:.1f} ms<extra></extra>",
     ), row=1, col=1)
@@ -454,7 +459,7 @@ def fig_hrv_deep_dive(data: dict) -> go.Figure:
     fig.add_annotation(
         text=f"Reference IQR ({NORM_RMSSD_P25}-{NORM_RMSSD_P75} ms)",
         xref="x domain", yref="y", x=0.98, y=(NORM_RMSSD_P25 + NORM_RMSSD_P75) / 2,
-        showarrow=False, font=dict(size=10, color=ACCENT_GREEN),
+        showarrow=False, font=dict(size=11, color=ACCENT_GREEN),
         xanchor="right", opacity=0.7, row=1, col=1,
     )
 
@@ -464,7 +469,7 @@ def fig_hrv_deep_dive(data: dict) -> go.Figure:
     fig.add_annotation(
         text=f"Low-HRV reference <{ESC_RMSSD_DEFICIENCY} ms",
         xref="x domain", yref="y", x=0.02, y=ESC_RMSSD_DEFICIENCY,
-        showarrow=False, font=dict(size=10, color=ACCENT_RED),
+        showarrow=False, font=dict(size=11, color=ACCENT_RED),
         xanchor="left", yanchor="bottom", row=1, col=1,
     )
 
@@ -473,14 +478,14 @@ def fig_hrv_deep_dive(data: dict) -> go.Figure:
                   line_color=ACCENT_BLUE, line_width=1.5, opacity=0.7, row=1, col=1)
     fig.add_annotation(
         text="Ruxolitinib", x=pd.Timestamp(TREATMENT_START), yref="y domain", y=0.95,
-        showarrow=False, font=dict(size=10, color=ACCENT_BLUE),
+        showarrow=False, font=dict(size=11, color=ACCENT_BLUE),
         textangle=-90, xanchor="right", row=1, col=1,
     )
 
     # --- Panel 2: Distribution ---
     fig.add_trace(go.Histogram(
         x=hrv["rmssd"], nbinsx=50, name="RMSSD Distribution",
-        marker_color=C_CRITICAL, opacity=0.8,
+        marker_color=C_HRV, opacity=0.8,
         marker_line=dict(color="rgba(239,68,68,0.3)", width=0.5),
         hovertemplate="<b>%{x:.0f} ms</b><br>Count: %{y} samples<extra></extra>",
     ), row=1, col=2)
@@ -532,7 +537,7 @@ def fig_hrv_deep_dive(data: dict) -> go.Figure:
     fig.add_trace(go.Bar(
         x=hourly["hour"], y=hourly["mean"],
         name="RMSSD per Hour",
-        marker_color=[C_OK if v > 10 else C_CRITICAL for v in hourly["mean"]],
+        marker_color=C_HRV,
         marker_line=dict(color="rgba(255,255,255,0.08)", width=0.5),
         error_y=dict(type="data", array=hourly["std"], visible=True,
                      color="rgba(255,255,255,0.25)", thickness=1.5),
@@ -603,7 +608,7 @@ def fig_heart_rate(data: dict) -> go.Figure:
     fig.add_trace(go.Scatter(
         x=daily["date"], y=daily["mean"],
         mode="lines", name="Daily Mean HR",
-        line=dict(color=C_CRITICAL, width=2),
+        line=dict(color=C_HR, width=2),
         hovertemplate="<b>%{x|%b %d}</b><br>Mean HR: %{y:.0f} bpm<extra></extra>",
     ), row=1, col=1)
 
@@ -620,7 +625,7 @@ def fig_heart_rate(data: dict) -> go.Figure:
     fig.add_annotation(
         text=f"Nocturnal concern {NOCTURNAL_HR_ELEVATED} bpm", xref="x domain", yref="y",
         x=0.02, y=NOCTURNAL_HR_ELEVATED, showarrow=False,
-        font=dict(size=10, color=ACCENT_AMBER), xanchor="left", yanchor="bottom",
+        font=dict(size=11, color=ACCENT_AMBER), xanchor="left", yanchor="bottom",
         row=1, col=1,
     )
 
@@ -634,7 +639,7 @@ def fig_heart_rate(data: dict) -> go.Figure:
     fig.add_trace(go.Scatter(
         x=hourly["hour"], y=hourly["mean"],
         mode="lines+markers", name="HR per Hour",
-        line=dict(color=C_CRITICAL, width=2, shape="spline"),
+        line=dict(color=C_HR, width=2, shape="spline"),
         fill="tozeroy", fillcolor="rgba(239,68,68,0.06)",
         marker=dict(size=5, line=dict(width=0)),
         hovertemplate="<b>%{x}:00</b><br>Mean HR: %{y:.0f} bpm<br>Samples: %{customdata}<extra></extra>",
@@ -669,7 +674,7 @@ def fig_heart_rate(data: dict) -> go.Figure:
         ">120 (severe)": (hr["bpm"] >= 120).sum(),
     }
     total = len(hr)
-    colors = [ACCENT_CYAN, C_OK, C_CAUTION, C_WARNING, C_CRITICAL, ACCENT_RED]
+    colors = [ACCENT_BLUE, SERIES_OK, SERIES_WARNING, SERIES_SERIOUS, C_HR, ACCENT_RED]
 
     fig.add_trace(go.Bar(
         x=list(zones.keys()),
@@ -726,13 +731,10 @@ def fig_sleep_analysis(data: dict) -> go.Figure:
 
     # --- Panel 1: Sleep score ---
     if not sl.empty:
-        colors = sl["score"].apply(
-            lambda v: C_CRITICAL if v < 50 else (C_WARNING if v < 60 else (C_CAUTION if v < 70 else C_OK))
-        )
         fig.add_trace(go.Bar(
             x=sl["date"], y=sl["score"],
             name="Sleep Score",
-            marker_color=colors,
+            marker_color=C_SLEEP,
             marker_line=dict(color="rgba(255,255,255,0.08)", width=0.5),
             hovertemplate="<b>%{x|%b %d}</b><br>Sleep Score: %{y}<extra></extra>",
         ), row=1, col=1)
@@ -750,7 +752,7 @@ def fig_sleep_analysis(data: dict) -> go.Figure:
                       row=1, col=1)
         fig.add_annotation(
             text="Good sleep (70)", xref="x domain", yref="y",
-            x=0.98, y=70, showarrow=False, font=dict(size=10, color=TEXT_TERTIARY),
+            x=0.98, y=70, showarrow=False, font=dict(size=11, color=TEXT_TERTIARY),
             xanchor="right", yanchor="bottom", row=1, col=1,
         )
 
@@ -771,7 +773,7 @@ def fig_sleep_analysis(data: dict) -> go.Figure:
         fig.add_trace(go.Scatter(
             x=long_sleep["day"], y=long_sleep["efficiency"],
             mode="lines+markers", name="Efficiency %",
-            line=dict(color=C_OK, width=2.5),
+            line=dict(color=C_SLEEP, width=2.5),
             marker=dict(size=4, line=dict(width=0)),
             yaxis="y4",
             hovertemplate="<b>%{x|%b %d}</b><br>Efficiency: %{y}%<extra></extra>",
@@ -781,7 +783,7 @@ def fig_sleep_analysis(data: dict) -> go.Figure:
                       row=1, col=2)
         fig.add_annotation(
             text="7 hrs recommended", xref="x2 domain", yref="y2",
-            x=0.98, y=7, showarrow=False, font=dict(size=10, color=TEXT_TERTIARY),
+            x=0.98, y=7, showarrow=False, font=dict(size=11, color=TEXT_TERTIARY),
             xanchor="right", yanchor="bottom", row=1, col=2,
         )
 
@@ -790,7 +792,7 @@ def fig_sleep_analysis(data: dict) -> go.Figure:
         fig.add_trace(go.Scatter(
             x=long_sleep["day"], y=long_sleep["average_heart_rate"],
             mode="lines+markers", name="Avg HR (sleep)",
-            line=dict(color=C_CRITICAL, width=2),
+            line=dict(color=C_HR, width=2),
             marker=dict(size=4, line=dict(width=0)),
             hovertemplate="<b>%{x|%b %d}</b><br>Avg HR: %{y:.0f} bpm<extra></extra>",
         ), row=2, col=1)
@@ -807,7 +809,7 @@ def fig_sleep_analysis(data: dict) -> go.Figure:
                       row=2, col=1)
         fig.add_annotation(
             text="Elevated for sleep", xref="x3 domain", yref="y3",
-            x=0.98, y=80, showarrow=False, font=dict(size=10, color=ACCENT_AMBER),
+            x=0.98, y=80, showarrow=False, font=dict(size=11, color=ACCENT_AMBER),
             xanchor="right", yanchor="bottom", row=2, col=1,
         )
 
@@ -816,7 +818,7 @@ def fig_sleep_analysis(data: dict) -> go.Figure:
         fig.add_trace(go.Bar(
             x=long_sleep["day"], y=long_sleep["average_hrv"],
             name="Sleep HRV",
-            marker_color=C_CRITICAL,
+            marker_color=C_HRV,
             marker_line=dict(color="rgba(239,68,68,0.2)", width=0.5),
             hovertemplate="<b>%{x|%b %d}</b><br>Sleep HRV: %{y:.0f} ms<extra></extra>",
         ), row=2, col=2)
@@ -824,7 +826,7 @@ def fig_sleep_analysis(data: dict) -> go.Figure:
         fig.add_trace(go.Scatter(
             x=long_sleep["day"], y=long_sleep["average_breath"],
             mode="lines+markers", name="Respiratory Rate",
-            line=dict(color=C_OK, width=2),
+            line=dict(color=C_BREATH, width=2),
             marker=dict(size=4, line=dict(width=0)),
             hovertemplate="<b>%{x|%b %d}</b><br>Breath: %{y:.1f} /min<extra></extra>",
         ), row=2, col=2)
@@ -834,7 +836,7 @@ def fig_sleep_analysis(data: dict) -> go.Figure:
         fig.add_annotation(
             text=f"Deficiency {ESC_RMSSD_DEFICIENCY} ms",
             xref="x4 domain", yref="y4", x=0.02, y=ESC_RMSSD_DEFICIENCY,
-            showarrow=False, font=dict(size=10, color=ACCENT_RED),
+            showarrow=False, font=dict(size=11, color=ACCENT_RED),
             xanchor="left", yanchor="bottom", row=2, col=2,
         )
 
@@ -893,9 +895,7 @@ def fig_readiness_recovery(data: dict) -> go.Figure:
     fig.add_trace(go.Bar(
         x=r["date"], y=r["score"],
         name="Readiness Score",
-        marker_color=r["score"].apply(
-            lambda v: C_CRITICAL if v < 50 else (C_WARNING if v < 60 else (C_CAUTION if v < 70 else C_OK))
-        ),
+        marker_color=ACCENT_BLUE,
         marker_line=dict(color="rgba(255,255,255,0.08)", width=0.5),
         hovertemplate="<b>%{x|%b %d}</b><br>Readiness: %{y}/100<extra></extra>",
     ), row=1, col=1)
@@ -912,9 +912,9 @@ def fig_readiness_recovery(data: dict) -> go.Figure:
     fig.add_trace(go.Scatter(
         x=r["date"], y=r["hrv_balance"],
         mode="lines+markers", name="HRV Balance",
-        line=dict(color=C_CRITICAL, width=2),
+        line=dict(color=C_HRV, width=2),
         marker=dict(size=5,
-                    color=r["hrv_balance"].apply(lambda v: C_CRITICAL if pd.notna(v) and v < 20 else C_BLUE),
+                    color=C_HRV,
                     line=dict(width=0)),
         hovertemplate="<b>%{x|%b %d}</b><br>HRV Balance: %{y}/100<extra></extra>",
     ), row=1, col=2)
@@ -922,7 +922,7 @@ def fig_readiness_recovery(data: dict) -> go.Figure:
     fig.add_trace(go.Scatter(
         x=r["date"], y=r["sleep_balance"],
         mode="lines+markers", name="Sleep Balance",
-        line=dict(color=C_OK, width=2),
+        line=dict(color=C_SLEEP, width=2),
         marker=dict(size=4, line=dict(width=0)),
         hovertemplate="<b>%{x|%b %d}</b><br>Sleep Balance: %{y}/100<extra></extra>",
     ), row=1, col=2)
@@ -941,9 +941,7 @@ def fig_readiness_recovery(data: dict) -> go.Figure:
             fig.add_trace(go.Bar(
                 x=sp_long["day"], y=sp_long["lowest_heart_rate"],
                 name="Lowest Nocturnal HR",
-                marker_color=sp_long["lowest_heart_rate"].apply(
-                    lambda v: C_CRITICAL if v > 80 else (C_WARNING if v > NOCTURNAL_HR_DIP_NORMAL_HIGH else C_OK)
-                ),
+                marker_color=C_HR,
                 marker_line=dict(color="rgba(255,255,255,0.08)", width=0.5),
                 hovertemplate="<b>%{x|%b %d}</b><br>Lowest HR: %{y} bpm<extra></extra>",
             ), row=2, col=1)
@@ -965,11 +963,9 @@ def fig_readiness_recovery(data: dict) -> go.Figure:
         fig.add_trace(go.Scatter(
             x=td["date"], y=td["temperature_deviation"],
             mode="lines+markers", name="Temp Deviation",
-            line=dict(color=C_BLUE, width=2),
+            line=dict(color=C_TEMP, width=2),
             marker=dict(size=4,
-                        color=td["temperature_deviation"].apply(
-                            lambda v: C_CRITICAL if abs(v) > 0.5 else C_OK
-                        ),
+                        color=C_TEMP,
                         line=dict(width=0)),
             fill="tozeroy", fillcolor="rgba(59,130,246,0.06)",
             hovertemplate="<b>%{x|%b %d}</b><br>Temp: %{y:+.2f} C<extra></extra>",
@@ -1025,19 +1021,19 @@ def fig_resilience_cv_age(data: dict) -> go.Figure:
         fig.add_trace(go.Scatter(
             x=res["date"], y=res["contributors_sleep_recovery"],
             mode="lines+markers", name="Sleep Recovery",
-            line=dict(color=C_BLUE, width=2), marker=dict(size=4, line=dict(width=0)),
+            line=dict(color=C_SLEEP, width=2), marker=dict(size=4, line=dict(width=0)),
             hovertemplate="<b>%{x|%b %d}</b><br>Sleep Recovery: %{y:.1f}<extra></extra>",
         ), row=1, col=1)
         fig.add_trace(go.Scatter(
             x=res["date"], y=res["contributors_daytime_recovery"],
             mode="lines+markers", name="Daytime Recovery",
-            line=dict(color=C_OK, width=2), marker=dict(size=4, line=dict(width=0)),
+            line=dict(color=C_ACTIVITY, width=2), marker=dict(size=4, line=dict(width=0)),
             hovertemplate="<b>%{x|%b %d}</b><br>Daytime Recovery: %{y:.1f}<extra></extra>",
         ), row=1, col=1)
         fig.add_trace(go.Scatter(
             x=res["date"], y=res["contributors_stress"],
             mode="lines+markers", name="Stress Mgmt",
-            line=dict(color=C_WARNING, width=2), marker=dict(size=4, line=dict(width=0)),
+            line=dict(color=SERIES_WARNING, width=2), marker=dict(size=4, line=dict(width=0)),
             hovertemplate="<b>%{x|%b %d}</b><br>Stress Mgmt: %{y:.1f}<extra></extra>",
         ), row=1, col=1)
 
@@ -1048,13 +1044,13 @@ def fig_resilience_cv_age(data: dict) -> go.Figure:
         fig.add_trace(go.Scatter(
             x=cva["date"], y=cva["vascular_age"],
             mode="lines+markers", name="Vascular Age",
-            line=dict(color=C_CRITICAL, width=2),
+            line=dict(color=C_HR, width=2),
             marker=dict(size=6, line=dict(width=0)),
             fill="tozeroy", fillcolor="rgba(239,68,68,0.05)",
             hovertemplate="<b>%{x|%b %d}</b><br>Vascular Age: %{y:.0f} yr<extra></extra>",
         ), row=1, col=2)
 
-        fig.add_hline(y=cva["vascular_age"].mean(), line_dash="dash", line_color=C_WARNING,
+        fig.add_hline(y=cva["vascular_age"].mean(), line_dash="dash", line_color=SERIES_WARNING,
                       annotation_text=f"Mean vascular ({cva['vascular_age'].mean():.0f})", row=1, col=2)
 
     fig.update_xaxes(tickformat="%d %b", row=1, col=1,
@@ -1095,11 +1091,9 @@ def fig_spo2_stress(data: dict) -> go.Figure:
         fig.add_trace(go.Scatter(
             x=spo["date"], y=spo["spo2_average"],
             mode="lines+markers", name="SpO2",
-            line=dict(color=C_BLUE, width=2),
+            line=dict(color=C_SPO2, width=2),
             marker=dict(size=5,
-                        color=spo["spo2_average"].apply(
-                            lambda v: C_CRITICAL if v < 94 else (C_WARNING if v < 95.5 else C_OK)
-                        ),
+                        color=C_SPO2,
                         line=dict(width=0)),
             hovertemplate="<b>%{x|%b %d}</b><br>SpO2: %{y:.1f}%<extra></extra>",
         ), row=1, col=1)
@@ -1112,14 +1106,14 @@ def fig_spo2_stress(data: dict) -> go.Figure:
                       row=1, col=1)
         fig.add_annotation(
             text="95% lower limit", xref="x domain", yref="y",
-            x=0.02, y=95, showarrow=False, font=dict(size=10, color=ACCENT_AMBER),
+            x=0.02, y=95, showarrow=False, font=dict(size=11, color=ACCENT_AMBER),
             xanchor="left", yanchor="bottom", row=1, col=1,
         )
         fig.add_hline(y=94, line_dash="dash", line_color=ACCENT_RED, line_width=1,
                       row=1, col=1)
         fig.add_annotation(
             text="94% critical", xref="x domain", yref="y",
-            x=0.02, y=94, showarrow=False, font=dict(size=10, color=ACCENT_RED),
+            x=0.02, y=94, showarrow=False, font=dict(size=11, color=ACCENT_RED),
             xanchor="left", yanchor="bottom", row=1, col=1,
         )
 
@@ -1129,13 +1123,13 @@ def fig_spo2_stress(data: dict) -> go.Figure:
         stress = stress.sort_values("date")
         fig.add_trace(go.Bar(
             x=stress["date"], y=stress["stress_min"],
-            name="Stress", marker_color=C_CRITICAL, opacity=0.7,
+            name="Stress", marker_color=C_HR, opacity=0.7,
             marker_line=dict(color="rgba(239,68,68,0.2)", width=0.5),
             hovertemplate="<b>%{x|%b %d}</b><br>Stress: %{y:.0f} min<extra></extra>",
         ), row=1, col=2)
         fig.add_trace(go.Bar(
             x=stress["date"], y=stress["recovery_min"],
-            name="Recovery", marker_color=C_OK, opacity=0.7,
+            name="Recovery", marker_color=C_ACTIVITY, opacity=0.7,
             marker_line=dict(color="rgba(16,185,129,0.2)", width=0.5),
             hovertemplate="<b>%{x|%b %d}</b><br>Recovery: %{y:.0f} min<extra></extra>",
         ), row=1, col=2)
@@ -1186,10 +1180,7 @@ def fig_activity(data: dict) -> go.Figure:
     fig.add_trace(go.Bar(
         x=act["date"], y=act["steps"],
         name="Steps",
-        marker_color=act["steps"].apply(
-            lambda v: C_CRITICAL if v < 1000 else (
-                C_WARNING if v < 2000 else (C_CAUTION if v < 5000 else C_OK))
-        ),
+        marker_color=C_ACTIVITY,
         marker_line=dict(color="rgba(255,255,255,0.08)", width=0.5),
         hovertemplate="<b>%{x|%b %d}</b><br>Steps: %{y:,.0f}<extra></extra>",
     ), row=1, col=1)
@@ -1198,14 +1189,14 @@ def fig_activity(data: dict) -> go.Figure:
                   row=1, col=1)
     fig.add_annotation(
         text="Sedentary (5,000)", xref="x domain", yref="y",
-        x=0.98, y=5000, showarrow=False, font=dict(size=10, color=TEXT_TERTIARY),
+        x=0.98, y=5000, showarrow=False, font=dict(size=11, color=TEXT_TERTIARY),
         xanchor="right", yanchor="bottom", row=1, col=1,
     )
     fig.add_hline(y=2000, line_dash="dash", line_color=ACCENT_AMBER, line_width=1,
                   row=1, col=1)
     fig.add_annotation(
         text="Severe inactivity (2,000)", xref="x domain", yref="y",
-        x=0.98, y=2000, showarrow=False, font=dict(size=10, color=ACCENT_AMBER),
+        x=0.98, y=2000, showarrow=False, font=dict(size=11, color=ACCENT_AMBER),
         xanchor="right", yanchor="bottom", row=1, col=1,
     )
 
@@ -1213,9 +1204,7 @@ def fig_activity(data: dict) -> go.Figure:
     fig.add_trace(go.Bar(
         x=act["date"], y=act["score"],
         name="Activity Score",
-        marker_color=act["score"].apply(
-            lambda v: C_CRITICAL if v < 50 else (C_WARNING if v < 60 else (C_CAUTION if v < 70 else C_OK))
-        ),
+        marker_color=C_ACTIVITY,
         marker_line=dict(color="rgba(255,255,255,0.08)", width=0.5),
         hovertemplate="<b>%{x|%b %d}</b><br>Activity Score: %{y}<extra></extra>",
     ), row=1, col=2)
@@ -1232,7 +1221,7 @@ def fig_activity(data: dict) -> go.Figure:
     # --- Calories ---
     fig.add_trace(go.Bar(
         x=act["date"], y=act["active_calories"],
-        name="Active Cal", marker_color=C_WARNING,
+        name="Active Cal", marker_color=SERIES_WARNING,
         marker_line=dict(color="rgba(245,158,11,0.2)", width=0.5),
         hovertemplate="<b>%{x|%b %d}</b><br>Active: %{y:.0f} kcal<extra></extra>",
     ), row=2, col=1)
@@ -1247,13 +1236,13 @@ def fig_activity(data: dict) -> go.Figure:
     # --- Time breakdown (hours) ---
     fig.add_trace(go.Bar(
         x=act["date"], y=act["inactive_time"] / 3600,
-        name="Inactive", marker_color=C_CRITICAL, opacity=0.7,
+        name="Inactive", marker_color=TEXT_TERTIARY, opacity=0.7,
         marker_line=dict(color="rgba(255,255,255,0.05)", width=0.5),
         hovertemplate="<b>%{x|%b %d}</b><br>Inactive: %{y:.1f} hrs<extra></extra>",
     ), row=2, col=2)
     fig.add_trace(go.Bar(
         x=act["date"], y=act["rest_time"] / 3600,
-        name="Rest", marker_color=C_CAUTION, opacity=0.7,
+        name="Rest", marker_color=C_SLEEP, opacity=0.7,
         marker_line=dict(color="rgba(255,255,255,0.05)", width=0.5),
         hovertemplate="<b>%{x|%b %d}</b><br>Rest: %{y:.1f} hrs<extra></extra>",
     ), row=2, col=2)
@@ -1265,7 +1254,7 @@ def fig_activity(data: dict) -> go.Figure:
     ), row=2, col=2)
     fig.add_trace(go.Bar(
         x=act["date"], y=(act["medium_activity_time"] + act["high_activity_time"]) / 3600,
-        name="Med/High", marker_color=C_OK, opacity=0.7,
+        name="Med/High", marker_color=C_ACTIVITY, opacity=0.7,
         marker_line=dict(color="rgba(255,255,255,0.05)", width=0.5),
         hovertemplate="<b>%{x|%b %d}</b><br>Med/High: %{y:.1f} hrs<extra></extra>",
     ), row=2, col=2)
@@ -1308,7 +1297,7 @@ def fig_rmssd_comparison_bar(stats: dict) -> go.Figure:
     ]
     vals = [patient_rmssd, ESC_RMSSD_DEFICIENCY, NORM_RMSSD_P50]
     errs = [0, 0, (NORM_RMSSD_P75 - NORM_RMSSD_P25) / 2]
-    colors = [C_CRITICAL, C_WARNING, C_OK]
+    colors = [C_HRV, SERIES_WARNING, SERIES_OK]
 
     fig = go.Figure(go.Bar(
         x=cats, y=vals,
@@ -1392,7 +1381,7 @@ def clinical_narrative(stats: dict) -> str:
         steps_history_ctx = (
             f'<div class="cs-bar-context" style="margin-top:4px;color:{C_CRITICAL};font-weight:500">'
             f'Peak Samsung Health baseline: {peak_steps:,} steps/day '
-            f'— current Oura-window mean is {decline_pct:.0f}% lower'
+            f'- current Oura-window mean is {decline_pct:.0f}% lower'
             f'</div>'
         )
     else:
@@ -1664,7 +1653,7 @@ def build_full_report(data: dict, stats: dict) -> str:
                       decimals=0,
                       status_label=sleep_label),
         make_kpi_card("Daily Steps", steps, "", status=steps_status,
-                      detail=(f"Peak Samsung Health baseline {stats['pre_dx_peak_steps']:,}/day — {stats['steps_decline_pct']:.0f}% lower now"
+                      detail=(f"Peak Samsung Health baseline {stats['pre_dx_peak_steps']:,}/day - {stats['steps_decline_pct']:.0f}% lower now"
                               if stats.get("pre_dx_peak_steps") else
                               f"{stats.get('steps_days_under_2000', 0)} days <2000"),
                       decimals=0,

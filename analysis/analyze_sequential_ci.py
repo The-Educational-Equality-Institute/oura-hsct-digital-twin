@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Sequential CausalImpact Analysis — Isolate Jakavi vs. Beta-Blocker Effects
+Sequential CausalImpact Analysis - Isolate Jakavi vs. Beta-Blocker Effects
 
 N-of-1 study with two interventions introduced at different times:
   - Ruxolitinib (Jakavi): started 2026-03-16
@@ -9,11 +9,11 @@ N-of-1 study with two interventions introduced at different times:
 A single pooled CausalImpact run confounds the two drugs. This script runs
 two separate analyses to disentangle their individual causal effects:
 
-  Run A — Jakavi effect (isolated):
+  Run A - Jakavi effect (isolated):
     Pre:  DATA_START to 2026-03-15  (no treatment)
     Post: 2026-03-16 to 2026-04-07  (Jakavi-only window, before BB)
 
-  Run B — Marginal beta-blocker effect:
+  Run B - Marginal beta-blocker effect:
     Pre:  2026-03-16 to 2026-04-07  (Jakavi-only as new baseline)
     Post: 2026-04-08 to latest data  (Jakavi + BB)
 
@@ -151,7 +151,7 @@ CI_WIDTH_WARN_RATIO = 2.0
 SAFE_DIV_EPS = 1e-15
 NITER = 5000
 
-# Metric definitions — the four metrics to analyze
+# Metric definitions - the four metrics to analyze
 METRIC_DEFS = {
     "mean_rmssd": {
         "label": "HRV Mean RMSSD",
@@ -241,16 +241,29 @@ def load_daily_metrics() -> pd.DataFrame:
         .reset_index()
     )
 
-    # Sleep periods: lowest_heart_rate, average_heart_rate, efficiency
+    # Sleep periods: lowest_heart_rate, average_heart_rate, efficiency.
+    # A date can carry several long_sleep periods (a split night); keep the
+    # longest so every date appears exactly once, matching the convention in
+    # analyze_oura_causal.py. Without this the daily matrix carries duplicate
+    # dates and reindexing onto a continuous date range raises
+    # "cannot reindex on an axis with duplicate labels".
     sleep = pd.read_sql_query(
-        """SELECT day as date, lowest_heart_rate, average_heart_rate, efficiency
+        """SELECT day as date, lowest_heart_rate, average_heart_rate, efficiency,
+                  total_sleep_duration
            FROM oura_sleep_periods
            WHERE type = 'long_sleep'
            ORDER BY day""",
         conn,
     )
-    for col in ["lowest_heart_rate", "average_heart_rate", "efficiency"]:
+    for col in ["lowest_heart_rate", "average_heart_rate", "efficiency",
+                "total_sleep_duration"]:
         sleep[col] = pd.to_numeric(sleep[col], errors="coerce")
+    sleep = (
+        sleep.sort_values(["date", "total_sleep_duration"], ascending=[True, False])
+        .drop_duplicates(subset="date", keep="first")
+        .drop(columns=["total_sleep_duration"])
+        .reset_index(drop=True)
+    )
     sleep = sleep.rename(columns={"efficiency": "sleep_efficiency"})
 
     conn.close()
@@ -745,7 +758,7 @@ def _build_comparison_chart(
 
     fig.update_layout(
         **LAYOUT_DEFAULTS,
-        title=dict(text=f"{meta['label']} — Full Timeline", font=dict(size=14)),
+        title=dict(text=f"{meta['label']} - Full Timeline", font=dict(size=14)),
         xaxis_title="Date",
         yaxis_title=f"{meta['label']} ({meta['unit']})",
         height=380,
@@ -1091,7 +1104,7 @@ def _interpret_single(result: dict, meta: dict, drug_name: str) -> str:
         f'<span style="color:{color};">{drug_name} significantly '
         f'{direction} {meta["label"].lower()} by '
         f'{abs_effect:.1f} {meta["unit"]} ({rel:+.1f}%), '
-        f'{format_p_value(p)} — <strong>{verdict}</strong>.</span>'
+        f'{format_p_value(p)} - <strong>{verdict}</strong>.</span>'
     )
 
 
@@ -1106,12 +1119,33 @@ def main() -> None:
     print("=" * 72)
 
     if not CAUSALIMPACT_AVAILABLE:
-        print(
-            "\nERROR: CausalImpact package not available.\n"
-            "Install with: pip install pycausalimpact\n"
-            "Or try: pip install tfcausalimpact\n"
+        REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "status": "dependency_unavailable",
+            "missing": "pycausalimpact or tfcausalimpact",
+            "generated_at": datetime.now().isoformat(timespec="seconds"),
+        }
+        JSON_OUTPUT.write_text(json.dumps(payload, indent=2))
+        body = make_section(
+            "Optional dependency unavailable",
+            (
+                "<p>Sequential CausalImpact requires <code>pycausalimpact</code> "
+                "or <code>tfcausalimpact</code>, which is part of the optional "
+                "full-stack environment. Core report regeneration continues "
+                "without this analysis.</p>"
+            ),
+            section_id="dependency",
         )
-        sys.exit(1)
+        html = wrap_html(
+            title="Sequential CausalImpact Analysis",
+            body_content=body,
+            report_id="sequential_ci",
+        )
+        HTML_OUTPUT.write_text(html)
+        print("\nWARN: CausalImpact package not available, wrote dependency placeholder")
+        print(f"[OUTPUT] JSON metrics: {JSON_OUTPUT}")
+        print(f"[OUTPUT] HTML report: {HTML_OUTPUT}")
+        return
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
