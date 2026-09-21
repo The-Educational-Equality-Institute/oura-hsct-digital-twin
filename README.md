@@ -130,7 +130,7 @@ cp config.example.py config.py
 python run_all.py
 ```
 
-No OAuth setup needed. The repo includes `data/demo.db` with real Oura Ring data (post-HSCT). The bundled snapshot covers 2026-01-08 to 2026-09-15 (240 nights with a scored long-sleep period). Reports appear in `reports/`.
+No OAuth setup needed. The repo includes `data/demo.db` with real Oura Ring data (post-HSCT). The bundled snapshot covers 2026-01-08 to 2026-09-21 (246 nights with a long-sleep period). Reports appear in `reports/`.
 
 With `requirements.txt` alone, the optional-backend modules degrade gracefully and say so on the page. Install `requirements-full.txt` for the full set.
 
