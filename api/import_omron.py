@@ -15,14 +15,14 @@ fields at ingest time:
 Usage:
     python api/import_omron.py                          # default profile, default inbox
     python api/import_omron.py --profile henrik
-    python api/import_omron.py --inbox /mnt/c/Users/ovehe/omron-bridge/out
+    python api/import_omron.py --inbox /path/to/omron-bridge/out   # or set OMRON_INBOX
 
 The ingester is idempotent: UNIQUE(user_slot, datetime) dedupes re-reads of the
 device's 100-slot ring buffer. CSV files are moved to `<inbox>/ingested/` after
 successful import so they aren't re-processed.
 
 Companion:
-    Windows runner that produces the CSVs: C:\\Users\\ovehe\\omron-bridge\\omron_pull.py
+    Windows runner that produces the CSVs: omron-bridge\\omron_pull.py (in the bridge folder)
 """
 from __future__ import annotations
 
@@ -32,6 +32,7 @@ import json
 import logging
 import shutil
 import sqlite3
+import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -44,7 +45,7 @@ from profiles import PROFILES  # noqa: E402  # used for --profile flag
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger("import_omron")
 
-DEFAULT_INBOX = Path("/mnt/c/Users/ovehe/omron-bridge/out")
+DEFAULT_INBOX = Path(os.environ.get("OMRON_INBOX", "data/omron-inbox"))
 TRIPLET_WINDOW = timedelta(minutes=5)
 
 # OMRON M7 AFib (HEM-7380T1) per-reading record byte format:
