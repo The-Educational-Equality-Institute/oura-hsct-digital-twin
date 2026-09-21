@@ -10,7 +10,7 @@ template built here, NOT the dark _theme.py system.
 
 Outputs:
     reports/anthropic_case.html
-    /home/henrik/projects/helseoversikt/36_Anthropic_Case/technical/anthropic_case.html
+    plus an optional second copy at $ANTHROPIC_CASE_COPY_TO, when that variable is set
 
 Data:
     - Hero chart series: oura_sleep_periods (day, average_hrv, average_heart_rate)
@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import os
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -50,9 +51,9 @@ from config import (
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _counterfactual import fork_chart_html, format_p, phase_estimates  # noqa: E402  (the digital-twin fork)
 
-HELSEOVERSIKT_COPY = Path(
-    "/home/henrik/projects/helseoversikt/36_Anthropic_Case/technical/anthropic_case.html"
-)
+# Optional second output path (a private working copy elsewhere on disk).
+# Never hard-code a local path here; the repository is public.
+EXTRA_COPY = Path(os.environ["ANTHROPIC_CASE_COPY_TO"]) if os.environ.get("ANTHROPIC_CASE_COPY_TO") else None
 
 RECENT_WINDOW_DAYS = 30
 
@@ -775,9 +776,10 @@ def main() -> None:
     out_path.write_text(html, encoding="utf-8")
     print(f"Wrote {out_path}")
 
-    HELSEOVERSIKT_COPY.parent.mkdir(parents=True, exist_ok=True)
-    HELSEOVERSIKT_COPY.write_text(html, encoding="utf-8")
-    print(f"Wrote {HELSEOVERSIKT_COPY}")
+    if EXTRA_COPY is not None:
+        EXTRA_COPY.parent.mkdir(parents=True, exist_ok=True)
+        EXTRA_COPY.write_text(html, encoding="utf-8")
+        print(f"Wrote {EXTRA_COPY}")
 
     hrv = stats["hrv"]
     avg_hr = stats["avg_hr"]
