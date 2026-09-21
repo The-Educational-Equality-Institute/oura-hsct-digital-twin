@@ -193,3 +193,17 @@ def validate_config() -> bool:
     if ok:
         print(f"Config OK - DB: {db}  Reports: {REPORTS_DIR}")
     return ok
+
+# --- Public site identity (read by analysis/_theme.py and analysis/generate_index.py) ---
+SITE_NAME = "Oura Digital Twin"
+SITE_URL = "https://digital-twin.theeducationalequalityinstitute.org"
+SITE_DESCRIPTION = (
+    "Nightly Oura ring data from one post-transplant patient, analysed every morning "
+    "by an open-source pipeline built with Claude Code. N=1, exploratory, MIT licensed."
+)
+SITE_INDEXABLE = False  # False writes noindex on every page. One flag for the whole site.
+OG_IMAGE_PATH = "assets/og.png"
+REPO_URL = "https://github.com/The-Educational-Equality-Institute/oura-hsct-digital-twin"
+COMPANION_URL = "https://genomics.theeducationalequalityinstitute.org"
+COMPANION_LABEL = "Genomics portal"
+HEALTH_EQUITY_URL = "https://theeducationalequalityinstitute.org/programmes/health-equity/"

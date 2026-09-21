@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Weekly Trend Tracker — This Week vs Last Week
+Weekly Trend Tracker - This Week vs Last Week
 
 Compares the last 7 days against the prior 7 days across 12 key health
 metrics. Designed for doctor visits: clear KPI cards, sparklines, traffic
@@ -225,7 +225,7 @@ def extract_series(tables: dict[str, pd.DataFrame], m: MetricDef) -> pd.Series:
     """Pull a single metric series from the loaded tables, applying transforms."""
     df = tables.get(m.table, pd.DataFrame())
     if df.empty or m.column not in df.columns:
-        return pd.Series(dtype=float, name=m.key)
+        return pd.Series(dtype=float, name=m.key, index=pd.DatetimeIndex([], tz="UTC"))
     s = df[m.column].dropna().astype(float)
     s.name = m.key
     if m.transform == "sec_to_hours":
@@ -792,7 +792,7 @@ def build_doctor_summary_html(bullets: list[str]) -> str:
 
     return (
         f'<div class="doctor-summary">'
-        f'<h3>Doctor Summary &mdash; Week of {THIS_WEEK_START} to {THIS_WEEK_END}</h3>'
+        f'<h3>Doctor Summary - Week of {THIS_WEEK_START} to {THIS_WEEK_END}</h3>'
         f'<ul>{"".join(items)}</ul>'
         f'</div>'
     )
@@ -840,7 +840,7 @@ def build_json(
 
 def main() -> int:
     """Load data, compute weekly comparisons, generate HTML + JSON."""
-    print("Weekly Trend Tracker — This Week vs Last Week")
+    print("Weekly Trend Tracker - This Week vs Last Week")
     print("=" * 60)
     print(f"  This week:  {THIS_WEEK_START} to {THIS_WEEK_END}")
     print(f"  Last week:  {LAST_WEEK_START} to {LAST_WEEK_END}")
@@ -940,7 +940,7 @@ def main() -> int:
             body_content=body,
             report_id="weekly",
             subtitle=f"{THIS_WEEK_START} to {THIS_WEEK_END}",
-            header_meta="Patient 1 \u2014 Weekly Tracker",
+            header_meta="Patient 1 - Weekly Tracker",
             extra_css=EXTRA_CSS,
         )
         HTML_OUTPUT.write_text(html_content, encoding="utf-8")

@@ -195,7 +195,7 @@ def _bos_risk_status(mean_breath: float, trend_slope: float, pct_elevated: float
 # ---------------------------------------------------------------------------
 
 def load_data(
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> dict[str, dict[str, pd.Series]]:
     """Load breathing rate, HRV, and HR data for both patients.
 
@@ -361,30 +361,34 @@ def compute_rux_effect(
 
 def compute_comparison(
     data: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> dict[str, Any]:
     """Distribution comparison, z-score analysis, coupling metrics."""
-    h_id = patients[0].patient_id
-    m_id = patients[1].patient_id
-    h_breath = data[h_id]["breath"]
-    m_breath = data[m_id]["breath"]
+    patient_ids = [p.patient_id for p in patients]
 
-    # Distribution comparison
-    dist_comp = compare_distributions(h_breath, m_breath)
+    # Pairwise distribution comparison (first two patients for backward compat)
+    first_breath = data[patient_ids[0]]["breath"] if patient_ids[0] in data else pd.Series(dtype=float)
+    second_breath = data[patient_ids[1]]["breath"] if len(patient_ids) > 1 and patient_ids[1] in data else pd.Series(dtype=float)
+    dist_comp = compare_distributions(first_breath, second_breath)
 
-    # Z-score normalization
-    h_norm = zscore_normalize(h_breath, patient_id=h_id) if not h_breath.empty and len(h_breath) >= 3 else None
-    m_norm = zscore_normalize(m_breath, patient_id=m_id) if not m_breath.empty and len(m_breath) >= 3 else None
+    # Z-score normalization per patient
+    zscore_means: dict[str, float] = {}
+    for pid in patient_ids:
+        breath = data.get(pid, {}).get("breath", pd.Series(dtype=float))
+        if not breath.empty and len(breath) >= 3:
+            norm = zscore_normalize(breath, patient_id=pid)
+            zscore_means[pid] = float(norm.z_scores.mean())
+        else:
+            zscore_means[pid] = np.nan
 
     # Breathing-HRV coupling (Spearman) for each patient
     coupling: dict[str, dict[str, Any]] = {}
-    for pid in [h_id, m_id]:
-        breath = data[pid]["breath"]
-        hrv = data[pid]["hrv"]
+    for pid in patient_ids:
+        breath = data.get(pid, {}).get("breath", pd.Series(dtype=float))
+        hrv = data.get(pid, {}).get("hrv", pd.Series(dtype=float))
         if breath.empty or hrv.empty:
             coupling[pid] = {"spearman_r": np.nan, "p_value": np.nan, "n": 0}
             continue
-        # Align by date index
         common = breath.index.intersection(hrv.index)
         if len(common) < 5:
             coupling[pid] = {"spearman_r": np.nan, "p_value": np.nan, "n": len(common)}
@@ -401,8 +405,10 @@ def compute_comparison(
 
     return {
         "distribution": dist_comp,
-        "henrik_zscore_mean": float(h_norm.z_scores.mean()) if h_norm else np.nan,
-        "mitch_zscore_mean": float(m_norm.z_scores.mean()) if m_norm else np.nan,
+        "zscore_means": zscore_means,
+        # Backward compat keys
+        "henrik_zscore_mean": zscore_means.get("henrik", np.nan),
+        "mitch_zscore_mean": zscore_means.get("mitch", np.nan),
         "coupling": coupling,
     }
 
@@ -457,7 +463,7 @@ def detect_anomalies(
 
 def _fig_breathing_timeline(
     data: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> go.Figure:
     """Fig 1: Dual timeline -- both patients' breathing rate with 7d rolling mean."""
     breath_data = {p.patient_id: data[p.patient_id]["breath"] for p in patients}
@@ -492,7 +498,7 @@ def _fig_breathing_timeline(
 
 def _fig_distribution(
     data: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> go.Figure:
     """Fig 2: Distribution comparison -- violin plots for both patients."""
     breath_data = {p.patient_id: data[p.patient_id]["breath"] for p in patients}
@@ -515,12 +521,12 @@ def _fig_distribution(
 
 def _fig_rux_effect(
     data: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
     rux_stats: dict[str, Any],
 ) -> go.Figure:
-    """Fig 3: Pre/post Rux -- Patient 1 only, box/violin with stats annotation."""
-    h_id = patients[0].patient_id
-    breath = data[h_id]["breath"]
+    """Fig 3: Pre/post Rux -- Henrik only, box/violin with stats annotation."""
+    h_id = "henrik"
+    breath = data.get(h_id, {}).get("breath", pd.Series(dtype=float))
     rux_ts = pd.Timestamp(TREATMENT_START)
 
     pre = breath[breath.index < rux_ts].dropna()
@@ -589,12 +595,13 @@ def _fig_rux_effect(
 
 def _fig_breath_hrv_scatter(
     data: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
     coupling_stats: dict[str, dict[str, Any]],
 ) -> go.Figure:
-    """Fig 4: Breathing-HRV scatter -- two subplots, one per patient."""
+    """Fig 4: Breathing-HRV scatter -- one subplot per patient."""
+    n_patients = max(len(patients), 1)
     fig = make_subplots(
-        rows=1, cols=2,
+        rows=1, cols=n_patients,
         subplot_titles=[p.display_name for p in patients],
         horizontal_spacing=0.12,
     )
@@ -650,10 +657,9 @@ def _fig_breath_hrv_scatter(
                 borderpad=4,
             )
 
-    fig.update_xaxes(title_text="Breathing Rate (brpm)", row=1, col=1)
-    fig.update_xaxes(title_text="Breathing Rate (brpm)", row=1, col=2)
-    fig.update_yaxes(title_text="HRV RMSSD (ms)", row=1, col=1)
-    fig.update_yaxes(title_text="HRV RMSSD (ms)", row=1, col=2)
+    for idx in range(1, n_patients + 1):
+        fig.update_xaxes(title_text="Breathing Rate (brpm)", row=1, col=idx)
+        fig.update_yaxes(title_text="HRV RMSSD (ms)", row=1, col=idx)
 
     fig.update_layout(
         height=450,
@@ -666,14 +672,14 @@ def _fig_breath_hrv_scatter(
 
 def _fig_bos_panel(
     data: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
     bos_stats: dict[str, Any],
 ) -> go.Figure:
-    """Fig 5: BOS risk panel -- P1's trend with thresholds and trend line."""
-    h_id = patients[0].patient_id
-    breath = data[h_id]["breath"]
-    breath_7d = data[h_id].get("breath_7d", pd.Series(dtype=float))
-    breath_30d = data[h_id].get("breath_30d", pd.Series(dtype=float))
+    """Fig 5: BOS risk panel -- Henrik's trend with thresholds and trend line."""
+    h_id = "henrik"
+    breath = data.get(h_id, {}).get("breath", pd.Series(dtype=float))
+    breath_7d = data.get(h_id, {}).get("breath_7d", pd.Series(dtype=float))
+    breath_30d = data.get(h_id, {}).get("breath_30d", pd.Series(dtype=float))
 
     fig = go.Figure()
 
@@ -768,61 +774,50 @@ def build_html(
     rux_stats: dict[str, Any],
     comparison: dict[str, Any],
     anomalies: dict[str, list[dict[str, Any]]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> str:
     """Build the full HTML report."""
     sections: list[str] = []
+    patient_map = {p.patient_id: p for p in patients}
 
-    h_id = patients[0].patient_id
-    m_id = patients[1].patient_id
-    h_breath = data[h_id]["breath"]
-    m_breath = data[m_id]["breath"]
-
-    h_mean = float(h_breath.mean()) if not h_breath.empty else 0.0
-    m_mean = float(m_breath.mean()) if not m_breath.empty else 0.0
     h_trend_dir = bos_stats.get("trend", {}).get("direction", "N/A")
     risk_status = bos_stats.get("risk_status", "neutral")
     risk_label = bos_stats.get("risk_label", "N/A")
 
-    # Determine KPI statuses
-    h_status = "normal" if BREATH_NORMAL_LOW <= h_mean <= BREATH_NORMAL_HIGH else (
-        "warning" if h_mean > BREATH_NORMAL_HIGH else "info"
-    )
-    m_status = "normal" if BREATH_NORMAL_LOW <= m_mean <= BREATH_NORMAL_HIGH else (
-        "warning" if m_mean > BREATH_NORMAL_HIGH else "info"
-    )
+    # KPI cards: one per patient for mean breath, then Henrik-specific BOS cards
+    kpi_cards: list[str] = []
+    for i, p in enumerate(patients):
+        pid = p.patient_id
+        breath = data.get(pid, {}).get("breath", pd.Series(dtype=float))
+        p_mean = float(breath.mean()) if not breath.empty else 0.0
+        p_status = "normal" if BREATH_NORMAL_LOW <= p_mean <= BREATH_NORMAL_HIGH else (
+            "warning" if p_mean > BREATH_NORMAL_HIGH else "info"
+        )
+        kpi_cards.append(make_kpi_card(
+            f"P{i + 1} MEAN BREATH", p_mean, "brpm",
+            status=p_status,
+            detail=f"Range: {BREATH_NORMAL_LOW}-{BREATH_NORMAL_HIGH} brpm normal",
+            explainer="Average nighttime breathing rate",
+        ))
+
+    # Henrik-specific BOS screening cards
     trend_status = "normal" if h_trend_dir == "decreasing" else (
         "warning" if h_trend_dir == "increasing" else "info"
     )
-
-    kpi_row = make_kpi_row(
-        make_kpi_card(
-            "P1 MEAN BREATH", h_mean, "brpm",
-            status=h_status,
-            detail=f"Range: {BREATH_NORMAL_LOW}-{BREATH_NORMAL_HIGH} brpm normal",
-            explainer="Average nighttime breathing rate",
-        ),
-        make_kpi_card(
-            "P2 MEAN BREATH", m_mean, "brpm",
-            status=m_status,
-            detail="Reference (no respiratory comorbidity)",
-            explainer="Average nighttime breathing rate",
-        ),
-        make_kpi_card(
-            "P1 TREND", h_trend_dir.title(), "",
-            status=trend_status,
-            detail=f"Slope: {bos_stats.get('trend', {}).get('slope_per_day', 0):.4f}/day",
-            status_label=h_trend_dir.title(),
-        ),
-        make_kpi_card(
-            "BOS RISK", risk_label, "",
-            status=risk_status,
-            detail=f"{bos_stats.get('pct_elevated', 0):.1f}% nights above {BREATH_ELEVATED} brpm",
-            explainer="Bronchiolitis Obliterans Syndrome screening",
-            status_label=risk_label,
-        ),
-    )
-    sections.append(kpi_row)
+    kpi_cards.append(make_kpi_card(
+        "P1 TREND", h_trend_dir.title(), "",
+        status=trend_status,
+        detail=f"Slope: {bos_stats.get('trend', {}).get('slope_per_day', 0):.4f}/day",
+        status_label=h_trend_dir.title(),
+    ))
+    kpi_cards.append(make_kpi_card(
+        "BOS RISK", risk_label, "",
+        status=risk_status,
+        detail=f"{bos_stats.get('pct_elevated', 0):.1f}% nights above {BREATH_ELEVATED} brpm",
+        explainer="Bronchiolitis Obliterans Syndrome screening",
+        status_label=risk_label,
+    ))
+    sections.append(make_kpi_row(*kpi_cards))
 
     # -- Section 1: Breathing Rate Trends --
     sections.append(section_html_or_placeholder(
@@ -901,7 +896,7 @@ def build_html(
 
 def _build_distribution_section(
     data: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
     comparison: dict[str, Any],
 ) -> str:
     """Distribution chart plus comparison stats table."""
@@ -926,19 +921,22 @@ def _build_distribution_section(
 
 def _build_coupling_section(
     data: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
     coupling_stats: dict[str, dict[str, Any]],
 ) -> str:
     """Scatter plot plus coupling interpretation."""
     chart_html = _embed(_fig_breath_hrv_scatter(data, patients, coupling_stats))
 
-    h_id = patients[0].patient_id
-    m_id = patients[1].patient_id
-    h_coup = coupling_stats.get(h_id, {})
-    m_coup = coupling_stats.get(m_id, {})
-
-    h_intact = h_coup.get("coupling_intact", False)
-    m_intact = m_coup.get("coupling_intact", False)
+    # Build per-patient coupling summary lines
+    coupling_lines: list[str] = []
+    for i, p in enumerate(patients):
+        coup = coupling_stats.get(p.patient_id, {})
+        intact = coup.get("coupling_intact", False)
+        coupling_lines.append(
+            f'<strong>Patient {i + 1}:</strong> r={coup.get("spearman_r", 0):.2f}, '
+            f'{format_p_value(coup.get("p_value"))}, n={coup.get("n", 0)} '
+            f'-- {"Coupling intact" if intact else "Coupling disrupted/weak"}'
+        )
 
     interp = (
         f'<div style="margin-top:16px;padding:12px;background:rgba(26,29,39,0.5);border-radius:8px;">'
@@ -947,13 +945,8 @@ def _build_coupling_section(
         f'higher HRV correlates with lower breathing rate through vagal modulation. '
         f'Disrupted coupling may indicate autonomic dysfunction.</p>'
         f'<p style="color:{TEXT_SECONDARY};line-height:1.7;margin-top:8px;">'
-        f'<strong>Patient 1:</strong> r={h_coup.get("spearman_r", 0):.2f}, '
-        f'{format_p_value(h_coup.get("p_value"))}, n={h_coup.get("n", 0)} '
-        f'-- {"Coupling intact" if h_intact else "Coupling disrupted/weak"}<br>'
-        f'<strong>Patient 2:</strong> r={m_coup.get("spearman_r", 0):.2f}, '
-        f'{format_p_value(m_coup.get("p_value"))}, n={m_coup.get("n", 0)} '
-        f'-- {"Coupling intact" if m_intact else "Coupling disrupted/weak"}'
-        f'</p></div>'
+        + "<br>".join(coupling_lines)
+        + f'</p></div>'
     )
 
     return chart_html + interp
@@ -964,10 +957,10 @@ def _build_clinical_interpretation(
     rux_stats: dict[str, Any],
     comparison: dict[str, Any],
     anomalies: dict[str, list[dict[str, Any]]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> str:
     """Clinical interpretation narrative."""
-    h_id = patients[0].patient_id
+    h_id = "henrik"
     risk_label = bos_stats.get("risk_label", "N/A")
     slope = bos_stats.get("trend", {}).get("slope_per_day", 0)
     pct_elevated = bos_stats.get("pct_elevated", 0)
@@ -1068,49 +1061,36 @@ def export_json(
     rux_stats: dict[str, Any],
     comparison: dict[str, Any],
     anomalies: dict[str, list[dict[str, Any]]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
     data: dict[str, dict[str, Any]],
 ) -> None:
     """Write structured metrics JSON."""
-    h_id = patients[0].patient_id
-    m_id = patients[1].patient_id
-    h_breath = data[h_id]["breath"]
-    m_breath = data[m_id]["breath"]
+    patients_json: dict[str, Any] = {}
+    anomalies_json: dict[str, Any] = {}
+    for p in patients:
+        pid = p.patient_id
+        breath = data.get(pid, {}).get("breath", pd.Series(dtype=float))
+        patients_json[pid] = {
+            "label": p.display_name,
+            "breath_rate": {
+                "mean": float(breath.mean()) if not breath.empty else None,
+                "median": float(breath.median()) if not breath.empty else None,
+                "std": float(breath.std()) if not breath.empty else None,
+                "min": float(breath.min()) if not breath.empty else None,
+                "max": float(breath.max()) if not breath.empty else None,
+                "n_days": len(breath),
+            },
+        }
+        anomalies_json[pid] = anomalies.get(pid, [])
 
     output: dict[str, Any] = {
         "report": "comparative_breathing",
         "generated_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-        "patients": {
-            h_id: {
-                "label": patients[0].display_name,
-                "breath_rate": {
-                    "mean": float(h_breath.mean()) if not h_breath.empty else None,
-                    "median": float(h_breath.median()) if not h_breath.empty else None,
-                    "std": float(h_breath.std()) if not h_breath.empty else None,
-                    "min": float(h_breath.min()) if not h_breath.empty else None,
-                    "max": float(h_breath.max()) if not h_breath.empty else None,
-                    "n_days": len(h_breath),
-                },
-            },
-            m_id: {
-                "label": patients[1].display_name,
-                "breath_rate": {
-                    "mean": float(m_breath.mean()) if not m_breath.empty else None,
-                    "median": float(m_breath.median()) if not m_breath.empty else None,
-                    "std": float(m_breath.std()) if not m_breath.empty else None,
-                    "min": float(m_breath.min()) if not m_breath.empty else None,
-                    "max": float(m_breath.max()) if not m_breath.empty else None,
-                    "n_days": len(m_breath),
-                },
-            },
-        },
+        "patients": patients_json,
         "bos_screening": bos_stats,
         "ruxolitinib_effect": rux_stats,
         "comparison": comparison,
-        "anomalies": {
-            h_id: anomalies.get(h_id, []),
-            m_id: anomalies.get(m_id, []),
-        },
+        "anomalies": anomalies_json,
     }
 
     # Sanitize NaN/Inf for JSON
@@ -1144,19 +1124,20 @@ def main() -> int:
     """Run comparative breathing analysis pipeline."""
     logger.info("[1/7] Loading patient data...")
     patients = default_patients()
-    if patients[1] is None:
-        print("Skipping: mitch.db not found (second patient data not available)")
+    if len(patients) < 2:
+        print("Skipping: need at least 2 patient databases for comparative analysis")
         return 0
+    patient_map = {p.patient_id: p for p in patients}
     raw_data = load_data(patients)
 
     logger.info("[2/7] Computing rolling metrics...")
     data = compute_rolling(raw_data)
 
-    logger.info("[3/7] BOS screening (Patient 1)...")
-    bos_stats = compute_bos_screening(data, patients[0].patient_id)
+    logger.info("[3/7] BOS screening (Henrik)...")
+    bos_stats = compute_bos_screening(data, "henrik")
 
     logger.info("[4/7] Pre/post Ruxolitinib analysis...")
-    rux_stats = compute_rux_effect(data, patients[0].patient_id)
+    rux_stats = compute_rux_effect(data, "henrik")
 
     logger.info("[5/7] Cross-patient comparison...")
     comparison = compute_comparison(data, patients)

@@ -9,6 +9,8 @@ config.py
 # Data (user-specific databases)
 data/*.db
 !data/demo.db
+data/*.duckdb
+data/analytic.duckdb
 
 # Python
 __pycache__/
@@ -53,3 +55,15 @@ scripts/*
 test-results/
 .wrangler/
 index.html
+.env.*
+
+# Local build/deploy output and agent working files (added 2026-09-20)
+deploy/
+output/
+reports/assets/
+build-prompts/
+.playwright-cli/
+.mcp.json
+.mcp.json.*
+data/*.bak*
+data/*.bak-*

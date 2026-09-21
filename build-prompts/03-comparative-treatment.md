@@ -6,7 +6,7 @@ Create `analysis/analyze_comparative_treatment.py` — Module 2: Treatment Respo
 
 ## Project location & output
 
-- Script: `/home/henrik/projects/teei/oura-hsct-digital-twin/analysis/analyze_comparative_treatment.py`
+- Script: `/home/henrik/projects/helse/oura-hsct-digital-twin/analysis/analyze_comparative_treatment.py`
 - HTML: `reports/comparative_treatment_response.html`
 - JSON: `reports/comparative_treatment_response.json`
 - Report ID: `comp_treatment`

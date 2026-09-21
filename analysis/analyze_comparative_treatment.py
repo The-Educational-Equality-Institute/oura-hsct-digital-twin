@@ -66,6 +66,7 @@ from _theme import (
     make_section,
     disclaimer_banner,
     format_p_value,
+    add_phase_shading,
     COLORWAY,
     STATUS_COLORS,
     BG_PRIMARY,
@@ -150,7 +151,7 @@ def _add_event_vline(
         x=x_val, y=1.02, yref="paper",
         text=label,
         showarrow=False,
-        font=dict(size=9, color=color),
+        font=dict(size=11, color=color),
         row=row, col=col,
     )
 
@@ -195,7 +196,7 @@ def _sanitize(obj: Any) -> Any:
 # ---------------------------------------------------------------------------
 
 def load_data(
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> dict[str, dict[str, pd.Series]]:
     """Load all 6 treatment metrics for both patients."""
     result: dict[str, dict[str, pd.Series]] = {}
@@ -784,7 +785,7 @@ def _fig_henrik_timeline(
             x=list(upper.index) + list(lower.index[::-1]),
             y=list(upper.values) + list(lower.values[::-1]),
             fill="toself",
-            fillcolor=f"rgba(59,130,246,0.08)",
+            fillcolor="rgba(59,130,246,0.08)",
             line=dict(width=0),
             name="95% CI",
             showlegend=True,
@@ -835,6 +836,8 @@ def _fig_henrik_timeline(
                 name=f"CP: {method.upper()}",
             ))
 
+    add_phase_shading(fig, pd.Timestamp(TREATMENT_START))
+
     # Patient 1 event lines
     for evt_date, evt_label, evt_color in HENRIK_EVENTS:
         _add_event_vline(fig, pd.Timestamp(evt_date), evt_label, evt_color)
@@ -879,6 +882,8 @@ def _fig_bocpd_probability(
         fill="tozeroy",
         fillcolor="rgba(139,92,246,0.15)",
     ))
+    if patient_name == "Patient 1":
+        add_phase_shading(fig, pd.Timestamp(TREATMENT_START))
 
     # Threshold line
     fig.add_shape(
@@ -891,7 +896,7 @@ def _fig_bocpd_probability(
         x=clean.index[-1], y=threshold,
         text=f"Threshold ({threshold})",
         showarrow=False,
-        font=dict(size=9, color=ACCENT_AMBER),
+        font=dict(size=11, color=ACCENT_AMBER),
         xanchor="right",
     )
 
@@ -952,7 +957,7 @@ def _fig_mitchell_timeline(
 
 def _fig_comparative_violin(
     data: dict[str, dict[str, pd.Series]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
     metric_name: str,
     display_name: str,
 ) -> go.Figure:
@@ -1041,7 +1046,7 @@ def build_html(
     henrik_changepoints: dict[str, dict[str, Any]],
     mitchell_result: dict[str, Any],
     convergence: dict[str, pd.DataFrame],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> str:
     """Assemble the complete HTML report."""
     sections: list[str] = []
@@ -1158,7 +1163,7 @@ def _build_henrik_section(
     henrik_stats: dict[str, dict[str, Any]],
     henrik_three: dict[str, dict[str, Any]],
     henrik_changepoints: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> str:
     """Patient 1 treatment response: timelines, stat cards, BOCPD."""
     parts: list[str] = []
@@ -1247,9 +1252,9 @@ def _build_henrik_section(
             '<table class="odt-table" style="width:100%;border-collapse:collapse;">'
             '<thead><tr>'
             '<th style="text-align:left;padding:8px;border-bottom:1px solid #374151;">Metric</th>'
-            f'<th style="text-align:center;padding:8px;border-bottom:1px solid #374151;">Pre-Acute<br><small>(&lt; {KNOWN_EVENT_DATE})</small></th>'
-            f'<th style="text-align:center;padding:8px;border-bottom:1px solid #374151;">Post-Acute / Pre-Rux<br><small>({KNOWN_EVENT_DATE} - {TREATMENT_START})</small></th>'
-            f'<th style="text-align:center;padding:8px;border-bottom:1px solid #374151;">Post-Rux<br><small>(&ge; {TREATMENT_START})</small></th>'
+            f'<th style="text-align:center;padding:8px;border-bottom:1px solid #374151;">Pre-Acute<br><small style="font-size:11px">(&lt; {KNOWN_EVENT_DATE})</small></th>'
+            f'<th style="text-align:center;padding:8px;border-bottom:1px solid #374151;">Post-Acute / Pre-Rux<br><small style="font-size:11px">({KNOWN_EVENT_DATE} - {TREATMENT_START})</small></th>'
+            f'<th style="text-align:center;padding:8px;border-bottom:1px solid #374151;">Post-Rux<br><small style="font-size:11px">(&ge; {TREATMENT_START})</small></th>'
             '</tr></thead>'
             f'<tbody>{table_rows}</tbody>'
             '</table></div>'
@@ -1266,7 +1271,7 @@ def _build_henrik_section(
 def _build_mitchell_section(
     data: dict[str, dict[str, pd.Series]],
     mitchell_result: dict[str, Any],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> str:
     """Patient 2 discovered events section."""
     parts: list[str] = []
@@ -1333,7 +1338,7 @@ def _build_mitchell_section(
 
 def _build_comparative_section(
     data: dict[str, dict[str, pd.Series]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> str:
     """Comparative distributions (violin plots)."""
     parts: list[str] = []
@@ -1522,9 +1527,10 @@ def main() -> int:
     """Run comparative treatment response analysis pipeline."""
     logger.info("[1/9] Loading patient data...")
     patients = default_patients()
-    if patients[1] is None:
-        print("Skipping: mitch.db not found (second patient data not available)")
+    if len(patients) < 2:
+        print("Skipping: need at least 2 patient databases for comparative analysis")
         return 0
+    patient_map = {p.patient_id: p for p in patients}
     data = load_data(patients)
 
     # -- Patient 1 analyses --
@@ -1550,19 +1556,26 @@ def main() -> int:
         total_cp = sum(len(cp[k]) for k in ["pelt", "cusum", "bocpd", "rolling_window"])
         logger.info("  %s: %d changepoints detected across methods", display, total_cp)
 
-    # -- Patient 2 analyses --
-    logger.info("[5/9] Patient 2: automatic changepoint discovery...")
-    mitch_metrics = data.get("mitch", {})
-    mitchell_result = mitchell_consensus(mitch_metrics)
-    n_high = sum(1 for e in mitchell_result.get("consensus_events", []) if e.get("high_confidence"))
-    logger.info("  Patient 2: %d high-confidence consensus events", n_high)
+    # -- Non-Henrik patient analyses (automatic changepoint discovery) --
+    logger.info("[5/9] Non-Henrik patients: automatic changepoint discovery...")
+    non_henrik_results: dict[str, dict[str, Any]] = {}
+    for p in patients:
+        if p.patient_id == "henrik":
+            continue
+        pid_metrics = data.get(p.patient_id, {})
+        result = mitchell_consensus(pid_metrics)
+        non_henrik_results[p.patient_id] = result
+        n_high = sum(1 for e in result.get("consensus_events", []) if e.get("high_confidence"))
+        logger.info("  %s: %d high-confidence consensus events", p.display_name, n_high)
+    # Keep backward compat alias for build_html
+    mitchell_result = non_henrik_results.get("mitch", {})
 
     # -- Convergence --
     logger.info("[6/9] Computing multi-metric convergence...")
     convergence: dict[str, pd.DataFrame] = {}
-    for pid in ["henrik", "mitch"]:
-        metrics = data.get(pid, {})
-        convergence[pid] = compute_convergence(metrics, pid)
+    for p in patients:
+        metrics = data.get(p.patient_id, {})
+        convergence[p.patient_id] = compute_convergence(metrics, p.patient_id)
 
     # -- HTML --
     logger.info("[7/9] Generating HTML report...")

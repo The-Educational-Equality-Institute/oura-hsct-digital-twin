@@ -104,7 +104,8 @@ RUX_DATE = TREATMENT_START     # Mar 16
 def load_sleep_data(conn) -> pd.DataFrame:
     """Load long_sleep periods with HRV, HR, and efficiency."""
     sql = """
-        SELECT day, average_hrv, average_heart_rate, lowest_heart_rate, efficiency
+        SELECT day, average_hrv, average_heart_rate, lowest_heart_rate, efficiency,
+               total_sleep_duration
         FROM oura_sleep_periods
         WHERE type = 'long_sleep'
         ORDER BY day
@@ -116,6 +117,20 @@ def load_sleep_data(conn) -> pd.DataFrame:
     df["day"] = pd.to_datetime(df["day"], errors="coerce", utc=True)
     df = df.dropna(subset=["day"])
     df["day_date"] = df["day"].dt.date
+    # A date can carry several long_sleep periods (a split night); keep the
+    # longest so every date appears exactly once, matching the convention in
+    # analyze_oura_causal.py. Two such dates exist in the current data
+    # (2026-05-19, 2026-06-01) and without this they are counted twice.
+    df["total_sleep_duration"] = pd.to_numeric(
+        df["total_sleep_duration"], errors="coerce"
+    )
+    df = (
+        df.sort_values(["day_date", "total_sleep_duration"], ascending=[True, False])
+        .drop_duplicates(subset="day_date", keep="first")
+        .drop(columns=["total_sleep_duration"])
+        .sort_values("day_date")
+        .reset_index(drop=True)
+    )
     return df
 
 
@@ -210,7 +225,7 @@ def crossing_date(
     if slope == 0:
         return None
     days_to_target = (target - intercept) / slope
-    if days_to_target < 0:
+    if days_to_target < 0 or days_to_target > 365 * 10:
         return None
     # For HR (direction='below'): slope must be negative
     if direction == "below" and slope >= 0:
@@ -322,7 +337,7 @@ def forecast_metric(
     slope_per_day = reg["slope"]
     slope_per_week = slope_per_day * 7
 
-    # Check direction — if no improvement, report it
+    # Check direction - if no improvement, report it
     improving = (direction == "above" and slope_per_day > 0) or \
                 (direction == "below" and slope_per_day < 0)
 

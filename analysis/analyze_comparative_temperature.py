@@ -86,7 +86,7 @@ from _hardening import section_html_or_placeholder
 
 pio.templates.default = "clinical_dark"
 
-PID_LABEL = {"henrik": "P1", "mitch": "P2"}
+PID_LABEL = {"henrik": "P1", "mitch": "P2", "wenche": "P3"}
 
 HTML_OUTPUT = REPORTS_DIR / "comparative_temperature_analysis.html"
 JSON_OUTPUT = REPORTS_DIR / "comparative_temperature_metrics.json"
@@ -113,7 +113,7 @@ KNOWN_EVENTS = {
 # ---------------------------------------------------------------------------
 
 def load_data(
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> dict[str, dict[str, pd.DataFrame]]:
     """Load temperature and cross-reference data for both patients."""
     result: dict[str, dict[str, pd.DataFrame]] = {}
@@ -522,7 +522,7 @@ def fig_dual_timeline(
     data: dict[str, dict[str, pd.DataFrame]],
     rolling: dict[str, dict[str, pd.Series]],
     anomalies: dict[str, pd.DataFrame],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> go.Figure:
     """Both patients temp_delta over time. Rolling 7d mean, anomaly markers, normal band."""
     fig = go.Figure()
@@ -627,7 +627,7 @@ def fig_dual_timeline(
 
 def fig_temperature_distribution(
     data: dict[str, dict[str, pd.DataFrame]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> go.Figure:
     """Overlapping violin plots with normal range shading."""
     fig = go.Figure()
@@ -757,7 +757,7 @@ def fig_rux_pre_post(
 def fig_predictive_scatter(
     data: dict[str, dict[str, pd.DataFrame]],
     lag_corrs: dict[str, dict[str, Any]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> go.Figure:
     """Temp[N] vs Readiness[N+1] for both patients. Two subplots."""
     patient_list = [p for p in patients if p.patient_id in data]
@@ -837,7 +837,7 @@ def fig_predictive_scatter(
 
 def fig_calendar_heatmap(
     data: dict[str, dict[str, pd.DataFrame]],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> go.Figure:
     """GitHub-style calendar heatmap of temperature delta magnitude. One panel per patient."""
     patient_list = [p for p in patients if p.patient_id in data]
@@ -1061,7 +1061,7 @@ def build_html(
     lag_corrs: dict[str, dict[str, Any]],
     rux_stats: dict[str, Any],
     cross_patient: dict[str, Any],
-    patients: tuple[PatientConfig, PatientConfig],
+    patients: list[PatientConfig],
 ) -> str:
     """Assemble the full HTML report."""
     sections: list[str] = []
@@ -1314,9 +1314,6 @@ def build_html(
 
     sections.append(section_html_or_placeholder("Methodology", _methodology_section))
 
-    # ---- Disclaimer ----
-    sections.append(disclaimer_banner())
-
     body = "\n".join(sections)
 
     # Determine data end date
@@ -1399,9 +1396,10 @@ def main() -> int:
     """Run comparative temperature analysis pipeline."""
     logger.info("[1/9] Loading patient data...")
     patients = default_patients()
-    if patients[1] is None:
-        print("Skipping: mitch.db not found (second patient data not available)")
+    if len(patients) < 2:
+        print("Skipping: need at least 2 patient databases for comparative analysis")
         return 0
+    patient_map = {p.patient_id: p for p in patients}
     data = load_data(patients)
 
     logger.info("[2/9] Computing baseline statistics...")

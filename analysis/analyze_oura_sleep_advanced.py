@@ -959,7 +959,7 @@ def build_dashboard(
             colorscale=[
                 [0.0, BG_PRIMARY],
                 [0.15, "#1a2744"],
-                [0.35, "#1E3A5F"],
+                [0.35, "#C3C3F1"],
                 [0.55, ACCENT_BLUE],
                 [0.75, "#60A5FA"],
                 [1.0, "#DBEAFE"],

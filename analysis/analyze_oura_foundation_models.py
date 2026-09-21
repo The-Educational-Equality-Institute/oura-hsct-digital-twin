@@ -93,7 +93,7 @@ CHRONOS_MODEL = "amazon/chronos-bolt-base"  # Bolt variant (faster, native quant
 CHRONOS_FALLBACK = "amazon/chronos-t5-base"  # Original T5 fallback
 QUANTILE_LEVELS = [0.1, 0.25, 0.5, 0.75, 0.9]
 
-# Visualization — from theme, with dark-theme-aware band colors
+# Visualization - from theme, with dark-theme-aware band colors
 COLOR_PRE = C_PRE_TX
 COLOR_POST = C_POST_TX
 COLOR_RUX_LINE = C_RUX_LINE
@@ -104,15 +104,28 @@ COLOR_BAND_INNER = "rgba(59, 130, 246, 0.25)"
 
 
 def _install_torchvision_compat_stub() -> None:
-    """Mask a broken torchvision install during Chronos imports.
+    """Fall back to a stub when torchvision is missing or broken.
 
-    This environment has torchvision metadata present, but importing it fails
-    before Chronos can load because the installed binary is incompatible with
-    the current torch operator registry. Chronos itself does not need image or
-    video ops, so a minimal stub is sufficient for transformers import-time
-    checks in this script.
+    Chronos reaches transformers, which performs import-time torchvision checks
+    even though Chronos needs no image or video ops. A real torchvision matching
+    the installed torch is used whenever one imports cleanly; only when that
+    fails is a minimal stub installed, so the forecast still runs on a machine
+    without a usable torchvision binary.
+
+    Installing the stub unconditionally is what made Chronos unavailable with
+    "cannot import name 'ImageReadMode' from 'torchvision.io'": transformers
+    asked the stub for a symbol the stub does not define.
     """
     if "torchvision" in sys.modules:
+        return
+
+    try:
+        import torchvision  # noqa: F401, PLC0415
+        import torchvision.io  # noqa: F401, PLC0415
+        import torchvision.transforms  # noqa: F401, PLC0415
+    except Exception as exc:  # noqa: BLE001 - any import failure means "use the stub"
+        print(f"[CHRONOS] torchvision unusable ({exc}); installing compat stub.")
+    else:
         return
 
     vision = types.ModuleType("torchvision")
@@ -362,7 +375,12 @@ def load_chronos_pipeline():
     import torch
     BaseChronosPipeline = _import_base_chronos_pipeline()
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # CPU is the default. The GPU on this machine routinely has well under
+    # 1 GB of free VRAM, where loading chronos-bolt-base fails; the pipeline
+    # must never depend on CUDA being free. Opt in explicitly with
+    # CHRONOS_DEVICE=cuda when the VRAM is known to be available.
+    requested = os.environ.get("CHRONOS_DEVICE", "cpu").strip().lower()
+    device = "cuda" if requested == "cuda" and torch.cuda.is_available() else "cpu"
     print(f"[CHRONOS] Loading model on {device}...")
 
     local_primary = _resolve_local_hf_snapshot(CHRONOS_MODEL)
@@ -1235,7 +1253,7 @@ def create_forecast_figure(
 
     # --- Bands first (behind lines) ---
 
-    # 90% PI band — very subtle
+    # 90% PI band - very subtle
     fig.add_trace(go.Scatter(
         x=np.concatenate([fc_dt, fc_dt[::-1]]),
         y=np.concatenate([forecast["q90"], forecast["q10"][::-1]]),
@@ -1246,7 +1264,7 @@ def create_forecast_figure(
         hoverinfo="skip",
     ))
 
-    # 50% PI band — slightly more visible
+    # 50% PI band - slightly more visible
     fig.add_trace(go.Scatter(
         x=np.concatenate([fc_dt, fc_dt[::-1]]),
         y=np.concatenate([forecast["q75"], forecast["q25"][::-1]]),
@@ -1259,7 +1277,7 @@ def create_forecast_figure(
 
     # --- Lines on top of bands ---
 
-    # Context (historical) — bold solid
+    # Context (historical) - bold solid
     fig.add_trace(go.Scatter(
         x=ctx_dt, y=context_values,
         mode="lines+markers",
@@ -1273,7 +1291,7 @@ def create_forecast_figure(
         ),
     ))
 
-    # Actual forecast period — bold solid
+    # Actual forecast period - bold solid
     fig.add_trace(go.Scatter(
         x=fc_dt, y=actual_values,
         mode="lines+markers",
@@ -1287,7 +1305,7 @@ def create_forecast_figure(
         ),
     ))
 
-    # Median forecast — dashed to distinguish from actual
+    # Median forecast - dashed to distinguish from actual
     fig.add_trace(go.Scatter(
         x=fc_dt, y=forecast["median"],
         mode="lines",
@@ -1618,7 +1636,7 @@ def create_hourly_hr_figure(hourly_results: dict) -> go.Figure:
     forecast = hourly_results["forecast"]
     anomalous = hourly_results["anomalous_mask"]
 
-    # --- Band first (behind lines) — very subtle ---
+    # --- Band first (behind lines) - very subtle ---
     fig.add_trace(go.Scatter(
         x=np.concatenate([forecast_times, forecast_times[::-1]]),
         y=np.concatenate([forecast["q90"], forecast["q10"][::-1]]),
@@ -1660,7 +1678,7 @@ def create_hourly_hr_figure(hourly_results: dict) -> go.Figure:
         ),
     ))
 
-    # --- Anomaly markers on top — red with white outlines ---
+    # --- Anomaly markers on top - red with white outlines ---
     if np.any(anomalous):
         fig.add_trace(go.Scatter(
             x=forecast_times[anomalous],

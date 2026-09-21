@@ -61,11 +61,13 @@ from config import (
     ESC_RMSSD_DEFICIENCY, NOCTURNAL_HR_ELEVATED, POPULATION_RMSSD_MEDIAN, HSCT_RMSSD_RANGE,
 )
 from _theme import (
-    wrap_html, make_kpi_card, make_kpi_row, make_section,
+    wrap_html, make_kpi_card, make_kpi_row, make_section, make_chart_panel,
+    make_hero_timeseries,
     BG_ELEVATED, BORDER_SUBTLE,
     TEXT_PRIMARY, TEXT_SECONDARY, TEXT_TERTIARY,
     ACCENT_BLUE, ACCENT_GREEN, ACCENT_RED, ACCENT_AMBER,
     ACCENT_PURPLE, ACCENT_CYAN, ACCENT_ORANGE,
+    ACCENT_TEAL, ACCENT_TEAL_DEEP, C_HRV, C_HR,
     C_PRE_TX,
 )
 
@@ -74,7 +76,7 @@ pio.templates.default = "clinical_dark"
 HTML_OUTPUT = REPORTS_DIR / "digital_twin_report.html"
 JSON_OUTPUT = REPORTS_DIR / "digital_twin_metrics.json"
 
-# Clinical reference values — imported from config.py
+# Clinical reference values - imported from config.py
 HSCT_TYPICAL_RMSSD = HSCT_RMSSD_RANGE  # local alias for backwards compat
 
 # State-space model parameters
@@ -100,7 +102,7 @@ OBS_NAMES = [
     "Sleep Efficiency",
 ]
 
-# Visualization — mapped to dark theme palette
+# Visualization - mapped to dark theme palette
 COLORS = {
     "pre": C_PRE_TX,
     "post": ACCENT_RED,
@@ -1366,11 +1368,11 @@ def create_state_trajectory_figure(
         fig.update_layout(**{
             yax: dict(
                 title="State (SD units)",
-                gridcolor="rgba(255,255,255,0.05)", griddash="dot",
+                gridcolor="rgba(20,22,26,0.06)", griddash="dot",
                 zeroline=False,
             ),
             xax: dict(
-                gridcolor="rgba(255,255,255,0.05)", griddash="dot",
+                gridcolor="rgba(20,22,26,0.06)", griddash="dot",
                 spikemode="across", spikethickness=1,
                 spikecolor=TEXT_TERTIARY, spikedash="dot",
             ),
@@ -1604,11 +1606,11 @@ def create_prediction_figure(
     for row_i in range(1, 4):
         for col_i in range(1, 3):
             fig.update_xaxes(
-                gridcolor="rgba(255,255,255,0.05)", griddash="dot",
+                gridcolor="rgba(20,22,26,0.06)", griddash="dot",
                 row=row_i, col=col_i,
             )
             fig.update_yaxes(
-                gridcolor="rgba(255,255,255,0.05)", griddash="dot",
+                gridcolor="rgba(20,22,26,0.06)", griddash="dot",
                 row=row_i, col=col_i,
             )
     # Crosshair spikes on time-series panels (row 2 and 3,col2)
@@ -1738,11 +1740,11 @@ def create_drug_response_figure(
     for r_i in range(1, 3):
         for c_i in range(1, 4):
             fig.update_xaxes(
-                gridcolor="rgba(255,255,255,0.05)", griddash="dot",
+                gridcolor="rgba(20,22,26,0.06)", griddash="dot",
                 row=r_i, col=c_i,
             )
             fig.update_yaxes(
-                gridcolor="rgba(255,255,255,0.05)", griddash="dot",
+                gridcolor="rgba(20,22,26,0.06)", griddash="dot",
                 zeroline=False,
                 row=r_i, col=c_i,
             )
@@ -1886,11 +1888,11 @@ def create_sensor_fusion_figure(
     for r_i in range(1, 3):
         for c_i in range(1, 3):
             fig.update_xaxes(
-                gridcolor="rgba(255,255,255,0.05)", griddash="dot",
+                gridcolor="rgba(20,22,26,0.06)", griddash="dot",
                 row=r_i, col=c_i,
             )
             fig.update_yaxes(
-                gridcolor="rgba(255,255,255,0.05)", griddash="dot",
+                gridcolor="rgba(20,22,26,0.06)", griddash="dot",
                 row=r_i, col=c_i,
             )
 
@@ -1981,11 +1983,11 @@ def create_observation_overlay_figure(
         xax = f"xaxis{ax_num}" if ax_num > 1 else "xaxis"
         fig.update_layout(**{
             yax: dict(
-                gridcolor="rgba(255,255,255,0.05)", griddash="dot",
+                gridcolor="rgba(20,22,26,0.06)", griddash="dot",
                 zeroline=False,
             ),
             xax: dict(
-                gridcolor="rgba(255,255,255,0.05)", griddash="dot",
+                gridcolor="rgba(20,22,26,0.06)", griddash="dot",
                 spikemode="across", spikethickness=1,
                 spikecolor=TEXT_TERTIARY, spikedash="dot",
             ),
@@ -2076,13 +2078,13 @@ def create_kf_vs_ukf_figure(
     for r_i in range(1, 4):
         for c_i in range(1, 3):
             fig.update_xaxes(
-                gridcolor="rgba(255,255,255,0.05)", griddash="dot",
+                gridcolor="rgba(20,22,26,0.06)", griddash="dot",
                 spikemode="across", spikethickness=1,
                 spikecolor=TEXT_TERTIARY, spikedash="dot",
                 row=r_i, col=c_i,
             )
             fig.update_yaxes(
-                gridcolor="rgba(255,255,255,0.05)", griddash="dot",
+                gridcolor="rgba(20,22,26,0.06)", griddash="dot",
                 zeroline=False,
                 row=r_i, col=c_i,
             )
@@ -2247,52 +2249,63 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
     n_post = drug_resp.get("n_post_days", 0)
     post_window_tone = "warning" if n_post < 14 else "good"
 
-    hero_cards = [
-        (
+    # Real per-day trend for the "Best short-term fit" card: the predicted
+    # variable is a genuine column in `daily`, so its tail is an actual
+    # observed series, never a fabricated one. Other hero cards summarize
+    # scalars (a shift magnitude, a pass/fail count, a day count) with no
+    # matching per-day series in scope, so they stay plain stats.
+    best_pred_trend: list[float] | None = None
+    best_pred_channel_color = ACCENT_TEAL
+    if best_pred_var and best_pred_var in daily.columns:
+        tail_series = daily[best_pred_var].tail(30)
+        if tail_series.notna().sum() >= 2:
+            best_pred_trend = [
+                float(v) if pd.notna(v) else None for v in tail_series.tolist()
+            ]
+        best_pred_channel_color = {
+            "mean_rmssd": C_HRV,
+            "mean_hr": C_HR,
+        }.get(best_pred_var, ACCENT_TEAL)
+
+    hero_cards_html = (
+        make_kpi_card(
             "Strongest modeled shift",
             f"{dominant_shift:+.2f} SD" if dominant_state_stats else "N/A",
-            (
+            status=shift_tone,
+            detail=(
                 f"{dominant_state_name} · {dominant_direction.title()} · {_fmt_p(dominant_p)} · exploratory"
                 if dominant_state_stats else "Shift summary unavailable"
             ),
-            shift_tone,
-        ),
-        (
+        )
+        + make_kpi_card(
             "Best short-term fit",
             (
                 f"R-sq {float(best_pred_r2):.3f}"
                 if isinstance(best_pred_r2, (int, float, np.floating)) else "N/A"
             ),
-            (
+            status=prediction_tone,
+            detail=(
                 f"{best_pred_label} · RMSE {_fmt_num(best_pred_rmse)} {metric_units.get(best_pred_var, '')}".strip()
                 if best_pred_var else "Prediction summary unavailable"
             ),
-            prediction_tone,
-        ),
-        (
+            trend=best_pred_trend,
+            channel_color=best_pred_channel_color,
+        )
+        + make_kpi_card(
             "Residual checks",
             f"{n_residual_pass}/{n_residual_total}" if n_residual_total else "N/A",
-            (
+            status=residual_tone,
+            detail=(
                 "Ljung-Box p > 0.05 across modeled sensors"
                 if n_residual_total else "Residual diagnostics unavailable"
             ),
-            residual_tone,
-        ),
-        (
+        )
+        + make_kpi_card(
             "Post-drug window",
             f"{n_post} days",
-            f"Short window; HEV diagnosed {HEV_DIAGNOSIS_DATE}",
-            post_window_tone,
-        ),
-    ]
-
-    hero_cards_html = "".join(
-        f'<div class="dt-hero-card" data-tone="{tone}">'
-        f'<div class="dt-hero-card-label">{label}</div>'
-        f'<div class="dt-hero-card-value">{value}</div>'
-        f'<div class="dt-hero-card-detail">{detail}</div>'
-        f'</div>'
-        for label, value, detail, tone in hero_cards
+            status=post_window_tone,
+            detail=f"HEV diagnosed {HEV_DIAGNOSIS_DATE} confounds the early window",
+        )
     )
 
     hero_html = (
@@ -2387,15 +2400,39 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
         '<div class="dt-summary-title">Why caution is still needed</div>'
         '<ul class="dt-bullet-list">'
         '<li>This is a <strong>single-patient (N=1)</strong> exploratory model, not a validated clinical instrument.</li>'
-        f'<li>The post-drug window is only <strong>{n_post} days</strong>, which is too short for strong treatment claims.</li>'
-        f'<li><strong>HEV diagnosed {HEV_DIAGNOSIS_DATE}</strong> may confound late-March shifts after ruxolitinib started on {TREATMENT_START}.</li>'
+        f'<li>The post-drug window is <strong>{n_post} days</strong>; findings remain descriptive, not confirmatory.</li>'
+        f'<li><strong>HEV diagnosed {HEV_DIAGNOSIS_DATE}</strong> may confound early post-drug shifts after ruxolitinib started on {TREATMENT_START}.</li>'
         '</ul>'
         '</div>'
         '</div>'
     )
 
+    # --- Hero time-series: full-window HRV + HR with treatment markers ---
+    # Built from the same `daily` frame already computed by load_oura_data(),
+    # never re-queried or re-derived, so the chart plots exactly the numbers
+    # already on the page.
+    hero_ts_dates = [str(d.date()) for d in daily.index]
+    hero_ts_metrics = {
+        "dates": hero_ts_dates,
+        "hrv": [float(v) if pd.notna(v) else None for v in daily["mean_rmssd"].tolist()],
+        "hr": [float(v) if pd.notna(v) else None for v in daily["mean_hr"].tolist()],
+    }
+    hero_ts_fig = make_hero_timeseries(
+        metrics=hero_ts_metrics,
+        show_hr=True,
+        title="HRV and heart rate over the full modeled window",
+        height=420,
+        div_id="odt-hero-timeseries",
+    )
+    hero_ts_html = make_chart_panel(
+        "Full-window trajectory",
+        "Nightly HRV (RMSSD) and heart rate, with Ruxolitinib start and HEV diagnosis marked "
+        "and the baseline / Jakavi-only / Jakavi+beta-blocker phases shaded.",
+        hero_ts_fig.to_html(full_html=False, include_plotlyjs=False),
+    )
+
     # --- Build body from sections ---
-    body = hero_html + kpi_row
+    body = hero_html + hero_ts_html + kpi_row
     body += make_section(
         "Read This First",
         '<div class="dt-section-intro">If someone opens only one part of this page, it should be this block. It summarizes the signal, the diagnostics that support the model, and the reasons the interpretation remains exploratory.</div>'
@@ -2448,9 +2485,15 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
 
     # Section 2: Drug Response
     body += make_section(
-        f"Ruxolitinib Drug Response (started {TREATMENT_START})",
+        "Whole-period response, ruxolitinib and beta-blocker pooled (descriptive)",
+        '<div class="dt-section-intro">This comparison pools every night on treatment against every night before, '
+        'so it cannot attribute the change to either medicine on its own. In this pipeline\'s own '
+        '<a href="placebo_calibration.html">placebo calibration</a>, this kind of before/after test fires at '
+        '100% of dates where nothing happened, so it is shown as description, not evidence. The phase-resolved '
+        'estimate is on the <a href="piecewise_regression.html">Piecewise ITS</a> page and the '
+        '<a href="index.html">homepage</a>.</div>'
         '<div class="dt-section-intro">Latent-state shifts are standardized, so the pre/post comparison shows magnitude rather than raw clinical units. '
-        'Use this block to gauge which modeled subsystems moved most after treatment began. The post-drug window is short, and HEV diagnosed on '
+        'Use this block to gauge which modeled subsystems moved most after treatment began. HEV diagnosed on '
         f'{HEV_DIAGNOSIS_DATE} may confound late-March movement.</div>'
         f'{drug_summary_html}'
         '<div class="dt-table-shell"><div class="dt-table-caption">'
@@ -2568,30 +2611,13 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
     padding: 56px 40px 40px;
     overflow: hidden;
     background:
-        radial-gradient(circle at top left, rgba(59,130,246,0.18), transparent 34%),
-        radial-gradient(circle at top right, rgba(139,92,246,0.14), transparent 30%),
-        linear-gradient(135deg, #0D1120 0%, #12182B 55%, #0D1120 100%);
-    border-bottom: 1px solid rgba(59,130,246,0.10);
+        radial-gradient(circle at top right, rgba(58,58,214,0.05), transparent 40%),
+        linear-gradient(180deg, #FFFFFF 0%, #F7F7F5 100%);
+    border-bottom: 1px solid rgba(20,22,26,0.08);
     border-radius: 0 0 24px 24px;
 }}
-.dt-hero-glow {{
-    position: absolute;
-    width: 560px;
-    height: 560px;
-    border-radius: 50%;
-    filter: blur(120px);
-    background: radial-gradient(circle, rgba(16,185,129,0.18) 0%, transparent 70%);
-    top: -220px;
-    left: -120px;
-    opacity: 0.35;
-    pointer-events: none;
-}}
-.dt-hero-glow-2 {{
-    background: radial-gradient(circle, rgba(139,92,246,0.20) 0%, transparent 70%);
-    top: -160px;
-    right: -180px;
-    left: auto;
-}}
+.dt-hero-glow {{ display: none; }}
+.dt-hero-glow-2 {{ display: none; }}
 .dt-hero-inner {{
     position: relative;
     z-index: 1;
@@ -2606,9 +2632,9 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
     font-weight: 700;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: {ACCENT_CYAN};
-    background: rgba(34,211,238,0.10);
-    border: 1px solid rgba(34,211,238,0.22);
+    color: {ACCENT_TEAL};
+    background: rgba(58,58,214,0.08);
+    border: 1px solid rgba(58,58,214,0.20);
     margin-bottom: 18px;
 }}
 .dt-hero-title {{
@@ -2644,8 +2670,8 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
     align-items: center;
     padding: 7px 12px;
     border-radius: 999px;
-    background: rgba(26,29,39,0.58);
-    border: 1px solid rgba(255,255,255,0.08);
+    background: #FFFFFF;
+    border: 1px solid rgba(20,22,26,0.08);
     color: {TEXT_SECONDARY};
     font-size: 0.75rem;
     font-weight: 600;
@@ -2655,39 +2681,11 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 14px;
 }}
-.dt-hero-card {{
-    background: rgba(17, 24, 39, 0.62);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 16px;
-    padding: 18px 18px 16px;
+.dt-hero-grid .odt-kpi {{
+    background: #FFFFFF;
+    border: 1px solid rgba(20,22,26,0.08);
+    box-shadow: 0 1px 2px rgba(20,22,26,0.04), 0 8px 24px rgba(20,22,26,0.04);
     min-height: 152px;
-    box-shadow: 0 18px 36px rgba(0,0,0,0.22);
-}}
-.dt-hero-card[data-tone="critical"] {{ border-color: rgba(239,68,68,0.22); }}
-.dt-hero-card[data-tone="warning"] {{ border-color: rgba(245,158,11,0.22); }}
-.dt-hero-card[data-tone="good"] {{ border-color: rgba(16,185,129,0.22); }}
-.dt-hero-card[data-tone="info"] {{ border-color: rgba(59,130,246,0.22); }}
-.dt-hero-card-label {{
-    font-size: 0.6875rem;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: {TEXT_TERTIARY};
-    font-weight: 700;
-    margin-bottom: 14px;
-}}
-.dt-hero-card-value {{
-    font-size: clamp(1.7rem, 2.6vw, 2.2rem);
-    font-weight: 800;
-    letter-spacing: -0.03em;
-    color: {TEXT_PRIMARY};
-    margin-bottom: 10px;
-}}
-.dt-hero-card-detail {{
-    font-size: 0.8125rem;
-    line-height: 1.55;
-    color: {TEXT_SECONDARY};
 }}
 
 /* === Section helpers === */
@@ -2706,8 +2704,8 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
 .dt-summary-card {{
     padding: 18px 20px;
     border-radius: 16px;
-    background: rgba(17,24,39,0.52);
-    border: 1px solid rgba(255,255,255,0.07);
+    background: #FFFFFF;
+    border: 1px solid rgba(20,22,26,0.07);
 }}
 .dt-summary-card--warn {{
     border-color: rgba(245,158,11,0.22);
@@ -2750,8 +2748,8 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
 .dt-empty-state {{
     padding: 16px 18px;
     border-radius: 12px;
-    background: rgba(26,29,39,0.5);
-    border: 1px solid rgba(255,255,255,0.06);
+    background: #FFFFFF;
+    border: 1px solid rgba(20,22,26,0.06);
     color: {TEXT_TERTIARY};
     font-size: 0.875rem;
 }}
@@ -2766,8 +2764,8 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
 .dt-band-item {{
     padding: 16px 18px;
     border-radius: 14px;
-    background: rgba(26,29,39,0.55);
-    border: 1px solid rgba(255,255,255,0.07);
+    background: #FFFFFF;
+    border: 1px solid rgba(20,22,26,0.07);
 }}
 .dt-band-item span {{
     display: block;
@@ -2801,8 +2799,8 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
 .dt-metric-card {{
     padding: 16px 18px;
     border-radius: 14px;
-    background: rgba(26,29,39,0.52);
-    border: 1px solid rgba(255,255,255,0.07);
+    background: #FFFFFF;
+    border: 1px solid rgba(20,22,26,0.07);
 }}
 .dt-metric-label {{
     font-size: 0.75rem;
@@ -2832,8 +2830,8 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
 .dt-sensor-card {{
     padding: 16px 18px;
     border-radius: 14px;
-    background: rgba(26,29,39,0.52);
-    border: 1px solid rgba(255,255,255,0.07);
+    background: #FFFFFF;
+    border: 1px solid rgba(20,22,26,0.07);
 }}
 .dt-sensor-label {{
     font-size: 0.75rem;
@@ -2876,9 +2874,9 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
     transform: translateY(-1px);
 }}
 .tag-improved {{
-    background: rgba(16, 185, 129, 0.12);
+    background: rgba(58,58,214,0.10);
     color: #34D399;
-    border: 1px solid rgba(16, 185, 129, 0.2);
+    border: 1px solid rgba(58,58,214,0.20);
 }}
 .tag-worsened {{
     background: rgba(239, 68, 68, 0.12);
@@ -2914,17 +2912,17 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
 
 /* === Disclaimer (glass morphism) === */
 .disclaimer {{
-    background: rgba(26, 29, 39, 0.6);
+    background: #FFFFFF;
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(20,22,26,0.08);
     border-radius: 16px;
     padding: 22px 24px;
     margin-top: 36px;
     font-size: 0.875rem;
     color: {TEXT_TERTIARY};
     line-height: 1.7;
-    box-shadow: 0 18px 36px rgba(0,0,0,0.18);
+    box-shadow: 0 18px 36px rgba(20,22,26,0.06);
 }}
 .disclaimer strong {{
     color: {TEXT_SECONDARY};
@@ -2936,16 +2934,16 @@ def generate_html_report(figs: list[go.Figure], daily: pd.DataFrame) -> str:
     margin: 16px 0 22px;
     border-radius: 16px;
     overflow: hidden;
-    border: 1px solid rgba(255,255,255,0.07);
-    background: rgba(17,24,39,0.42);
+    border: 1px solid rgba(20,22,26,0.07);
+    background: #FFFFFF;
 }}
 .dt-table-caption {{
     padding: 14px 18px;
     font-size: 0.8125rem;
     line-height: 1.55;
     color: {TEXT_TERTIARY};
-    border-bottom: 1px solid rgba(255,255,255,0.06);
-    background: rgba(255,255,255,0.02);
+    border-bottom: 1px solid rgba(20,22,26,0.06);
+    background: rgba(20,22,26,0.03);
 }}
 .dt-table-shell table {{
     margin: 0;

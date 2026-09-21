@@ -17,6 +17,13 @@ LOGFILE="${LOGFILE:-/tmp/oura_daily_pipeline.log}"
 # NODE_BIN="$HOME/.nvm/versions/node/v22.21.1/bin"
 
 # --- Setup ---
+# Source secrets (.env has OURA_ACCESS_TOKEN etc.)
+if [ -f "$DIGITAL_TWIN/.env" ]; then
+  set -a
+  source "$DIGITAL_TWIN/.env"
+  set +a
+fi
+
 exec >> "$LOGFILE" 2>&1
 echo ""
 echo "========================================"
@@ -35,12 +42,24 @@ else
 fi
 
 # 3. Import fresh Oura data (last 3 days for overlap safety)
-echo "[2/4] Importing Oura data..."
+echo "[2/5] Importing Oura data..."
 python "$IMPORT_SCRIPT" --days 3
 echo "  Import done."
 
+# 3b. Import OMRON BP readings from the Windows BLE bridge (if any CSVs waiting).
+#     Gracefully skips when the inbox is absent or empty.
+echo "[3/5] Importing OMRON BP readings..."
+python "$DIGITAL_TWIN/api/import_omron.py" || echo "  OMRON import non-fatal warning (continuing)"
+echo "  OMRON import done."
+
+# 3c. Rebuild the DuckDB analytic layer (frame_1d, frame_1h, v_baselines)
+#     from the latest SQLite state. Idempotent, ~1s per rebuild.
+echo "[3c/5] Rebuilding analytic frames..."
+python "$DIGITAL_TWIN/analysis/_frames.py" --rebuild || echo "  frame rebuild non-fatal warning (continuing)"
+echo "  frame rebuild done."
+
 # 4. Run all analysis scripts
-echo "[3/4] Running analysis pipeline..."
+echo "[4/5] Running analysis pipeline..."
 cd "$DIGITAL_TWIN"
 python run_all.py
 echo "  Analysis done."
@@ -57,6 +76,7 @@ echo "  Analysis done."
 # npx wrangler pages deploy dist --project-name=digital-twin --branch=main
 # echo "  Deploy done."
 
+echo "[5/5] Done."
 echo ""
 echo "Pipeline complete — $(date '+%Y-%m-%d %H:%M:%S')"
 echo "========================================"

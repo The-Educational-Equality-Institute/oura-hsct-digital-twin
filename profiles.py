@@ -20,7 +20,7 @@ PROFILES = {
         "condition": "ALL at 14, allogeneic HSCT 2023-11-23",
         "transplant_date": date(2023, 11, 23),
         "treatment_start": date(2026, 3, 16),
-        "treatment": "Ruxolitinib 10mg BID",
+        "treatment": "Ruxolitinib 10mg BID + Bisoprolol 2.5mg daily (from Apr 8)",
         "database": PROJECT_ROOT / "data" / "demo.db",
         "major_event_date": date(2023, 11, 23),
         "major_event_label": "HSCT",
@@ -30,15 +30,26 @@ PROFILES = {
         "ring_gen": 4,
     },
     "mitch": {
-        "label": "Post-Stroke Patient",
-        "age": 33,
-        "condition": "Stroke at 33, bilateral carotid/vertebral artery dissection (left main)",
+        "label": "Post-Stroke / ALL Survivor",
+        "age": 36,
+        "condition": "ALL at 14 (daunorubicin, vincristine), bilateral vertebral artery dissection with cerebellar stroke at 33. Missing echo (22yr post-anthracycline). Autonomic dysfunction worsening.",
         "database": PROJECT_ROOT / "data" / "mitch.db",
-        "major_event_date": date(2024, 12, 15),
+        "major_event_date": date(2023, 4, 22),  # Stroke date (22 April 2023)
         "major_event_label": "Stroke",
         # P2's tokens use prefixed env vars
         "token_env": "MITCH_OURA_ACCESS_TOKEN",
         "refresh_env": "MITCH_OURA_REFRESH_TOKEN",
         "ring_gen": 3,
+    },
+    "wenche": {
+        "label": "Healthy Control",
+        "age": 61,
+        "condition": "Healthy (no known cardiovascular or immunological conditions)",
+        "database": PROJECT_ROOT / "data" / "wenche.db",
+        "data_start": date(2026, 3, 24),
+        # No major event — healthy control
+        "token_env": "WENCHE_OURA_ACCESS_TOKEN",
+        "refresh_env": "WENCHE_OURA_REFRESH_TOKEN",
+        "ring_gen": 4,
     },
 }

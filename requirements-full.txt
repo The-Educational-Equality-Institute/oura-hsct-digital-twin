@@ -52,6 +52,12 @@ stumpy>=1.12
 # Guarded: try/except inside function
 tsfresh>=0.20
 
+# Analytic frame backend (analysis/_frames.py, required by
+# analyze_multimodal_anomalies.py). Opens data/oura.db through the sqlite
+# scanner and persists frame_1d in data/analytic.duckdb. Without it the
+# multimodal report degrades to "Optional dependency unavailable".
+duckdb>=1.0
+
 # rSLDS backend (analyze_oura_gvhd_predict.py)
 # Guarded: SSM_AVAILABLE flag, falls back to hmmlearn
 # Requires manual install - see comment block at top of this file

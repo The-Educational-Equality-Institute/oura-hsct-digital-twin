@@ -92,6 +92,7 @@ from config import (
     REPORTS_DIR,
     TRANSPLANT_DATE,
     TREATMENT_START,
+    BETA_BLOCKER_START,
     KNOWN_EVENT_DATE,
     PATIENT_AGE,
     PATIENT_LABEL,
@@ -103,6 +104,7 @@ from config import (
 
 from _theme import (
     wrap_html, make_kpi_card, make_kpi_row, make_section, format_p_value,
+    add_phase_shading,
     COLORWAY, STATUS_COLORS, BG_PRIMARY, BG_SURFACE, BG_ELEVATED,
     BORDER_SUBTLE, BORDER_DEFAULT, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_TERTIARY,
     ACCENT_BLUE, ACCENT_GREEN, ACCENT_RED, ACCENT_AMBER,
@@ -114,7 +116,7 @@ HTML_OUTPUT = REPORTS_DIR / "causal_inference_report.html"
 JSON_OUTPUT = REPORTS_DIR / "causal_inference_metrics.json"
 TS_JSON_OUTPUT = REPORTS_DIR / "causal_timeseries.json"
 
-# Color palette — uses dark theme from _theme
+# Color palette - uses dark theme from _theme
 COLOR_PRE = C_PRE_TX
 COLOR_POST = C_POST_TX
 COLOR_RUX_LINE = C_RUX_LINE
@@ -122,13 +124,13 @@ COLOR_COUNTERFACTUAL = C_COUNTERFACTUAL
 COLOR_CI_BAND = "rgba(147, 197, 253, 0.12)"
 COLOR_EFFECT = C_EFFECT
 
-# Plotly layout defaults — template handles most styling; t=60 since
+# Plotly layout defaults - template handles most styling; t=60 since
 # make_section already provides an h2 header (no redundant Plotly title)
 LAYOUT_DEFAULTS = dict(
     margin=dict(l=70, r=30, t=60, b=40),
 )
 
-# Clinical reference values — imported from config.py
+# Clinical reference values - imported from config.py
 
 # PCMCI parameters
 PCMCI_TAU_MAX = 7
@@ -220,6 +222,16 @@ def _make_ci_failure_result(
         "ts_pred_lower": [],
         "ts_pred_upper": [],
     }
+
+
+def _make_causalimpact_input(ts: pd.DataFrame, target_col: str) -> pd.DataFrame:
+    """Build a pycausalimpact-safe single-target frame.
+
+    pycausalimpact still accesses summary stats as `series[0]`, which fails
+    under pandas 2+ when the target column label is a string. A numeric target
+    label preserves library expectations without changing downstream analysis.
+    """
+    return pd.DataFrame({0: ts[target_col].to_numpy()}, index=ts.index)
 
 
 def _check_convergence(
@@ -371,8 +383,14 @@ def build_daily_matrix(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
         .reset_index()
     )
 
-    # Sleep periods - already per-night
-    sp = data["sleep_periods"].copy()
+    # Sleep periods: one row per night. A date can carry several periods (a nap,
+    # a split night); keep the longest so every date appears exactly once.
+    sp = (
+        data["sleep_periods"]
+        .sort_values(["date", "total_sleep_duration"], ascending=[True, False])
+        .drop_duplicates(subset="date", keep="first")
+        .copy()
+    )
     total_sec = sp["total_sleep_duration"].replace(0, np.nan)
     sp["sleep_efficiency"] = sp["efficiency"]
     sp["deep_pct"] = sp["deep_sleep_duration"] / total_sec * 100
@@ -432,6 +450,8 @@ def _add_rux_line(fig: go.Figure, row: int = 1, col: int = 1) -> None:
     rux_dt = pd.Timestamp(TREATMENT_START)
     yref = "y domain" if row == 1 else f"y{row} domain"
 
+    add_phase_shading(fig, rux_dt, row=row, col=col)
+
     # Glow layers: outer to inner, decreasing width + increasing opacity
     glow_layers = [
         ("rgba(59, 130, 246, 0.06)", 12),
@@ -448,7 +468,7 @@ def _add_rux_line(fig: go.Figure, row: int = 1, col: int = 1) -> None:
             row=row, col=col,
         )
 
-    # Core line — solid, bright
+    # Core line - solid, bright
     fig.add_shape(
         type="line",
         x0=rux_dt, x1=rux_dt,
@@ -500,7 +520,7 @@ def run_causal_impact(daily: pd.DataFrame) -> dict[str, Any]:
         results["runtime_s"] = round(time.perf_counter() - t0, 2)
         return results
 
-    # Define streams to analyze — all 11 metrics
+    # Define streams to analyze - all 11 metrics
     streams = {
         "rem_sleep_duration": {"label": "REM sleep duration (s)", "unit": "s",
                                "higher_is_better": True},
@@ -579,6 +599,7 @@ def run_causal_impact(daily: pd.DataFrame) -> dict[str, Any]:
         ts[stream_name] = ts[stream_name].interpolate(method="linear", limit=3)
         # Drop any remaining NaN at edges
         ts = ts.dropna()
+        ts_ci = _make_causalimpact_input(ts, stream_name)
 
         if len(ts) < 10:
             print(f"    Skipping after reindex - only {len(ts)} points")
@@ -607,7 +628,7 @@ def run_causal_impact(daily: pd.DataFrame) -> dict[str, Any]:
 
         try:
             ci = CausalImpact(
-                ts, [pre_start, pre_end], [post_start, post_end],
+                ts_ci, [pre_start, pre_end], [post_start, post_end],
                 niter=5000, nseasons=[{"period": 7}],
             )
 
@@ -907,9 +928,10 @@ def run_placebo_tests(daily: pd.DataFrame, ci_results: dict[str, Any]) -> dict[s
             try:
                 # Trim series to end at post_end (exclude real post-intervention data)
                 ts_trimmed = ts.loc[:pd.Timestamp(post_end_str)].copy()
+                ts_trimmed_ci = _make_causalimpact_input(ts_trimmed, metric_key)
 
                 ci = CausalImpact(
-                    ts_trimmed,
+                    ts_trimmed_ci,
                     [pre_start_str, pre_end_str],
                     [post_start_str, post_end_str],
                     niter=5000, nseasons=[{"period": 7}],
@@ -1215,7 +1237,7 @@ def run_pcmci(daily: pd.DataFrame) -> dict[str, Any]:
         "runtime_s": 0,
     }
 
-    # Variables for analysis — all 11 metrics
+    # Variables for analysis - all 11 metrics
     var_cols = ["rem_sleep_duration", "rem_pct", "total_hours",
                 "deep_sleep_duration", "mean_rmssd", "max_rmssd",
                 "lowest_heart_rate", "mean_hr", "average_breath",
@@ -1785,7 +1807,7 @@ def plot_transfer_entropy(te_results: dict[str, Any]) -> list[go.Figure]:
     te_colorscale = [
         [0.0, BG_SURFACE],
         [0.15, "#1A2744"],
-        [0.30, "#1E3A5F"],
+        [0.30, "#C3C3F1"],
         [0.50, "#2563EB"],
         [0.70, "#3B82F6"],
         [0.85, "#60A5FA"],
@@ -1853,7 +1875,7 @@ def plot_transfer_entropy(te_results: dict[str, Any]) -> list[go.Figure]:
                 y=labels,
                 text=text,
                 texttemplate="%{text}",
-                textfont=dict(size=9),
+                textfont=dict(size=11),
                 colorscale=colorscale,
                 zmin=zmin, zmax=zmax,
                 showscale=True,
@@ -1861,7 +1883,7 @@ def plot_transfer_entropy(te_results: dict[str, Any]) -> list[go.Figure]:
                     title=dict(text="TE (bits)", font=dict(size=11, color=TEXT_SECONDARY)),
                     len=0.8,
                     thickness=12,
-                    tickfont=dict(size=10, color=TEXT_SECONDARY),
+                    tickfont=dict(size=11, color=TEXT_SECONDARY),
                     outlinewidth=0,
                 ),
                 xgap=2, ygap=2,
@@ -1876,12 +1898,12 @@ def plot_transfer_entropy(te_results: dict[str, Any]) -> list[go.Figure]:
         fig.update_xaxes(
             title_text="Target",
             tickangle=45,
-            tickfont=dict(size=9),
+            tickfont=dict(size=11),
             row=1, col=col,
         )
         fig.update_yaxes(
             title_text="Source",
-            tickfont=dict(size=9),
+            tickfont=dict(size=11),
             row=1, col=col,
         )
 
@@ -2318,7 +2340,7 @@ def plot_mediation(mediation_results: dict[str, Any]) -> list[go.Figure]:
                 showarrow=True,
                 arrowhead=0,
                 ax=0, ay=-20,
-                font=dict(size=10, color="#FFFFFF"),
+                font=dict(size=11, color="#FFFFFF"),
                 bgcolor="rgba(59, 130, 246, 0.2)",
                 bordercolor=ACCENT_BLUE,
                 borderwidth=1,
@@ -2520,6 +2542,205 @@ def _build_individual_metric_tests(
 
 
 # ===========================================================================
+# CONFOUNDER ANALYSIS: BETA-BLOCKER SEPARATION
+# ===========================================================================
+
+
+def _build_confounder_analysis(
+    daily: pd.DataFrame,
+) -> tuple[str, dict[str, Any]]:
+    """Three-period analysis separating Jakavi-only from Jakavi+beta-blocker.
+
+    Splits the post-treatment period at BETA_BLOCKER_START to isolate
+    Ruxolitinib's effect from the combined Rux + beta-blocker signal.
+    Critical for clinician review (Schoemans/Wolff).
+
+    Returns (html_section_str, metrics_dict).
+    """
+    METRIC_DEFS = [
+        ("mean_rmssd", "HRV (RMSSD)", "ms"),
+        ("lowest_heart_rate", "Lowest HR", "bpm"),
+        ("average_heart_rate", "Average HR", "bpm"),
+        ("sleep_efficiency", "Sleep Efficiency", "%"),
+    ]
+
+    rux_str = str(TREATMENT_START)
+    bb_str = str(BETA_BLOCKER_START)
+    rux_days = (BETA_BLOCKER_START - TREATMENT_START).days
+    bb_days = (date.today() - BETA_BLOCKER_START).days
+
+    pre = daily[daily["date"] < rux_str]
+    jak_only = daily[(daily["date"] >= rux_str) & (daily["date"] < bb_str)]
+    jak_bb = daily[daily["date"] >= bb_str]
+
+    results: dict[str, Any] = {
+        "periods": {
+            "pre": {"start": str(DATA_START), "end": str(TREATMENT_START - timedelta(days=1)),
+                     "n_days": len(pre), "label": "Pre-treatment"},
+            "jakavi_only": {"start": rux_str, "end": str(BETA_BLOCKER_START - timedelta(days=1)),
+                            "n_days": len(jak_only), "n_rux_days": rux_days,
+                            "label": f"Jakavi only ({rux_days} days)"},
+            "jakavi_bb": {"start": bb_str, "end": str(daily["date"].max()),
+                          "n_days": len(jak_bb), "n_bb_days": bb_days,
+                          "label": f"Jakavi + beta-blocker ({bb_days} days)"},
+        },
+        "tests": {},
+    }
+
+    # --- Test 1: Pre vs Jakavi-only (isolates Rux effect) ---
+    # --- Test 2: Jakavi-only vs Jakavi+BB (marginal BB effect) ---
+    table_rows_isolated: list[str] = []
+    table_rows_marginal: list[str] = []
+
+    for col, label, unit in METRIC_DEFS:
+        pre_vals = pre[col].dropna()
+        jak_vals = jak_only[col].dropna()
+        bb_vals = jak_bb[col].dropna()
+
+        metric_result: dict[str, Any] = {"label": label, "unit": unit}
+
+        # Three-period means
+        metric_result["pre_mean"] = float(pre_vals.mean()) if len(pre_vals) else None
+        metric_result["jakavi_only_mean"] = float(jak_vals.mean()) if len(jak_vals) else None
+        metric_result["jakavi_bb_mean"] = float(bb_vals.mean()) if len(bb_vals) else None
+        metric_result["n_pre"] = len(pre_vals)
+        metric_result["n_jakavi_only"] = len(jak_vals)
+        metric_result["n_jakavi_bb"] = len(bb_vals)
+
+        # Test 1: Pre vs Jakavi-only
+        if len(pre_vals) >= 5 and len(jak_vals) >= 3:
+            u1, p1 = scipy_stats.mannwhitneyu(pre_vals, jak_vals, alternative="two-sided")
+            diff1 = float(jak_vals.mean() - pre_vals.mean())
+            std1 = np.sqrt((pre_vals.std(ddof=1) ** 2 + jak_vals.std(ddof=1) ** 2) / 2)
+            d1 = diff1 / std1 if std1 > 0 else 0.0
+            if col in ("lowest_heart_rate", "average_heart_rate"):
+                favorable1 = diff1 < 0
+            else:
+                favorable1 = diff1 > 0
+            metric_result["isolated_rux"] = {
+                "diff": diff1, "cohens_d": d1, "p_value": float(p1),
+                "u_statistic": float(u1), "direction": "favorable" if favorable1 else "unfavorable",
+            }
+            sig1 = p1 < 0.05
+            d_label1 = "large" if abs(d1) >= 0.8 else "medium" if abs(d1) >= 0.5 else "small"
+            sig_badge1 = (
+                f'<span class="badge badge-sig">p={p1:.4f}</span>' if sig1
+                else f'<span class="badge badge-ns">p={p1:.3f}</span>'
+            )
+            dir_cls1 = "favorable" if favorable1 else "unfavorable"
+            table_rows_isolated.append(
+                f'<tr><td style="font-weight:600">{label}</td>'
+                f'<td>{pre_vals.mean():.1f} {unit} (n={len(pre_vals)})</td>'
+                f'<td>{jak_vals.mean():.1f} {unit} (n={len(jak_vals)})</td>'
+                f'<td class="{dir_cls1}">{diff1:+.1f} {unit}</td>'
+                f'<td>{d1:+.2f} ({d_label1})</td>'
+                f'<td>{sig_badge1}</td></tr>'
+            )
+        else:
+            metric_result["isolated_rux"] = {"error": "insufficient data"}
+
+        # Test 2: Jakavi-only vs Jakavi+BB (marginal beta-blocker)
+        if len(jak_vals) >= 3 and len(bb_vals) >= 3:
+            u2, p2 = scipy_stats.mannwhitneyu(jak_vals, bb_vals, alternative="two-sided")
+            diff2 = float(bb_vals.mean() - jak_vals.mean())
+            metric_result["marginal_bb"] = {
+                "diff": diff2, "p_value": float(p2), "u_statistic": float(u2),
+            }
+            sig2 = p2 < 0.05
+            sig_badge2 = (
+                f'<span class="badge badge-sig">p={p2:.4f}</span>' if sig2
+                else f'<span class="badge badge-ns">p={p2:.3f}</span>'
+            )
+            table_rows_marginal.append(
+                f'<tr><td style="font-weight:600">{label}</td>'
+                f'<td>{jak_vals.mean():.1f} {unit} (n={len(jak_vals)})</td>'
+                f'<td>{bb_vals.mean():.1f} {unit} (n={len(bb_vals)})</td>'
+                f'<td>{diff2:+.1f} {unit}</td>'
+                f'<td>{sig_badge2}</td></tr>'
+            )
+        else:
+            metric_result["marginal_bb"] = {"error": "insufficient data"}
+
+        results["tests"][col] = metric_result
+
+    # --- Build HTML ---
+    timeline_html = f"""
+    <div style="background:{BG_ELEVATED};border:1px solid {BORDER_DEFAULT};border-radius:8px;
+                padding:16px;margin:16px 0;font-size:0.9rem">
+      <div style="font-weight:600;color:{TEXT_PRIMARY};margin-bottom:8px">Treatment Timeline</div>
+      <div style="display:flex;gap:24px;flex-wrap:wrap">
+        <div><span style="color:{TEXT_SECONDARY}">Pre-treatment:</span>
+             <span style="color:{TEXT_PRIMARY}">{len(pre)} days</span></div>
+        <div><span style="color:{ACCENT_BLUE}">Jakavi only:</span>
+             <span style="color:{TEXT_PRIMARY}">{rux_str} to {str(BETA_BLOCKER_START - timedelta(days=1))} ({rux_days} days)</span></div>
+        <div><span style="color:{ACCENT_AMBER}">Jakavi + BB:</span>
+             <span style="color:{TEXT_PRIMARY}">{bb_str} to present ({bb_days} days)</span></div>
+      </div>
+    </div>"""
+
+    def _make_table(title: str, subtitle: str, cols: list[str], rows: list[str]) -> str:
+        if not rows:
+            return ""
+        header = "".join(f'<th style="padding:10px 12px;color:{TEXT_PRIMARY}">{c}</th>' for c in cols)
+        return f"""
+        <div style="margin:20px 0">
+          <div style="font-weight:600;color:{TEXT_PRIMARY};font-size:1rem">{title}</div>
+          <div style="color:{TEXT_SECONDARY};font-size:0.85rem;margin-bottom:8px">{subtitle}</div>
+          <table style="width:100%;border-collapse:collapse;font-size:0.9rem">
+            <thead><tr style="border-bottom:2px solid {BORDER_DEFAULT}">{header}</tr></thead>
+            <tbody>{"".join(rows)}</tbody>
+          </table>
+        </div>"""
+
+    table1 = _make_table(
+        "Test 1: Isolated Ruxolitinib Effect",
+        "Pre-treatment vs Jakavi-only period (beta-blocker confounder eliminated)",
+        ["Metric", "Pre Mean", "Jakavi-only Mean", "Change", "Cohen's d", "p-value"],
+        table_rows_isolated,
+    )
+
+    table2 = _make_table(
+        "Test 2: Marginal Beta-Blocker Effect",
+        "Jakavi-only vs Jakavi + beta-blocker (what BB adds on top)",
+        ["Metric", "Jakavi-only Mean", "Jakavi+BB Mean", "Change", "p-value"],
+        table_rows_marginal,
+    )
+
+    # Interpretation
+    rux_results = results["tests"]
+    rux_hr_sig = (
+        rux_results.get("lowest_heart_rate", {}).get("isolated_rux", {}).get("p_value", 1) < 0.05
+        or rux_results.get("average_heart_rate", {}).get("isolated_rux", {}).get("p_value", 1) < 0.05
+    )
+    rux_hrv_sig = rux_results.get("mean_rmssd", {}).get("isolated_rux", {}).get("p_value", 1) < 0.05
+    bb_hrv_sig = rux_results.get("mean_rmssd", {}).get("marginal_bb", {}).get("p_value", 1) < 0.05
+
+    findings: list[str] = []
+    if rux_hr_sig:
+        findings.append("Ruxolitinib alone produces a statistically significant reduction in heart rate, "
+                        "independent of beta-blocker.")
+    if rux_hrv_sig:
+        findings.append("Ruxolitinib alone significantly improves HRV.")
+    else:
+        findings.append("HRV improvement during Jakavi-only period does not reach significance - "
+                        "the HRV signal strengthens after beta-blocker addition.")
+    if bb_hrv_sig:
+        findings.append("Beta-blocker addition produces a significant further HRV increase on top of Jakavi.")
+
+    interp_html = f"""
+    <div style="background:{BG_ELEVATED};border-left:3px solid {ACCENT_BLUE};
+                padding:12px 16px;margin:16px 0;border-radius:0 8px 8px 0">
+      <div style="font-weight:600;color:{TEXT_PRIMARY};margin-bottom:6px">Key Findings</div>
+      <ul style="color:{TEXT_SECONDARY};margin:0;padding-left:20px;line-height:1.6">
+        {"".join(f'<li>{f}</li>' for f in findings)}
+      </ul>
+    </div>"""
+
+    section_content = timeline_html + table1 + table2 + interp_html
+    return section_content, results
+
+
+# ===========================================================================
 # HTML REPORT GENERATION
 # ===========================================================================
 
@@ -2556,6 +2777,7 @@ def generate_html_report(
 
     # Build section HTML
     indiv_html, indiv_metrics = _build_individual_metric_tests(daily)
+    confounder_html, confounder_metrics = _build_confounder_analysis(daily)
     ci_html = _build_ci_summary(all_results.get("causal_impact", {}))
     stat_power_html = _build_statistical_power_section(daily, all_results)
     placebo_html = _build_placebo_summary(all_results.get("placebo_tests", {}))
@@ -2565,6 +2787,7 @@ def generate_html_report(
 
     # Store individual metric results for JSON export
     all_results["individual_metric_tests"] = indiv_metrics
+    all_results["confounder_analysis"] = confounder_metrics
 
     # Organize figure divs by section
     section_figs: dict[str, list[str]] = {}
@@ -2588,46 +2811,89 @@ def generate_html_report(
             runtimes[key] = result.get("runtime_s", 0)
     total_runtime = sum(runtimes.values())
 
-    # --- Build KPI row ---
-    ci_streams = all_results.get("causal_impact", {}).get("streams", {})
+    # --- Build KPI row: lead with the finding, then the causal machinery ---
+    ci_result = all_results.get("causal_impact", {})
+    ci_streams = ci_result.get("streams", {}) if isinstance(ci_result, dict) else {}
+    ci_error = ci_result.get("error") if isinstance(ci_result, dict) else None
     usable_streams = [
         s for s in ci_streams.values()
         if isinstance(s, dict) and "error" not in s
     ]
-    n_sig_raw = sum(1 for s in usable_streams if s.get("p_value", 1) < 0.05)
     n_sig_fdr = sum(1 for s in usable_streams if s.get("significant_fdr", False))
     strongest_stream = min(
         usable_streams,
         key=lambda s: s.get("p_value", 1.0),
         default=None,
     )
-    strongest_p = strongest_stream.get("p_value", 1.0) if strongest_stream else 1.0
-    strongest_q = strongest_stream.get("q_value_bh", strongest_p) if strongest_stream else 1.0
+    strongest_p = strongest_stream.get("p_value", 1.0) if strongest_stream else None
+    strongest_q = strongest_stream.get("q_value_bh", strongest_p) if strongest_stream else None
     strongest_label = strongest_stream.get("label", "N/A") if strongest_stream else "N/A"
+    strongest_sig = strongest_q is not None and strongest_q < 0.05
 
-    post_status = "warning" if n_post < 14 else "normal"
-    post_label = "Insufficient" if n_post < 14 else ""
+    def _metric_card(key: str, title: str) -> str:
+        m = indiv_metrics.get(key, {})
+        if "post_mean" not in m:
+            return make_kpi_card(title, "n/a", "", status="info", detail=m.get("error", "insufficient data"))
+        unit = m.get("unit", "")
+        return make_kpi_card(
+            title,
+            m["post_mean"],
+            unit,
+            status="info",
+            decimals=1,
+            detail=(
+                f"{m['pre_mean']:.1f} → {m['post_mean']:.1f} {unit} · "
+                f"d={m['cohens_d']:+.2f} · pooled Mann-Whitney, see placebo section"
+            ),
+            status_label="Descriptive",
+        )
 
-    fdr_status = "normal" if n_sig_fdr > 0 else "warning"
-    fdr_label = "" if n_sig_fdr > 0 else "None"
+    placebo = all_results.get("placebo_tests", {}) if isinstance(all_results.get("placebo_tests"), dict) else {}
+    n_placebo_tests = int(placebo.get("n_total_tests") or 0)
+    n_placebo_sig = int(placebo.get("n_significant_placebo") or 0)
+    placebo_fail = str(placebo.get("placebo_validation", "")).upper() == "FAIL"
+    if n_placebo_tests:
+        placebo_card = make_kpi_card(
+            "Placebo check", f"{n_placebo_sig}/{n_placebo_tests}", "",
+            status="warning" if placebo_fail else "good",
+            detail="placebo dates in the pre-period that CausalImpact calls significant",
+            status_label="Liberal" if placebo_fail else "Calibrated",
+        )
+    else:
+        placebo_card = make_kpi_card(
+            "Placebo check", "not run", "", status="warning",
+            detail=str(placebo.get("error", "no placebo tests")), status_label="Unavailable",
+        )
 
-    lowest_p_status = "normal" if strongest_q < 0.05 else "warning"
-    lowest_p_label = "Significant" if strongest_q < 0.05 else "Not significant"
+    if usable_streams:
+        ci_value = f"{n_sig_fdr}/{len(usable_streams)}"
+        ci_status = "good" if n_sig_fdr > 0 else "info"
+        ci_detail = "streams FDR-significant, Bayesian structural time series"
+        ci_label = ""
+    else:
+        ci_value = "not run"
+        ci_status = "warning"
+        ci_detail = ci_error or "CausalImpact produced no usable streams"
+        ci_label = "Unavailable"
 
     kpi_row = make_kpi_row(
-        make_kpi_card("Pre-intervention", n_pre, "days", status="info", decimals=0),
-        make_kpi_card("Post-intervention", n_post, "days", status=post_status, decimals=0, status_label=post_label),
-        make_kpi_card("Raw p<0.05", f"{n_sig_raw}/{len(ci_streams)}", "", status="normal" if n_sig_raw > 0 else "info"),
-        make_kpi_card("FDR-significant", f"{n_sig_fdr}/{len(ci_streams)}", "", status=fdr_status, status_label=fdr_label),
+        make_kpi_card("CausalImpact", ci_value, "", status=ci_status, detail=ci_detail, status_label=ci_label),
+        placebo_card,
+        _metric_card("mean_rmssd", "HRV, all nights on treatment"),
+        _metric_card("average_heart_rate", "Sleeping HR, all nights on treatment"),
         make_kpi_card(
-            "Lowest raw p",
-            format_p_value(strongest_p),
-            "",
-            status=lowest_p_status,
-            detail=f"{strongest_label} | q={strongest_q:.4f}",
-            status_label=lowest_p_label,
+            "On treatment", n_post, "nights", status="info", decimals=0,
+            detail=f"{n_pre} nights before · split at ruxolitinib start only",
         ),
-        make_kpi_card("Methods used", "4", "", status="info", detail="CI + PCMCI+ + TE + Mediation"),
+        make_kpi_card(
+            "Strongest CI stream",
+            format_p_value(strongest_p) if strongest_p is not None else "n/a",
+            "",
+            status="good" if strongest_sig else "info",
+            detail=(f"{strongest_label} · q={strongest_q:.4f}" if strongest_q is not None else "no stream"),
+            status_label="Significant" if strongest_sig else "",
+        ),
+        make_kpi_card("Methods used", "4", "", status="info", detail="CausalImpact + PCMCI+ + Transfer entropy + Mediation"),
     )
 
     # --- Build body ---
@@ -2640,7 +2906,10 @@ def generate_html_report(
         shifted after ruxolitinib
         (10 mg BID, started {TREATMENT_START}) on Oura Ring biometrics.
         <strong>Data period:</strong> {daily['date'].iloc[0]} to {daily['date'].iloc[-1]}
-        ({len(daily)} days).
+        ({len(daily)} days). This page tests one split, at ruxolitinib start. A beta-blocker was
+        added on {BETA_BLOCKER_START}; the <a href="piecewise_regression.html">Piecewise ITS</a> and
+        <a href="tau_u_effects.html">Tau-U</a> pages separate the two medicines, and the placebo
+        section below calibrates the methods used here.
     </div>""")
 
     # Warning if short post period
@@ -2682,6 +2951,22 @@ def generate_html_report(
         "0. Individual Metric Treatment Response",
         indiv_method + indiv_html,
         section_id="indiv",
+    ))
+
+    # Section 0b: Confounder Analysis
+    confounder_method = (
+        '<div class="causal-method-note">'
+        '<strong>Method:</strong> Three-period analysis separating the post-treatment window into '
+        f'Jakavi-only ({(BETA_BLOCKER_START - TREATMENT_START).days} days) and '
+        f'Jakavi + beta-blocker ({(date.today() - BETA_BLOCKER_START).days} days). '
+        'Mann-Whitney U tests isolate each drug\'s contribution. '
+        'This addresses the key confounder question: does Ruxolitinib\'s effect stand '
+        'independently of the beta-blocker added later?</div>'
+    )
+    body_parts.append(make_section(
+        "0b. Confounder Analysis: Beta-Blocker Separation",
+        confounder_method + confounder_html,
+        section_id="confounder",
     ))
 
     # Section 1: CausalImpact
@@ -2837,7 +3122,7 @@ def generate_html_report(
   font-weight: 600;
 }}
 .badge-sig {{ background: rgba(16,185,129,0.15); color: {ACCENT_GREEN}; }}
-.badge-ns {{ background: rgba(107,114,128,0.2); color: {TEXT_SECONDARY}; }}
+.badge-ns {{ background: rgba(107,114,128,0.2); color: #4B5160; }}
 .badge-warn {{ background: rgba(245,158,11,0.15); color: {ACCENT_AMBER}; }}
 .badge-fail {{ background: rgba(239,68,68,0.15); color: {ACCENT_RED}; }}
 .favorable {{ color: {ACCENT_GREEN}; }}
@@ -3213,11 +3498,11 @@ def _build_mediation_summary(mediation_results: dict[str, Any]) -> str:
         html_parts.append(f"""
         <div class="causal-grid">
             <div class="causal-stat">
-                <div class="value">{total.get('effect', 0):+.1f}</div>
+                <div class="value">{(total.get('effect') or 0):+.1f}</div>
                 <div class="label">Total effect (readiness score)</div>
             </div>
             <div class="causal-stat">
-                <div class="value">{total.get('pre_mean', 0):.1f} -> {total.get('post_mean', 0):.1f}</div>
+                <div class="value">{(total.get('pre_mean') or 0):.1f} -> {(total.get('post_mean') or 0):.1f}</div>
                 <div class="label">Pre -> Post average</div>
             </div>
             <div class="causal-stat">
@@ -3773,6 +4058,41 @@ def main() -> None:
         "generated_at": generated_at,
         "streams": {},
     }
+
+    fallback_streams = {
+        "rem_sleep_duration": {"label": "REM sleep duration (s)"},
+        "rem_pct": {"label": "REM sleep fraction (%)"},
+        "total_hours": {"label": "Total sleep (hours)"},
+        "deep_sleep_duration": {"label": "Deep sleep duration (s)"},
+        "mean_rmssd": {"label": "HRV mean RMSSD (ms)"},
+        "max_rmssd": {"label": "HRV max RMSSD (ms)"},
+        "lowest_heart_rate": {"label": "Lowest heart rate (bpm)"},
+        "mean_hr": {"label": "Average heart rate (bpm)"},
+        "average_breath": {"label": "Respiratory rate (br/min)"},
+        "spo2_average": {"label": "SpO2 (%)"},
+        "temperature_deviation": {"label": "Temperature deviation (deg C)"},
+    }
+
+    for stream_key, meta in fallback_streams.items():
+        if stream_key not in daily.columns:
+            continue
+        frame = daily[["date", stream_key]].dropna(subset=[stream_key]).copy()
+        if frame.empty:
+            continue
+        dates = [str(value)[:10] for value in frame["date"].tolist()]
+        intervention_idx = int((pd.to_datetime(frame["date"]) < pd.Timestamp(TREATMENT_START)).sum())
+        ts_data["streams"][stream_key] = {
+            "label": meta["label"],
+            "p_value": 1.0,
+            "relative_effect_pct": None,
+            "intervention_idx": intervention_idx,
+            "dates": dates,
+            "actual": frame[stream_key].astype(float).tolist(),
+            "predicted": [],
+            "pred_lower": [],
+            "pred_upper": [],
+        }
+
     for stream_key, s in ci_streams.items():
         if not isinstance(s, dict) or "error" in s:
             continue

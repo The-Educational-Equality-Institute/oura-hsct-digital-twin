@@ -6,7 +6,7 @@ Before building the comparative modules, make these two changes:
 
 Add `major_event_date` and `major_event_label` to both profiles so the comparative scripts can normalize timelines by days-since-event.
 
-In `/home/henrik/projects/teei/oura-hsct-digital-twin/profiles.py`, update the `henrik` profile to add:
+In `/home/henrik/projects/helse/oura-hsct-digital-twin/profiles.py`, update the `henrik` profile to add:
 ```python
 "major_event_date": date(2023, 11, 23),  # HSCT date
 "major_event_label": "HSCT",
@@ -34,7 +34,7 @@ Add these entries to the `REPORT_REGISTRY` list in `analysis/_theme.py`, at the 
 
 Run this to confirm both databases have full data:
 ```bash
-cd /home/henrik/projects/teei/oura-hsct-digital-twin
+cd /home/henrik/projects/helse/oura-hsct-digital-twin
 source .venv/bin/activate
 python -c "
 import sqlite3

@@ -1802,7 +1802,7 @@ def build_html_report(
             f"  chart{i}El.innerHTML = '';\n"
             f"  chart{i}El.style.height = (fig{i}.layout.height || 450) + 'px';\n"
             f"  Plotly.newPlot('chart{i}', fig{i}.data, fig{i}.layout, "
-            f"{{responsive: true, displayModeBar: true, displaylogo: false, "
+            f"{{responsive: true, displayModeBar: false, displaylogo: false, "
             f"modeBarButtonsToRemove: ['lasso2d', 'select2d']}}).then((graphDiv) => {{\n"
             f"    window.__odtEnhancePlotly?.(graphDiv);\n"
             f"    Plotly.Plots.resize(graphDiv);\n"
